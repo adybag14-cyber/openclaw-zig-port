@@ -25,3 +25,11 @@ Bootstrap repository for the next OpenClaw runtime port in Zig.
 2. Land gateway + RPC dispatcher parity core.
 3. Port security/runtime/tooling surfaces in vertical slices with tests.
 4. Reach release gate and ship `v0.1.0-zig` preview when parity gates pass.
+
+## Zig Bootstrap Commands
+
+```bash
+zig build
+zig build run
+zig build test
+```
