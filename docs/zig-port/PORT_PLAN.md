@@ -138,3 +138,4 @@ Port OpenClaw Go runtime behavior from baseline commit `65c974b528e2` into a pro
   - parity gate now writes a JSON audit payload (`parity-go-zig.json`) and CI/release flows publish it as traceable parity evidence.
   - release workflow smoke run `22646343174` validated parity evidence publication in release assets (`parity-go-zig.json`) for tag `v0.1.0-zig-preview.ci-parityjson`.
   - parity gate now also writes markdown evidence (`parity-go-zig.md`) for human review, and both CI + release flows publish JSON + markdown together.
+  - release workflow smoke run `22646648616` validated dual parity evidence publication (`parity-go-zig.json`, `parity-go-zig.md`) for tag `v0.1.0-zig-preview.ci-paritymd`.
