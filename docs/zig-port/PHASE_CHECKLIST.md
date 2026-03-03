@@ -26,10 +26,10 @@ Release lock: no release tag is allowed until all phases are complete and parity
 - [x] Add remediation/reporting contract outputs
 
 ## Phase 5 - Browser/Auth/Channels
-- [ ] Implement web login manager (`start/wait/complete/status`)
+- [x] Implement web login manager (`start/wait/complete/status`)
 - [x] Implement browser completion bridge contract (Lightpanda-only provider policy)
 - [ ] Implement Telegram command/reply surface
-- [ ] Add smoke coverage for auth + reply loops
+- [ ] Add smoke coverage for auth + reply loops (`auth` complete via `scripts/web-login-smoke-check.ps1`; `reply loops` pending with Telegram surface)
 
 ## Phase 6 - Memory + Edge
 - [ ] Port memory persistence primitives
@@ -48,6 +48,8 @@ Release lock: no release tag is allowed until all phases are complete and parity
 - [x] `scripts/zig-syntax-check.ps1`
 - [x] `scripts/zig-codeberg-master-check.ps1` (reports local vs remote master hash)
 - [x] `scripts/docker-smoke-check.ps1` (host + Docker HTTP 200 checks on `/health` and `/rpc`)
+- [x] `scripts/web-login-smoke-check.ps1` (`web.login.start -> wait -> complete -> status` all HTTP 200 with authorized completion)
 - [x] Serve smoke: `GET /health` and `POST /rpc` (`shutdown`) both returned HTTP 200
 - [x] Serve smoke: `POST /rpc` `file.write`, `file.read`, and `exec.run` returned HTTP 200 with real payloads
 - [x] Serve smoke: `POST /rpc` `security.audit` and `doctor` return structured diagnostics payloads
+- [x] Serve smoke: `POST /rpc` `web.login.start`, `web.login.wait`, `web.login.complete`, `web.login.status` return expected lifecycle statuses

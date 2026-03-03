@@ -15,7 +15,7 @@ This workspace is configured to use a local Zig master toolchain.
 - Remote: `https://codeberg.org/ziglang/zig.git`
 - Local checkout commit: `74f361a5ce5212ce321fd0ebfa4c158468a161bb`
 - Local commit subject: `std.math.big.int: address log2/log10 reviews`
-- Latest remote `master` (Codeberg): `ac24e6caf5a79573f16d2ccc273d907ad2199032`
+- Latest remote `master` (Codeberg): `0a412853aae9815eb663a88a8a2d37b91c614317`
 - Current status: local toolchain hash does **not** match latest remote master hash
 
 ## Syntax and build check command

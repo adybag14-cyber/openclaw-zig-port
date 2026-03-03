@@ -3,6 +3,7 @@ const config = @import("../config.zig");
 const protocol = @import("../protocol/envelope.zig");
 const registry = @import("registry.zig");
 const lightpanda = @import("../bridge/lightpanda.zig");
+const web_login = @import("../bridge/web_login.zig");
 const tool_runtime = @import("../runtime/tool_runtime.zig");
 const security_guard = @import("../security/guard.zig");
 const security_audit = @import("../security/audit.zig");
@@ -15,6 +16,7 @@ var active_config: config.Config = config.defaults();
 var config_ready: bool = false;
 
 var guard_instance: ?security_guard.Guard = null;
+var login_manager: ?web_login.LoginManager = null;
 
 pub fn setConfig(cfg: config.Config) void {
     active_config = cfg;
@@ -22,6 +24,10 @@ pub fn setConfig(cfg: config.Config) void {
     if (guard_instance != null) {
         guard_instance.?.deinit();
         guard_instance = null;
+    }
+    if (login_manager != null) {
+        login_manager.?.deinit();
+        login_manager = null;
     }
 }
 
@@ -46,7 +52,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             .status = "ok",
             .service = "openclaw-zig",
             .bridge = "lightpanda",
-            .phase = "phase4-security-diagnostics",
+            .phase = "phase5-auth-channels",
         });
     }
 
@@ -67,6 +73,174 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         return protocol.encodeResult(allocator, req.id, .{
             .status = "shutting_down",
             .service = "openclaw-zig",
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "web.login.start")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+
+        var provider: []const u8 = "";
+        var model: []const u8 = "";
+        if (parsed.value == .object) {
+            if (parsed.value.object.get("params")) |params| {
+                if (params == .object) {
+                    if (params.object.get("provider")) |value| {
+                        if (value == .string) provider = value.string;
+                    }
+                    if (params.object.get("model")) |value| {
+                        if (value == .string) model = value.string;
+                    }
+                }
+            }
+        }
+
+        const manager = try getLoginManager();
+        const session = try manager.start(provider, model);
+        return protocol.encodeResult(allocator, req.id, .{
+            .login = session,
+            .status = "pending",
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "web.login.wait")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+
+        var session_id: []const u8 = "";
+        var timeout_ms: u32 = 15_000;
+        if (parsed.value == .object) {
+            if (parsed.value.object.get("params")) |params| {
+                if (params == .object) {
+                    if (params.object.get("loginSessionId")) |value| {
+                        if (value == .string) session_id = value.string;
+                    }
+                    if (session_id.len == 0) {
+                        if (params.object.get("sessionId")) |value| {
+                            if (value == .string) session_id = value.string;
+                        }
+                    }
+                    if (params.object.get("timeoutMs")) |value| timeout_ms = parseTimeout(value, timeout_ms);
+                }
+            }
+        }
+        if (std.mem.trim(u8, session_id, " \t\r\n").len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "web.login.wait requires loginSessionId",
+            });
+        }
+
+        const manager = try getLoginManager();
+        const session = manager.wait(session_id, timeout_ms) catch |err| {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32004,
+                .message = @errorName(err),
+            });
+        };
+        return protocol.encodeResult(allocator, req.id, .{
+            .login = session,
+            .status = session.status,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "web.login.complete")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+
+        var session_id: []const u8 = "";
+        var code: []const u8 = "";
+        if (parsed.value == .object) {
+            if (parsed.value.object.get("params")) |params| {
+                if (params == .object) {
+                    if (params.object.get("loginSessionId")) |value| {
+                        if (value == .string) session_id = value.string;
+                    }
+                    if (session_id.len == 0) {
+                        if (params.object.get("sessionId")) |value| {
+                            if (value == .string) session_id = value.string;
+                        }
+                    }
+                    if (params.object.get("code")) |value| {
+                        if (value == .string) code = value.string;
+                    }
+                }
+            }
+        }
+        if (std.mem.trim(u8, session_id, " \t\r\n").len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "web.login.complete requires loginSessionId",
+            });
+        }
+
+        const manager = try getLoginManager();
+        const session = manager.complete(session_id, code) catch |err| {
+            const message = switch (err) {
+                error.InvalidCode => "invalid login code",
+                error.SessionExpired => "login session expired",
+                error.SessionNotFound => "login session not found",
+            };
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32004,
+                .message = message,
+            });
+        };
+        return protocol.encodeResult(allocator, req.id, .{
+            .login = session,
+            .status = session.status,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "web.login.status")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        var session_id: []const u8 = "";
+        if (parsed.value == .object) {
+            if (parsed.value.object.get("params")) |params| {
+                if (params == .object) {
+                    if (params.object.get("loginSessionId")) |value| {
+                        if (value == .string) session_id = value.string;
+                    }
+                    if (session_id.len == 0) {
+                        if (params.object.get("sessionId")) |value| {
+                            if (value == .string) session_id = value.string;
+                        }
+                    }
+                }
+            }
+        }
+
+        const manager = try getLoginManager();
+        if (std.mem.trim(u8, session_id, " \t\r\n").len > 0) {
+            const session = manager.get(session_id) orelse {
+                return protocol.encodeError(allocator, req.id, .{
+                    .code = -32004,
+                    .message = "login session not found",
+                });
+            };
+            return protocol.encodeResult(allocator, req.id, .{
+                .login = session,
+                .status = session.status,
+            });
+        }
+        return protocol.encodeResult(allocator, req.id, .{
+            .summary = manager.status(),
+            .status = "ok",
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "channels.status")) {
+        const summary = (try getLoginManager()).status();
+        return protocol.encodeResult(allocator, req.id, .{
+            .channels = .{
+                .telegram = .{
+                    .enabled = false,
+                    .status = "not_configured",
+                },
+            },
+            .webLogin = summary,
+            .status = "ok",
         });
     }
 
@@ -181,6 +355,13 @@ fn getGuard() !*security_guard.Guard {
     return &guard_instance.?;
 }
 
+fn getLoginManager() !*web_login.LoginManager {
+    if (login_manager == null) {
+        login_manager = web_login.LoginManager.init(std.heap.page_allocator, 10 * 60 * 1000);
+    }
+    return &login_manager.?;
+}
+
 fn getRuntimeIo() std.Io {
     if (!runtime_io_ready) {
         runtime_io_threaded = std.Io.Threaded.init(std.heap.page_allocator, .{});
@@ -194,9 +375,27 @@ fn shouldEnforceGuard(method: []const u8) bool {
     if (std.ascii.eqlIgnoreCase(method, "health")) return false;
     if (std.ascii.eqlIgnoreCase(method, "status")) return false;
     if (std.ascii.eqlIgnoreCase(method, "shutdown")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "channels.status")) return false;
     if (std.ascii.eqlIgnoreCase(method, "security.audit")) return false;
     if (std.ascii.eqlIgnoreCase(method, "doctor")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "web.login.start")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "web.login.wait")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "web.login.complete")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "web.login.status")) return false;
     return true;
+}
+
+fn parseTimeout(value: std.json.Value, fallback: u32) u32 {
+    return switch (value) {
+        .integer => |i| if (i > 0 and i <= std.math.maxInt(u32)) @as(u32, @intCast(i)) else fallback,
+        .float => |f| if (f > 0 and f <= @as(f64, @floatFromInt(std.math.maxInt(u32)))) @as(u32, @intFromFloat(f)) else fallback,
+        .string => |s| blk: {
+            const trimmed = std.mem.trim(u8, s, " \t\r\n");
+            if (trimmed.len == 0) break :blk fallback;
+            break :blk std.fmt.parseInt(u32, trimmed, 10) catch fallback;
+        },
+        else => fallback,
+    };
 }
 
 fn encodeRuntimeError(
@@ -337,6 +536,69 @@ test "dispatch exposes security.audit and doctor methods" {
     const doctor = try dispatch(allocator, "{\"id\":\"doctor-1\",\"method\":\"doctor\",\"params\":{}}");
     defer allocator.free(doctor);
     try std.testing.expect(std.mem.indexOf(u8, doctor, "\"checks\"") != null);
+}
+
+test "dispatch web.login lifecycle start wait complete status" {
+    const allocator = std.testing.allocator;
+    const start = try dispatch(allocator, "{\"id\":\"wl-start\",\"method\":\"web.login.start\",\"params\":{\"provider\":\"chatgpt\",\"model\":\"gpt-5.2\"}}");
+    defer allocator.free(start);
+    try std.testing.expect(std.mem.indexOf(u8, start, "\"status\":\"pending\"") != null);
+
+    const session_id = try extractLoginStringField(allocator, start, "loginSessionId");
+    defer allocator.free(session_id);
+    const code = try extractLoginStringField(allocator, start, "code");
+    defer allocator.free(code);
+
+    const wait_frame = try encodeFrame(allocator, "wl-wait", "web.login.wait", .{
+        .loginSessionId = session_id,
+        .timeoutMs = 20,
+    });
+    defer allocator.free(wait_frame);
+    const wait = try dispatch(allocator, wait_frame);
+    defer allocator.free(wait);
+    try std.testing.expect(std.mem.indexOf(u8, wait, "\"status\":\"pending\"") != null);
+
+    const complete_frame = try encodeFrame(allocator, "wl-complete", "web.login.complete", .{
+        .loginSessionId = session_id,
+        .code = code,
+    });
+    defer allocator.free(complete_frame);
+    const complete = try dispatch(allocator, complete_frame);
+    defer allocator.free(complete);
+    try std.testing.expect(std.mem.indexOf(u8, complete, "\"status\":\"authorized\"") != null);
+
+    const status_frame = try encodeFrame(allocator, "wl-status", "web.login.status", .{
+        .loginSessionId = session_id,
+    });
+    defer allocator.free(status_frame);
+    const status = try dispatch(allocator, status_frame);
+    defer allocator.free(status);
+    try std.testing.expect(std.mem.indexOf(u8, status, "\"status\":\"authorized\"") != null);
+}
+
+test "dispatch channels.status returns channel and web login summary" {
+    const allocator = std.testing.allocator;
+    const out = try dispatch(allocator, "{\"id\":\"channels-status\",\"method\":\"channels.status\",\"params\":{}}");
+    defer allocator.free(out);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"channels\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"webLogin\"") != null);
+}
+
+fn extractLoginStringField(
+    allocator: std.mem.Allocator,
+    payload: []const u8,
+    field: []const u8,
+) ![]u8 {
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, payload, .{});
+    defer parsed.deinit();
+    if (parsed.value != .object) return error.InvalidParamsFrame;
+    const result = parsed.value.object.get("result") orelse return error.InvalidParamsFrame;
+    if (result != .object) return error.InvalidParamsFrame;
+    const login = result.object.get("login") orelse return error.InvalidParamsFrame;
+    if (login != .object) return error.InvalidParamsFrame;
+    const value = login.object.get(field) orelse return error.InvalidParamsFrame;
+    if (value != .string) return error.InvalidParamsFrame;
+    return allocator.dupe(u8, value.string);
 }
 
 fn encodeFrame(

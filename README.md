@@ -51,6 +51,11 @@ Current route surface:
   - `exec.run`
   - `file.read`
   - `file.write`
+  - `web.login.start`
+  - `web.login.wait`
+  - `web.login.complete`
+  - `web.login.status`
+  - `channels.status`
   - `security.audit`
   - `doctor`
 
@@ -78,4 +83,10 @@ Run host + Docker smoke/system checks:
 
 ```powershell
 ./scripts/docker-smoke-check.ps1
+```
+
+Run web login lifecycle smoke check:
+
+```powershell
+./scripts/web-login-smoke-check.ps1
 ```
