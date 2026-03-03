@@ -173,6 +173,34 @@ const CompatCronRun = struct {
     }
 };
 
+const CompatDevicePair = struct {
+    pair_id: []u8,
+    device_id: []u8,
+    status: []u8,
+    created_at_ms: i64,
+    updated_at_ms: i64,
+
+    fn deinit(self: *CompatDevicePair, allocator: std.mem.Allocator) void {
+        allocator.free(self.pair_id);
+        allocator.free(self.device_id);
+        allocator.free(self.status);
+    }
+};
+
+const CompatDeviceToken = struct {
+    token_id: []u8,
+    device_id: []u8,
+    value: []u8,
+    revoked: bool,
+    created_at_ms: i64,
+
+    fn deinit(self: *CompatDeviceToken, allocator: std.mem.Allocator) void {
+        allocator.free(self.token_id);
+        allocator.free(self.device_id);
+        allocator.free(self.value);
+    }
+};
+
 const ConfigOverlayEntry = struct {
     key: []const u8,
     value: []const u8,
@@ -212,6 +240,10 @@ const CompatState = struct {
     next_cron_id: u64,
     cron_jobs: std.ArrayList(CompatCronJob),
     cron_runs: std.ArrayList(CompatCronRun),
+    next_device_pair_id: u64,
+    device_pairs: std.ArrayList(CompatDevicePair),
+    next_device_token_id: u64,
+    device_tokens: std.ArrayList(CompatDeviceToken),
     events: std.ArrayList(CompatEvent),
     update_jobs: std.ArrayList(CompatUpdateJob),
     config_overlay: std.StringHashMap([]u8),
@@ -249,6 +281,10 @@ const CompatState = struct {
             .next_cron_id = 1,
             .cron_jobs = .empty,
             .cron_runs = .empty,
+            .next_device_pair_id = 1,
+            .device_pairs = .empty,
+            .next_device_token_id = 1,
+            .device_tokens = .empty,
             .events = .empty,
             .update_jobs = .empty,
             .config_overlay = std.StringHashMap([]u8).init(allocator),
@@ -278,6 +314,10 @@ const CompatState = struct {
         self.cron_jobs.deinit(self.allocator);
         for (self.cron_runs.items) |*entry| entry.deinit(self.allocator);
         self.cron_runs.deinit(self.allocator);
+        for (self.device_pairs.items) |*entry| entry.deinit(self.allocator);
+        self.device_pairs.deinit(self.allocator);
+        for (self.device_tokens.items) |*entry| entry.deinit(self.allocator);
+        self.device_tokens.deinit(self.allocator);
         for (self.events.items) |*event| event.deinit(self.allocator);
         self.events.deinit(self.allocator);
         for (self.update_jobs.items) |*job| job.deinit(self.allocator);
@@ -787,6 +827,89 @@ const CompatState = struct {
         job.last_run_status = self.allocator.dupe(u8, "completed") catch return null;
         job.updated_at_ms = now;
         return self.cron_runs.items[self.cron_runs.items.len - 1];
+    }
+
+    fn findDevicePairIndex(self: *const CompatState, pair_id: []const u8) ?usize {
+        const normalized = std.mem.trim(u8, pair_id, " \t\r\n");
+        if (normalized.len == 0) return null;
+        for (self.device_pairs.items, 0..) |entry, idx| {
+            if (std.ascii.eqlIgnoreCase(entry.pair_id, normalized)) return idx;
+        }
+        return null;
+    }
+
+    fn upsertDevicePairStatus(
+        self: *CompatState,
+        pair_id: []const u8,
+        device_id: []const u8,
+        status: []const u8,
+    ) !CompatDevicePair {
+        const normalized_pair_id = std.mem.trim(u8, pair_id, " \t\r\n");
+        if (normalized_pair_id.len == 0) return error.InvalidParamsFrame;
+        if (self.findDevicePairIndex(normalized_pair_id)) |idx| {
+            var entry = &self.device_pairs.items[idx];
+            self.allocator.free(entry.status);
+            entry.status = try self.allocator.dupe(u8, status);
+            entry.updated_at_ms = time_util.nowMs();
+            return entry.*;
+        }
+
+        const now = time_util.nowMs();
+        try self.device_pairs.append(self.allocator, .{
+            .pair_id = try self.allocator.dupe(u8, normalized_pair_id),
+            .device_id = try self.allocator.dupe(
+                u8,
+                if (std.mem.trim(u8, device_id, " \t\r\n").len > 0) device_id else normalized_pair_id,
+            ),
+            .status = try self.allocator.dupe(u8, status),
+            .created_at_ms = now,
+            .updated_at_ms = now,
+        });
+        return self.device_pairs.items[self.device_pairs.items.len - 1];
+    }
+
+    fn removeDevicePair(self: *CompatState, pair_id: []const u8) bool {
+        const idx = self.findDevicePairIndex(pair_id) orelse return false;
+        var removed = self.device_pairs.orderedRemove(idx);
+        removed.deinit(self.allocator);
+        return true;
+    }
+
+    fn rotateDeviceToken(self: *CompatState, device_id: []const u8) !CompatDeviceToken {
+        const now = time_util.nowMs();
+        const token_id = try std.fmt.allocPrint(self.allocator, "token-{d:0>4}", .{self.next_device_token_id});
+        self.next_device_token_id += 1;
+        const value = try std.fmt.allocPrint(self.allocator, "tok-{d}", .{now});
+        try self.device_tokens.append(self.allocator, .{
+            .token_id = token_id,
+            .device_id = try self.allocator.dupe(u8, if (std.mem.trim(u8, device_id, " \t\r\n").len > 0) device_id else "default-device"),
+            .value = value,
+            .revoked = false,
+            .created_at_ms = now,
+        });
+        return self.device_tokens.items[self.device_tokens.items.len - 1];
+    }
+
+    fn revokeDeviceToken(self: *CompatState, token_id: []const u8) usize {
+        const normalized = std.mem.trim(u8, token_id, " \t\r\n");
+        var revoked: usize = 0;
+        if (normalized.len == 0) {
+            for (self.device_tokens.items) |*entry| {
+                if (!entry.revoked) {
+                    entry.revoked = true;
+                    revoked += 1;
+                }
+            }
+            return revoked;
+        }
+        for (self.device_tokens.items) |*entry| {
+            if (std.ascii.eqlIgnoreCase(entry.token_id, normalized) and !entry.revoked) {
+                entry.revoked = true;
+                revoked = 1;
+                break;
+            }
+        }
+        return revoked;
     }
 
     fn markSessionDeleted(self: *CompatState, session_id: []const u8) !void {
@@ -1794,6 +1917,111 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         return protocol.encodeResult(allocator, req.id, .{
             .count = items.items.len,
             .items = items.items,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "device.pair.list")) {
+        const compat = try getCompatState();
+        const DevicePairView = struct {
+            pairId: []const u8,
+            deviceId: []const u8,
+            status: []const u8,
+            createdAtMs: i64,
+            updatedAtMs: i64,
+        };
+        var items: std.ArrayList(DevicePairView) = .empty;
+        defer items.deinit(allocator);
+        for (compat.device_pairs.items) |entry| {
+            try items.append(allocator, .{
+                .pairId = entry.pair_id,
+                .deviceId = entry.device_id,
+                .status = entry.status,
+                .createdAtMs = entry.created_at_ms,
+                .updatedAtMs = entry.updated_at_ms,
+            });
+        }
+        return protocol.encodeResult(allocator, req.id, .{
+            .count = items.items.len,
+            .items = items.items,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "device.pair.approve") or std.ascii.eqlIgnoreCase(req.method, "device.pair.reject")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const pair_id = firstParamString(params, "pairId", firstParamString(params, "id", ""));
+        if (pair_id.len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "missing pairId",
+            });
+        }
+        const status: []const u8 = if (std.ascii.eqlIgnoreCase(req.method, "device.pair.approve")) "approved" else "rejected";
+        const compat = try getCompatState();
+        const pair = compat.upsertDevicePairStatus(pair_id, firstParamString(params, "deviceId", pair_id), status) catch {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "invalid device pair params",
+            });
+        };
+        return protocol.encodeResult(allocator, req.id, .{
+            .pair = .{
+                .pairId = pair.pair_id,
+                .deviceId = pair.device_id,
+                .status = pair.status,
+                .createdAtMs = pair.created_at_ms,
+                .updatedAtMs = pair.updated_at_ms,
+            },
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "device.pair.remove")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const pair_id = firstParamString(params, "pairId", firstParamString(params, "id", ""));
+        if (pair_id.len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "missing pairId",
+            });
+        }
+        const compat = try getCompatState();
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = compat.removeDevicePair(pair_id),
+            .pairId = pair_id,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "device.token.rotate")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const device_id = firstParamString(params, "deviceId", "default-device");
+        const compat = try getCompatState();
+        const token = try compat.rotateDeviceToken(device_id);
+        return protocol.encodeResult(allocator, req.id, .{
+            .token = .{
+                .tokenId = token.token_id,
+                .deviceId = token.device_id,
+                .value = token.value,
+                .revoked = token.revoked,
+                .createdAtMs = token.created_at_ms,
+            },
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "device.token.revoke")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const token_id = firstParamString(params, "tokenId", "");
+        const compat = try getCompatState();
+        const revoked = compat.revokeDeviceToken(token_id);
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = revoked > 0,
+            .revoked = revoked,
         });
     }
 
@@ -4054,6 +4282,12 @@ fn shouldEnforceGuard(method: []const u8) bool {
     if (std.ascii.eqlIgnoreCase(method, "cron.remove")) return false;
     if (std.ascii.eqlIgnoreCase(method, "cron.run")) return false;
     if (std.ascii.eqlIgnoreCase(method, "cron.runs")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "device.pair.list")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "device.pair.approve")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "device.pair.reject")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "device.pair.remove")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "device.token.rotate")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "device.token.revoke")) return false;
     if (std.ascii.eqlIgnoreCase(method, "secrets.reload")) return false;
     if (std.ascii.eqlIgnoreCase(method, "config.get")) return false;
     if (std.ascii.eqlIgnoreCase(method, "config.set")) return false;
@@ -5555,6 +5789,44 @@ test "dispatch compat cron methods return contracts" {
     const run_missing = try dispatch(allocator, "{\"id\":\"compat-cron-run-missing\",\"method\":\"cron.run\",\"params\":{\"cronId\":\"missing-cron\"}}");
     defer allocator.free(run_missing);
     try std.testing.expect(std.mem.indexOf(u8, run_missing, "\"code\":-32004") != null);
+}
+
+test "dispatch compat device methods return contracts" {
+    const allocator = std.testing.allocator;
+
+    const pair_list_initial = try dispatch(allocator, "{\"id\":\"compat-device-pair-list0\",\"method\":\"device.pair.list\",\"params\":{}}");
+    defer allocator.free(pair_list_initial);
+    try std.testing.expect(std.mem.indexOf(u8, pair_list_initial, "\"items\"") != null);
+
+    const pair_approve = try dispatch(allocator, "{\"id\":\"compat-device-pair-approve\",\"method\":\"device.pair.approve\",\"params\":{\"pairId\":\"pair-1\",\"deviceId\":\"phone-1\"}}");
+    defer allocator.free(pair_approve);
+    try std.testing.expect(std.mem.indexOf(u8, pair_approve, "\"status\":\"approved\"") != null);
+
+    const pair_reject = try dispatch(allocator, "{\"id\":\"compat-device-pair-reject\",\"method\":\"device.pair.reject\",\"params\":{\"pairId\":\"pair-1\"}}");
+    defer allocator.free(pair_reject);
+    try std.testing.expect(std.mem.indexOf(u8, pair_reject, "\"status\":\"rejected\"") != null);
+
+    const pair_list = try dispatch(allocator, "{\"id\":\"compat-device-pair-list\",\"method\":\"device.pair.list\",\"params\":{}}");
+    defer allocator.free(pair_list);
+    try std.testing.expect(std.mem.indexOf(u8, pair_list, "\"pair-1\"") != null);
+
+    const pair_remove = try dispatch(allocator, "{\"id\":\"compat-device-pair-remove\",\"method\":\"device.pair.remove\",\"params\":{\"pairId\":\"pair-1\"}}");
+    defer allocator.free(pair_remove);
+    try std.testing.expect(std.mem.indexOf(u8, pair_remove, "\"ok\":true") != null);
+
+    const token_rotate = try dispatch(allocator, "{\"id\":\"compat-device-token-rotate\",\"method\":\"device.token.rotate\",\"params\":{\"deviceId\":\"phone-1\"}}");
+    defer allocator.free(token_rotate);
+    const token_id = try extractResultObjectStringField(allocator, token_rotate, "token", "tokenId");
+    defer allocator.free(token_id);
+    try std.testing.expect(std.mem.indexOf(u8, token_rotate, "\"revoked\":false") != null);
+
+    const token_revoke_frame = try encodeFrame(allocator, "compat-device-token-revoke", "device.token.revoke", .{
+        .tokenId = token_id,
+    });
+    defer allocator.free(token_revoke_frame);
+    const token_revoke = try dispatch(allocator, token_revoke_frame);
+    defer allocator.free(token_revoke);
+    try std.testing.expect(std.mem.indexOf(u8, token_revoke, "\"revoked\":1") != null);
 }
 
 test "dispatch edge parity slice methods return contracts" {

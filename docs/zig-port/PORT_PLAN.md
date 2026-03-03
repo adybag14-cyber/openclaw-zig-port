@@ -101,9 +101,12 @@ Port OpenClaw Go runtime behavior from baseline commit `65c974b528e2` into a pro
   - Added compat cron surfaces with stateful behavior:
     - `cron.list`, `cron.status`, `cron.add`, `cron.update`, `cron.remove`, `cron.run`, `cron.runs`
     - stateful cron job/run lifecycle with run-history retention and status snapshots.
-  - Method surface moved to `120` Zig methods (from `113`) while preserving Lightpanda-only browser policy and green validation gates.
+  - Added compat device surfaces with stateful behavior:
+    - `device.pair.list`, `device.pair.approve`, `device.pair.reject`, `device.pair.remove`, `device.token.rotate`, `device.token.revoke`
+    - stateful pair/token lifecycle with update and revoke flows.
+  - Method surface moved to `126` Zig methods (from `120`) while preserving Lightpanda-only browser policy and green validation gates.
   - Added dispatcher contract tests for new edge methods and memory flows.
-  - Remaining Go parity families are now narrowed to: `device.*`, `node.*`, and `exec.approvals*` / `exec.approval.*`.
+  - Remaining Go parity families are now narrowed to: `node.*` and `exec.approvals*` / `exec.approval.*`.
 - Toolchain/runtime notes (local Windows Zig master):
   - Codeberg `master` is currently `d2db1d45f1651d25c779651378b002b027e5f8e4`.
   - Local Zig toolchain remains `0.16.0-dev.2703+0a412853a` (hash `0a412853a`) and is behind current Codeberg `master` (acknowledged).

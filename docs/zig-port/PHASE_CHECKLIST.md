@@ -66,7 +66,10 @@ Phase 6 progress notes:
 - Added compat cron slice:
   - cron methods: `cron.list`, `cron.status`, `cron.add`, `cron.update`, `cron.remove`, `cron.run`, `cron.runs`
   - stateful backing added for cron jobs and bounded cron run history with update/run lifecycle fields.
-- Method surface now at `120/134`; remaining Go parity families are `device.*`, `node.*`, and `exec.approvals*` / `exec.approval.*`.
+- Added compat device slice:
+  - device methods: `device.pair.list`, `device.pair.approve`, `device.pair.reject`, `device.pair.remove`, `device.token.rotate`, `device.token.revoke`
+  - stateful backing added for device pairs and token rotate/revoke lifecycle.
+- Method surface now at `126/134`; remaining Go parity families are `node.*` and `exec.approvals*` / `exec.approval.*`.
 
 ## Phase 7 - Validation + Release
 - [ ] Run full parity diff against Go baseline
