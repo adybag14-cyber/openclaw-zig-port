@@ -117,3 +117,9 @@ Port OpenClaw Go runtime behavior from baseline commit `65c974b528e2` into a pro
   - Added Windows build workaround in `build.zig`:
     - use `-fstrip` for executable to avoid missing `.pdb` install failure on this master toolchain.
     - route `zig build test` through `zig test src/main.zig` on Windows to avoid build-runner `--listen` regression.
+- Phase 7 complete:
+  - built `ReleaseFast` artifacts for `x86_64-windows`, `x86_64-linux`, and `x86_64-macos`
+  - generated `SHA256SUMS.txt` for release zips
+  - published GitHub preview release `v0.1.0-zig-preview.1`:
+    - https://github.com/adybag14-cyber/openclaw-zig-port/releases/tag/v0.1.0-zig-preview.1
+  - target note: `aarch64-linux` and `aarch64-macos` failed on the local Windows Zig master toolchain (`0.16.0-dev.2703+0a412853a`) with compiler exit code `5`, so the preview matrix was constrained to passing x86_64 targets.

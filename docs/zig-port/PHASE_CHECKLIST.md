@@ -78,8 +78,8 @@ Phase 6 progress notes:
 ## Phase 7 - Validation + Release
 - [x] Run full parity diff against Go baseline
 - [x] Run full test matrix and smoke checks
-- [ ] Build release binaries + checksums
-- [ ] Publish first Zig preview release
+- [x] Build release binaries + checksums
+- [x] Publish first Zig preview release
 
 ## Latest Validation Snapshot
 - [x] `zig build`
@@ -101,3 +101,11 @@ Phase 6 progress notes:
 - [x] Serve smoke: `POST /rpc` `security.audit` and `doctor` return structured diagnostics payloads
 - [x] Serve smoke: `POST /rpc` `web.login.start`, `web.login.wait`, `web.login.complete`, `web.login.status` return expected lifecycle statuses
 - [x] Serve smoke: `POST /rpc` `send` and `poll` return HTTP 200 and include queued Telegram reply payloads
+- [x] Release artifacts built in `ReleaseFast` and checksummed:
+  - `openclaw-zig-v0.1.0-zig-preview.1-x86_64-windows.zip`
+  - `openclaw-zig-v0.1.0-zig-preview.1-x86_64-linux.zip`
+  - `openclaw-zig-v0.1.0-zig-preview.1-x86_64-macos.zip`
+  - `SHA256SUMS.txt`
+- [x] GitHub release published: `v0.1.0-zig-preview.1`
+  - https://github.com/adybag14-cyber/openclaw-zig-port/releases/tag/v0.1.0-zig-preview.1
+- [x] Cross-target note: `aarch64-linux` and `aarch64-macos` failed on local Zig `0.16.0-dev.2703+0a412853a` Windows toolchain with compiler exit code `5`; release matrix kept to passing `x86_64` targets.
