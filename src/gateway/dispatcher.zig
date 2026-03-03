@@ -3320,6 +3320,9 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             .{ .id = "chatgpt", .name = "ChatGPT", .verificationUri = "https://chatgpt.com/", .supportsBrowserSession = true, .defaultModel = "gpt-5.2", .authMode = "device_code", .guestBypassSupported = false, .popupBypassAction = "not_applicable" },
             .{ .id = "claude", .name = "Claude", .verificationUri = "https://claude.ai/", .supportsBrowserSession = true, .defaultModel = "claude-opus-4", .authMode = "device_code", .guestBypassSupported = false, .popupBypassAction = "not_applicable" },
             .{ .id = "gemini", .name = "Gemini", .verificationUri = "https://aistudio.google.com/", .supportsBrowserSession = true, .defaultModel = "gemini-2.5-pro", .authMode = "device_code", .guestBypassSupported = false, .popupBypassAction = "not_applicable" },
+            .{ .id = "minimax", .name = "MiniMax", .verificationUri = "https://chat.minimax.io/", .supportsBrowserSession = true, .defaultModel = "minimax-m2.5", .authMode = "device_code", .guestBypassSupported = false, .popupBypassAction = "not_applicable" },
+            .{ .id = "kimi", .name = "Kimi", .verificationUri = "https://kimi.com/", .supportsBrowserSession = true, .defaultModel = "kimi-k2.5", .authMode = "device_code", .guestBypassSupported = false, .popupBypassAction = "not_applicable" },
+            .{ .id = "zhipuai", .name = "ZhipuAI", .verificationUri = "https://open.bigmodel.cn/", .supportsBrowserSession = true, .defaultModel = "glm-4.6", .authMode = "device_code", .guestBypassSupported = false, .popupBypassAction = "not_applicable" },
             .{ .id = "qwen", .name = "Qwen", .verificationUri = "https://chat.qwen.ai/", .supportsBrowserSession = true, .defaultModel = "qwen-max", .authMode = "guest_or_code", .guestBypassSupported = true, .popupBypassAction = "stay_logged_out" },
             .{ .id = "zai", .name = "ZAI", .verificationUri = "https://chat.z.ai/", .supportsBrowserSession = true, .defaultModel = "glm-5", .authMode = "guest_or_code", .guestBypassSupported = true, .popupBypassAction = "stay_logged_out" },
             .{ .id = "inception", .name = "Mercury", .verificationUri = "https://chat.inceptionlabs.ai/", .supportsBrowserSession = true, .defaultModel = "mercury-2", .authMode = "guest_or_code", .guestBypassSupported = true, .popupBypassAction = "stay_logged_out" },
@@ -6097,6 +6100,9 @@ test "dispatch auth oauth alias lifecycle providers start wait complete logout i
     defer allocator.free(providers);
     try std.testing.expect(std.mem.indexOf(u8, providers, "\"providers\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, providers, "\"chatgpt\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, providers, "\"minimax\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, providers, "\"kimi\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, providers, "\"zhipuai\"") != null);
 
     const start = try dispatch(allocator, "{\"id\":\"oauth-start\",\"method\":\"auth.oauth.start\",\"params\":{\"provider\":\"chatgpt\",\"model\":\"gpt-5.2\"}}");
     defer allocator.free(start);

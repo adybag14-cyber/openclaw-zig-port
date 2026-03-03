@@ -35,6 +35,7 @@ Phase 5 enhancement notes:
 - Added browser request provider split (`engine` vs target `provider`) so `qwen|zai|inception` route through Lightpanda correctly.
 - Added guest bypass metadata and action hints (`stay_logged_out`) to browser completion and OAuth provider catalog payloads.
 - Added Telegram `/auth guest <provider>` flow plus callback URL provider inference and shared callback code extraction (`query/fragment/path`) via `web_login.extractAuthCode`.
+- Expanded auth provider breadth in Telegram + OAuth catalog: `minimax`, `kimi`, and `zhipuai` (with alias normalization + default model coverage).
 
 ## Phase 6 - Memory + Edge
 - [x] Port memory persistence primitives

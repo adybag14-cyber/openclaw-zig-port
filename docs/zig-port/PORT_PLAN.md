@@ -70,6 +70,9 @@ Port OpenClaw Go runtime behavior from baseline commit `65c974b528e2` into a pro
     - Qwen/GLM-5/Mercury-2 now expose explicit guest bypass metadata (`stay_logged_out`) through `browser.request` and OAuth provider catalog responses.
     - `/auth guest <provider>` command path added for Telegram, plus callback-URL provider inference and robust callback code extraction (`query/fragment/path`) shared with web login.
     - Browser request parsing now separates `engine` (`lightpanda`) from target `provider` so `qwen|zai|inception` no longer fail as unsupported engine values.
+  - Expanded auth provider breadth:
+    - Added `minimax`, `kimi`, and `zhipuai` entries to OAuth provider catalog contracts.
+    - Extended Telegram provider alias + default-model normalization to cover those providers end-to-end.
   - Dispatcher `channels.status` now includes telegram queue/target/auth telemetry
   - Added auth + reply-loop smokes (`scripts/web-login-smoke-check.ps1`, `scripts/telegram-reply-loop-smoke-check.ps1`)
 - Phase 6 in progress:

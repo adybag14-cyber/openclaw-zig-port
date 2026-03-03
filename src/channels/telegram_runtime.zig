@@ -416,7 +416,7 @@ pub const TelegramRuntime = struct {
             return .{
                 .is_command = true,
                 .command_name = "auth",
-                .reply = try allocator.dupe(u8, "Auth providers: chatgpt, codex, claude, gemini, openrouter, opencode, qwen, zai(glm-5), inception(mercury-2)"),
+                .reply = try allocator.dupe(u8, "Auth providers: chatgpt, codex, claude, gemini, openrouter, opencode, qwen, zai(glm-5), inception(mercury-2), minimax, kimi, zhipuai"),
                 .provider = default_provider,
                 .model = default_model,
                 .login_session_id = "",
@@ -845,6 +845,9 @@ fn normalizeProvider(provider_raw: []const u8) []const u8 {
     if (std.ascii.eqlIgnoreCase(trimmed, "anthropic") or std.ascii.eqlIgnoreCase(trimmed, "claude-cli") or std.ascii.eqlIgnoreCase(trimmed, "claude-code") or std.ascii.eqlIgnoreCase(trimmed, "claude-desktop")) return "claude";
     if (std.ascii.eqlIgnoreCase(trimmed, "google") or std.ascii.eqlIgnoreCase(trimmed, "google-gemini") or std.ascii.eqlIgnoreCase(trimmed, "google-gemini-cli") or std.ascii.eqlIgnoreCase(trimmed, "gemini-cli")) return "gemini";
     if (std.ascii.eqlIgnoreCase(trimmed, "qwen-portal") or std.ascii.eqlIgnoreCase(trimmed, "qwen-chat") or std.ascii.eqlIgnoreCase(trimmed, "qwen-cli") or std.ascii.eqlIgnoreCase(trimmed, "qwen35") or std.ascii.eqlIgnoreCase(trimmed, "qwen3.5") or std.ascii.eqlIgnoreCase(trimmed, "qwen-3.5") or std.ascii.eqlIgnoreCase(trimmed, "copaw") or std.ascii.eqlIgnoreCase(trimmed, "qwen-copaw") or std.ascii.eqlIgnoreCase(trimmed, "qwen-agent")) return "qwen";
+    if (std.ascii.eqlIgnoreCase(trimmed, "minimax-portal") or std.ascii.eqlIgnoreCase(trimmed, "minimax-cli")) return "minimax";
+    if (std.ascii.eqlIgnoreCase(trimmed, "kimi-code") or std.ascii.eqlIgnoreCase(trimmed, "kimi-coding") or std.ascii.eqlIgnoreCase(trimmed, "kimi-for-coding")) return "kimi";
+    if (std.ascii.eqlIgnoreCase(trimmed, "zhipu") or std.ascii.eqlIgnoreCase(trimmed, "zhipu-ai") or std.ascii.eqlIgnoreCase(trimmed, "bigmodel") or std.ascii.eqlIgnoreCase(trimmed, "bigmodel-cn") or std.ascii.eqlIgnoreCase(trimmed, "zhipuai-coding") or std.ascii.eqlIgnoreCase(trimmed, "zhipu-coding")) return "zhipuai";
     if (std.ascii.eqlIgnoreCase(trimmed, "z.ai") or std.ascii.eqlIgnoreCase(trimmed, "z-ai") or std.ascii.eqlIgnoreCase(trimmed, "zaiweb") or std.ascii.eqlIgnoreCase(trimmed, "zai-web") or std.ascii.eqlIgnoreCase(trimmed, "glm") or std.ascii.eqlIgnoreCase(trimmed, "glm-5") or std.ascii.eqlIgnoreCase(trimmed, "glm5")) return "zai";
     if (std.ascii.eqlIgnoreCase(trimmed, "inception-labs") or std.ascii.eqlIgnoreCase(trimmed, "inceptionlabs") or std.ascii.eqlIgnoreCase(trimmed, "mercury") or std.ascii.eqlIgnoreCase(trimmed, "mercury2") or std.ascii.eqlIgnoreCase(trimmed, "mercury-2")) return "inception";
     return trimmed;
@@ -862,6 +865,9 @@ fn defaultModelForProvider(provider_raw: []const u8) []const u8 {
     if (std.ascii.eqlIgnoreCase(provider, "openrouter")) return "openrouter/auto";
     if (std.ascii.eqlIgnoreCase(provider, "opencode")) return "opencode/default";
     if (std.ascii.eqlIgnoreCase(provider, "qwen")) return "qwen-max";
+    if (std.ascii.eqlIgnoreCase(provider, "minimax")) return "minimax-m2.5";
+    if (std.ascii.eqlIgnoreCase(provider, "kimi")) return "kimi-k2.5";
+    if (std.ascii.eqlIgnoreCase(provider, "zhipuai")) return "glm-4.6";
     if (std.ascii.eqlIgnoreCase(provider, "zai")) return "glm-5";
     if (std.ascii.eqlIgnoreCase(provider, "inception")) return "mercury-2";
     return "gpt-5.2";
@@ -869,7 +875,7 @@ fn defaultModelForProvider(provider_raw: []const u8) []const u8 {
 
 fn isKnownProvider(provider_raw: []const u8) bool {
     const normalized = normalizeProvider(provider_raw);
-    for ([_][]const u8{ "chatgpt", "codex", "claude", "gemini", "openrouter", "opencode", "qwen", "zai", "inception" }) |entry| {
+    for ([_][]const u8{ "chatgpt", "codex", "claude", "gemini", "openrouter", "opencode", "qwen", "zai", "inception", "minimax", "kimi", "zhipuai" }) |entry| {
         if (std.ascii.eqlIgnoreCase(normalized, entry)) return true;
     }
     return false;
@@ -1014,4 +1020,12 @@ test "telegram runtime auth complete infers provider from callback URL" {
     defer complete_result.deinit(allocator);
     try std.testing.expect(std.mem.eql(u8, complete_result.provider, "zai"));
     try std.testing.expect(std.mem.eql(u8, complete_result.authStatus, "authorized"));
+}
+
+test "telegram runtime normalizes additional provider aliases" {
+    try std.testing.expect(std.mem.eql(u8, normalizeProvider("minimax-cli"), "minimax"));
+    try std.testing.expect(std.mem.eql(u8, normalizeProvider("kimi-coding"), "kimi"));
+    try std.testing.expect(std.mem.eql(u8, normalizeProvider("bigmodel"), "zhipuai"));
+    try std.testing.expect(std.mem.eql(u8, defaultModelForProvider("zhipu-ai"), "glm-4.6"));
+    try std.testing.expect(isKnownProvider("zhipuai-coding"));
 }
