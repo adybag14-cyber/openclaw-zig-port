@@ -16,6 +16,8 @@ pub const supported_methods = [_][]const u8{
     "security.audit",
     "doctor",
     "channels.status",
+    "send",
+    "poll",
 };
 
 pub fn supports(method: []const u8) bool {

@@ -62,7 +62,9 @@ Port OpenClaw Go runtime behavior from baseline commit `65c974b528e2` into a pro
   - RPC diagnostics surfaces: `security.audit` and `doctor`
   - CLI diagnostics surfaces: `--doctor`, `--security-audit`, optional `--deep` and `--fix`
   - Security audit deep probe and remediation actions (`src/security/audit.zig`)
-- Phase 5 (auth/channel slice) in progress:
+- Phase 5 complete:
   - Real web login manager implemented (`src/bridge/web_login.zig`) with `web.login.start|wait|complete|status`
-  - Dispatcher wiring added for auth lifecycle and non-stub `channels.status` summary output
-  - Added web login smoke script (`scripts/web-login-smoke-check.ps1`)
+  - Telegram command/reply runtime implemented (`src/channels/telegram_runtime.zig`) with `send` and `poll` RPC wiring
+  - Telegram command surface now handles `/auth` and `/model` flows with queued reply polling
+  - Dispatcher `channels.status` now includes telegram queue/target/auth telemetry
+  - Added auth + reply-loop smokes (`scripts/web-login-smoke-check.ps1`, `scripts/telegram-reply-loop-smoke-check.ps1`)

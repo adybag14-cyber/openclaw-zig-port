@@ -4,6 +4,7 @@ const protocol = @import("../protocol/envelope.zig");
 const registry = @import("registry.zig");
 const lightpanda = @import("../bridge/lightpanda.zig");
 const web_login = @import("../bridge/web_login.zig");
+const telegram_runtime = @import("../channels/telegram_runtime.zig");
 const tool_runtime = @import("../runtime/tool_runtime.zig");
 const security_guard = @import("../security/guard.zig");
 const security_audit = @import("../security/audit.zig");
@@ -17,6 +18,7 @@ var config_ready: bool = false;
 
 var guard_instance: ?security_guard.Guard = null;
 var login_manager: ?web_login.LoginManager = null;
+var telegram_runtime_instance: ?telegram_runtime.TelegramRuntime = null;
 
 pub fn setConfig(cfg: config.Config) void {
     active_config = cfg;
@@ -24,6 +26,10 @@ pub fn setConfig(cfg: config.Config) void {
     if (guard_instance != null) {
         guard_instance.?.deinit();
         guard_instance = null;
+    }
+    if (telegram_runtime_instance != null) {
+        telegram_runtime_instance.?.deinit();
+        telegram_runtime_instance = null;
     }
     if (login_manager != null) {
         login_manager.?.deinit();
@@ -232,16 +238,38 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
 
     if (std.ascii.eqlIgnoreCase(req.method, "channels.status")) {
         const summary = (try getLoginManager()).status();
+        const telegram_status = (try getTelegramRuntime()).status();
         return protocol.encodeResult(allocator, req.id, .{
             .channels = .{
                 .telegram = .{
-                    .enabled = false,
-                    .status = "not_configured",
+                    .enabled = telegram_status.enabled,
+                    .status = telegram_status.status,
+                    .queueDepth = telegram_status.queueDepth,
+                    .targetCount = telegram_status.targetCount,
+                    .authBindingCount = telegram_status.authBindingCount,
                 },
             },
             .webLogin = summary,
             .status = "ok",
         });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "send")) {
+        const runtime = try getTelegramRuntime();
+        var send_result = runtime.sendFromFrame(allocator, frame_json) catch |err| {
+            return encodeTelegramRuntimeError(allocator, req.id, err);
+        };
+        defer send_result.deinit(allocator);
+        return protocol.encodeResult(allocator, req.id, send_result);
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "poll")) {
+        const runtime = try getTelegramRuntime();
+        var poll_result = runtime.pollFromFrame(allocator, frame_json) catch |err| {
+            return encodeTelegramRuntimeError(allocator, req.id, err);
+        };
+        defer poll_result.deinit(allocator);
+        return protocol.encodeResult(allocator, req.id, poll_result);
     }
 
     if (shouldEnforceGuard(req.method)) {
@@ -362,6 +390,14 @@ fn getLoginManager() !*web_login.LoginManager {
     return &login_manager.?;
 }
 
+fn getTelegramRuntime() !*telegram_runtime.TelegramRuntime {
+    if (telegram_runtime_instance == null) {
+        const manager = try getLoginManager();
+        telegram_runtime_instance = telegram_runtime.TelegramRuntime.init(std.heap.page_allocator, manager);
+    }
+    return &telegram_runtime_instance.?;
+}
+
 fn getRuntimeIo() std.Io {
     if (!runtime_io_ready) {
         runtime_io_threaded = std.Io.Threaded.init(std.heap.page_allocator, .{});
@@ -382,6 +418,8 @@ fn shouldEnforceGuard(method: []const u8) bool {
     if (std.ascii.eqlIgnoreCase(method, "web.login.wait")) return false;
     if (std.ascii.eqlIgnoreCase(method, "web.login.complete")) return false;
     if (std.ascii.eqlIgnoreCase(method, "web.login.status")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "send")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "poll")) return false;
     return true;
 }
 
@@ -427,6 +465,39 @@ fn encodeRuntimeError(
     }
 
     const detailed = try std.fmt.allocPrint(allocator, "runtime invocation failed: {s}", .{@errorName(err)});
+    defer allocator.free(detailed);
+    return protocol.encodeError(allocator, id, .{
+        .code = -32000,
+        .message = detailed,
+    });
+}
+
+fn encodeTelegramRuntimeError(
+    allocator: std.mem.Allocator,
+    id: []const u8,
+    err: anyerror,
+) ![]u8 {
+    const is_param_error = switch (err) {
+        error.InvalidParamsFrame,
+        error.MissingMessage,
+        error.UnsupportedChannel,
+        => true,
+        else => false,
+    };
+    if (is_param_error) {
+        const message = switch (err) {
+            error.InvalidParamsFrame => "invalid params frame",
+            error.MissingMessage => "send requires message",
+            error.UnsupportedChannel => "only telegram channel is supported",
+            else => "invalid channel params",
+        };
+        return protocol.encodeError(allocator, id, .{
+            .code = -32602,
+            .message = message,
+        });
+    }
+
+    const detailed = try std.fmt.allocPrint(allocator, "channel invocation failed: {s}", .{@errorName(err)});
     defer allocator.free(detailed);
     return protocol.encodeError(allocator, id, .{
         .code = -32000,
@@ -582,6 +653,33 @@ test "dispatch channels.status returns channel and web login summary" {
     defer allocator.free(out);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"channels\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"webLogin\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"queueDepth\"") != null);
+}
+
+test "dispatch send/poll handles auth command and assistant reply loop" {
+    const allocator = std.testing.allocator;
+
+    const auth_start = try dispatch(allocator, "{\"id\":\"tg-start\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-dispatch\",\"sessionId\":\"tg-d1\",\"message\":\"/auth start chatgpt\"}}");
+    defer allocator.free(auth_start);
+    const login_session = try extractResultStringField(allocator, auth_start, "loginSessionId");
+    defer allocator.free(login_session);
+    const login_code = try extractResultStringField(allocator, auth_start, "loginCode");
+    defer allocator.free(login_code);
+
+    const auth_complete_frame = try std.fmt.allocPrint(allocator, "{{\"id\":\"tg-complete\",\"method\":\"send\",\"params\":{{\"channel\":\"telegram\",\"to\":\"room-dispatch\",\"sessionId\":\"tg-d1\",\"message\":\"/auth complete chatgpt {s} {s}\"}}}}", .{ login_code, login_session });
+    defer allocator.free(auth_complete_frame);
+    const auth_complete = try dispatch(allocator, auth_complete_frame);
+    defer allocator.free(auth_complete);
+    try std.testing.expect(std.mem.indexOf(u8, auth_complete, "\"authStatus\":\"authorized\"") != null);
+
+    const chat = try dispatch(allocator, "{\"id\":\"tg-chat\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-dispatch\",\"sessionId\":\"tg-d1\",\"message\":\"hello from dispatcher\"}}");
+    defer allocator.free(chat);
+    try std.testing.expect(std.mem.indexOf(u8, chat, "OpenClaw Zig") != null);
+
+    const poll = try dispatch(allocator, "{\"id\":\"tg-poll\",\"method\":\"poll\",\"params\":{\"channel\":\"telegram\",\"limit\":10}}");
+    defer allocator.free(poll);
+    try std.testing.expect(std.mem.indexOf(u8, poll, "\"count\":") != null);
+    try std.testing.expect(std.mem.indexOf(u8, poll, "\"updates\"") != null);
 }
 
 fn extractLoginStringField(
@@ -597,6 +695,21 @@ fn extractLoginStringField(
     const login = result.object.get("login") orelse return error.InvalidParamsFrame;
     if (login != .object) return error.InvalidParamsFrame;
     const value = login.object.get(field) orelse return error.InvalidParamsFrame;
+    if (value != .string) return error.InvalidParamsFrame;
+    return allocator.dupe(u8, value.string);
+}
+
+fn extractResultStringField(
+    allocator: std.mem.Allocator,
+    payload: []const u8,
+    field: []const u8,
+) ![]u8 {
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, payload, .{});
+    defer parsed.deinit();
+    if (parsed.value != .object) return error.InvalidParamsFrame;
+    const result = parsed.value.object.get("result") orelse return error.InvalidParamsFrame;
+    if (result != .object) return error.InvalidParamsFrame;
+    const value = result.object.get(field) orelse return error.InvalidParamsFrame;
     if (value != .string) return error.InvalidParamsFrame;
     return allocator.dupe(u8, value.string);
 }

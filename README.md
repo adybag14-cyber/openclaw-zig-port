@@ -56,6 +56,8 @@ Current route surface:
   - `web.login.complete`
   - `web.login.status`
   - `channels.status`
+  - `send`
+  - `poll`
   - `security.audit`
   - `doctor`
 
@@ -89,4 +91,10 @@ Run web login lifecycle smoke check:
 
 ```powershell
 ./scripts/web-login-smoke-check.ps1
+```
+
+Run Telegram command/reply loop smoke check:
+
+```powershell
+./scripts/telegram-reply-loop-smoke-check.ps1
 ```
