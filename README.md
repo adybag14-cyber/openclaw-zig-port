@@ -98,3 +98,11 @@ Run Telegram command/reply loop smoke check:
 ```powershell
 ./scripts/telegram-reply-loop-smoke-check.ps1
 ```
+
+Build preview release bundles (and optionally publish to GitHub Releases):
+
+```powershell
+./scripts/release-preview.ps1 -Version v0.1.1-zig-preview.2
+./scripts/release-preview.ps1 -Version v0.1.1-zig-preview.2 -IncludeArm64
+./scripts/release-preview.ps1 -Version v0.1.1-zig-preview.2 -Publish
+```

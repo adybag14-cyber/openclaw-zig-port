@@ -123,3 +123,6 @@ Port OpenClaw Go runtime behavior from baseline commit `65c974b528e2` into a pro
   - published GitHub preview release `v0.1.0-zig-preview.1`:
     - https://github.com/adybag14-cyber/openclaw-zig-port/releases/tag/v0.1.0-zig-preview.1
   - target note: `aarch64-linux` and `aarch64-macos` failed on the local Windows Zig master toolchain (`0.16.0-dev.2703+0a412853a`) with compiler exit code `5`, so the preview matrix was constrained to passing x86_64 targets.
+- Post-release hardening:
+  - added `scripts/release-preview.ps1` to automate deterministic preview artifact creation, checksum generation, and optional `gh release create` publishing.
+  - added a registry-wide dispatcher coverage test to assert every method in `registry.supported_methods` is actually dispatchable (no `-32601` method-not-found drift).

@@ -33,7 +33,7 @@ Release lock: no release tag is allowed until all phases are complete and parity
 
 ## Phase 6 - Memory + Edge
 - [x] Port memory persistence primitives
-- [ ] Port edge handler contracts
+- [x] Port edge handler contracts
 - [x] Port wasm runtime/sandbox lifecycle contracts
 
 Phase 6 progress notes:
@@ -109,3 +109,4 @@ Phase 6 progress notes:
 - [x] GitHub release published: `v0.1.0-zig-preview.1`
   - https://github.com/adybag14-cyber/openclaw-zig-port/releases/tag/v0.1.0-zig-preview.1
 - [x] Cross-target note: `aarch64-linux` and `aarch64-macos` failed on local Zig `0.16.0-dev.2703+0a412853a` Windows toolchain with compiler exit code `5`; release matrix kept to passing `x86_64` targets.
+- [x] Dispatcher coverage guard: registry-wide test asserts every method in `registry.supported_methods` resolves in dispatcher (prevents method-set drift regressions).

@@ -5964,6 +5964,23 @@ test "dispatch returns health result" {
     try std.testing.expect(std.mem.indexOf(u8, out, "\"status\":\"ok\"") != null);
 }
 
+test "dispatch covers every registered method name" {
+    const allocator = std.testing.allocator;
+    for (registry.supported_methods) |method| {
+        const frame = try encodeFrame(allocator, "registry-coverage", method, .{});
+        defer allocator.free(frame);
+
+        const out = try dispatch(allocator, frame);
+        defer allocator.free(out);
+
+        if (std.mem.indexOf(u8, out, "\"code\":-32601") != null) {
+            std.debug.print("registry method is missing in dispatcher switch: {s}\n", .{method});
+            std.debug.print("response: {s}\n", .{out});
+            return error.TestUnexpectedResult;
+        }
+    }
+}
+
 test "dispatch rejects playwright provider for browser.request" {
     const allocator = std.testing.allocator;
     const out = try dispatch(allocator, "{\"id\":\"2\",\"method\":\"browser.request\",\"params\":{\"provider\":\"playwright\"}}");
