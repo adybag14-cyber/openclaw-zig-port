@@ -114,3 +114,4 @@ Phase 6 progress notes:
 - [x] Added arm64 diagnostic runner (`scripts/zig-arm64-diagnose.ps1`) to persist stdout/stderr logs for `aarch64-linux` and `aarch64-macos` failures.
 - [x] Arm64 diagnostics confirmed local Windows Zig master failure class is toolchain-level (repro on minimal `build-exe`): `compiler_rt` sub-compilation failure, `memory allocation failure`, and (`aarch64-linux`) `invalid constraint: 'X'`.
 - [x] CI confirmation: GitHub Actions run `22645119953` passed all jobs, including `aarch64-linux` and `aarch64-macos` cross-target builds on Ubuntu Zig master.
+- [x] Added CI release workflow (`.github/workflows/release-preview.yml`) to publish full preview artifact matrix from Linux runners, including arm64 targets.

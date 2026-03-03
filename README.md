@@ -118,3 +118,16 @@ CI workflow:
 - validates build/test gates
 - attempts cross-target release builds (x86_64-macos required, aarch64-linux/aarch64-macos optional)
 - supports manual dispatch (`workflow_dispatch`) for on-demand verification
+
+Automated preview release workflow:
+- `.github/workflows/release-preview.yml` builds and publishes full preview artifacts on Linux runners for:
+  - `x86_64-windows`
+  - `x86_64-linux`
+  - `x86_64-macos`
+  - `aarch64-linux`
+  - `aarch64-macos`
+- Trigger with GitHub CLI:
+
+```powershell
+gh workflow run release-preview.yml -R adybag14-cyber/openclaw-zig-port -f version=v0.1.1-zig-preview.2
+```
