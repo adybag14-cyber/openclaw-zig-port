@@ -34,7 +34,7 @@ Release lock: no release tag is allowed until all phases are complete and parity
 ## Phase 6 - Memory + Edge
 - [x] Port memory persistence primitives
 - [ ] Port edge handler contracts
-- [ ] Port wasm runtime/sandbox lifecycle contracts
+- [x] Port wasm runtime/sandbox lifecycle contracts
 
 Phase 6 progress notes:
 - Implemented persistent memory store (`src/memory/store.zig`) with session/channel history handlers: `sessions.history`, `chat.history`, and `doctor.memory.status`.
@@ -42,8 +42,9 @@ Phase 6 progress notes:
 - Implemented advanced edge contract slice in dispatcher: `edge.enclave.status`, `edge.enclave.prove`, `edge.mesh.status`, `edge.homomorphic.compute`, `edge.finetune.status`, `edge.finetune.run`, `edge.identity.trust.status`, `edge.personality.profile`, `edge.handoff.plan`, `edge.marketplace.revenue.preview`, `edge.finetune.cluster.plan`, `edge.alignment.evaluate`, `edge.quantum.status`, and `edge.collaboration.plan`.
 - Added `edge.acceleration.status` parity handler with contract coverage.
 - Added wasm/runtime contract depth slice: `config.get` now exposes wasm module + policy snapshot and `tools.catalog` advertises wasm/runtime tool families; `edge.wasm.marketplace.list` now includes `witPackages` and `builderHints` parity fields.
+- Added explicit wasm lifecycle contracts: `edge.wasm.install`, `edge.wasm.execute`, and `edge.wasm.remove` with custom module state tracking and sandbox limit/capability enforcement.
 - Added OAuth + runtime aliases needed by Go parity callers: `auth.oauth.providers|start|wait|complete|logout|import`, `browser.open`, `chat.send`, and `sessions.send`.
-- Remaining: expand edge depth to full Go parity set and add explicit wasm execute/install/remove contract paths (beyond marketplace/config/catalog surfaces).
+- Remaining: expand edge depth to full Go parity set.
 
 ## Phase 7 - Validation + Release
 - [ ] Run full parity diff against Go baseline

@@ -75,12 +75,28 @@ const FinetuneJob = struct {
     }
 };
 
+const CustomWasmModule = struct {
+    id: []u8,
+    version: []u8,
+    description: []u8,
+    capabilities_csv: []u8,
+
+    fn deinit(self: *CustomWasmModule, allocator: std.mem.Allocator) void {
+        allocator.free(self.id);
+        allocator.free(self.version);
+        allocator.free(self.description);
+        allocator.free(self.capabilities_csv);
+    }
+};
+
 const EdgeState = struct {
     allocator: std.mem.Allocator,
     last_proof: ?EnclaveProof,
     proof_count: usize,
     finetune_jobs: std.ArrayList(FinetuneJob),
     next_finetune_id: u64,
+    custom_wasm_modules: std.ArrayList(CustomWasmModule),
+    wasm_execution_count: usize,
 
     fn init(allocator: std.mem.Allocator) EdgeState {
         return .{
@@ -89,6 +105,8 @@ const EdgeState = struct {
             .proof_count = 0,
             .finetune_jobs = .empty,
             .next_finetune_id = 1,
+            .custom_wasm_modules = .empty,
+            .wasm_execution_count = 0,
         };
     }
 
@@ -97,6 +115,8 @@ const EdgeState = struct {
         self.last_proof = null;
         for (self.finetune_jobs.items) |*job| job.deinit(self.allocator);
         self.finetune_jobs.deinit(self.allocator);
+        for (self.custom_wasm_modules.items) |*module| module.deinit(self.allocator);
+        self.custom_wasm_modules.deinit(self.allocator);
     }
 
     fn setEnclaveProof(
@@ -147,6 +167,52 @@ const EdgeState = struct {
             removed.deinit(self.allocator);
         }
         return id;
+    }
+
+    fn installWasmModule(
+        self: *EdgeState,
+        module_id: []const u8,
+        version: []const u8,
+        description: []const u8,
+        capabilities_csv: []const u8,
+    ) !void {
+        for (self.custom_wasm_modules.items) |*existing| {
+            if (std.ascii.eqlIgnoreCase(existing.id, module_id)) {
+                self.allocator.free(existing.version);
+                self.allocator.free(existing.description);
+                self.allocator.free(existing.capabilities_csv);
+                existing.version = try self.allocator.dupe(u8, version);
+                existing.description = try self.allocator.dupe(u8, description);
+                existing.capabilities_csv = try self.allocator.dupe(u8, capabilities_csv);
+                return;
+            }
+        }
+
+        try self.custom_wasm_modules.append(self.allocator, .{
+            .id = try self.allocator.dupe(u8, module_id),
+            .version = try self.allocator.dupe(u8, version),
+            .description = try self.allocator.dupe(u8, description),
+            .capabilities_csv = try self.allocator.dupe(u8, capabilities_csv),
+        });
+    }
+
+    fn removeWasmModule(self: *EdgeState, module_id: []const u8) bool {
+        var idx: usize = 0;
+        while (idx < self.custom_wasm_modules.items.len) : (idx += 1) {
+            if (std.ascii.eqlIgnoreCase(self.custom_wasm_modules.items[idx].id, module_id)) {
+                var removed = self.custom_wasm_modules.orderedRemove(idx);
+                removed.deinit(self.allocator);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    fn findCustomWasmModule(self: *const EdgeState, module_id: []const u8) ?CustomWasmModule {
+        for (self.custom_wasm_modules.items) |entry| {
+            if (std.ascii.eqlIgnoreCase(entry.id, module_id)) return entry;
+        }
+        return null;
     }
 };
 
@@ -237,6 +303,8 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         const memory = try getMemoryStore();
         const modules = wasmMarketplaceModules();
         const sandbox = wasmSandboxPolicy();
+        const edge_state = getEdgeState();
+        const total_module_count = modules.len + edge_state.custom_wasm_modules.items.len;
         return protocol.encodeResult(allocator, req.id, .{
             .gateway = .{
                 .bind = cfg.http_bind,
@@ -260,9 +328,12 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             .memory = memory.stats(),
             .security = guard.snapshot(),
             .wasm = .{
-                .count = modules.len,
+                .count = total_module_count,
                 .modules = modules,
+                .customModules = edge_state.custom_wasm_modules.items,
+                .customModuleCount = edge_state.custom_wasm_modules.items.len,
                 .policy = sandbox,
+                .executions = edge_state.wasm_execution_count,
             },
         });
     }
@@ -614,13 +685,17 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
     if (std.ascii.eqlIgnoreCase(req.method, "edge.wasm.marketplace.list")) {
         const modules = wasmMarketplaceModules();
         const sandbox = wasmSandboxPolicy();
+        const edge_state = getEdgeState();
+        const total_count = modules.len + edge_state.custom_wasm_modules.items.len;
         return protocol.encodeResult(allocator, req.id, .{
             .runtimeProfile = "edge",
             .moduleRoot = ".openclaw-zig/wasm/modules",
             .witRoot = ".openclaw-zig/wasm/wit",
-            .moduleCount = modules.len,
-            .count = modules.len,
+            .moduleCount = total_count,
+            .count = total_count,
             .modules = modules,
+            .customModules = edge_state.custom_wasm_modules.items,
+            .customModuleCount = edge_state.custom_wasm_modules.items.len,
             .witPackages = [_]struct { id: []const u8, version: []const u8 }{},
             .sandbox = sandbox,
             .builder = .{
@@ -632,6 +707,121 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                     .defaultCapability = "workspace.read",
                 },
             },
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "edge.wasm.install")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const module_id = firstParamString(params, "moduleId", firstParamString(params, "id", ""));
+        if (module_id.len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "edge.wasm.install requires moduleId",
+            });
+        }
+        const version = firstParamString(params, "version", "1.0.0");
+        const description = firstParamString(params, "description", "Custom installed wasm module");
+        const capabilities_csv = try parseCapabilitiesCsvFromParams(allocator, params);
+        defer allocator.free(capabilities_csv);
+
+        const edge_state = getEdgeState();
+        try edge_state.installWasmModule(module_id, version, description, capabilities_csv);
+        return protocol.encodeResult(allocator, req.id, .{
+            .status = "installed",
+            .module = .{
+                .id = module_id,
+                .version = version,
+                .description = description,
+                .capabilities = capabilities_csv,
+            },
+            .customModuleCount = edge_state.custom_wasm_modules.items.len,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "edge.wasm.execute")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const module_id = firstParamString(params, "moduleId", firstParamString(params, "id", ""));
+        if (module_id.len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "edge.wasm.execute requires moduleId",
+            });
+        }
+
+        const sandbox = wasmSandboxPolicy();
+        const timeout_ms: i64 = std.math.clamp(firstParamInt(params, "timeoutMs", 1000), 1, std.math.maxInt(i64));
+        const memory_mb: i64 = std.math.clamp(firstParamInt(params, "memoryMb", 64), 1, std.math.maxInt(i64));
+        if (timeout_ms > @as(i64, @intCast(sandbox.maxDurationMs))) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "timeout exceeds sandbox maxDurationMs",
+            });
+        }
+        if (memory_mb > @as(i64, @intCast(sandbox.maxMemoryMb))) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "memory exceeds sandbox maxMemoryMb",
+            });
+        }
+
+        const edge_state = getEdgeState();
+        var requires_network_fetch = false;
+        if (wasmMarketplaceModuleById(module_id)) |module| {
+            requires_network_fetch = moduleHasCapability(module.capabilities, "network.fetch");
+        } else if (edge_state.findCustomWasmModule(module_id)) |module| {
+            requires_network_fetch = capabilityCsvHas(module.capabilities_csv, "network.fetch");
+        } else {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32004,
+                .message = "wasm module not found",
+            });
+        }
+        if (requires_network_fetch and !sandbox.allowNetworkFetch) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32040,
+                .message = "sandbox denied required network.fetch capability",
+            });
+        }
+
+        const input_text = firstParamString(params, "input", firstParamString(params, "message", firstParamString(params, "prompt", "")));
+        const output_text = try renderWasmExecutionOutput(allocator, module_id, input_text);
+        defer allocator.free(output_text);
+
+        edge_state.wasm_execution_count += 1;
+        return protocol.encodeResult(allocator, req.id, .{
+            .status = "completed",
+            .moduleId = module_id,
+            .runtime = sandbox.runtime,
+            .timeoutMs = timeout_ms,
+            .memoryMb = memory_mb,
+            .sandbox = sandbox,
+            .output = output_text,
+            .executionCount = edge_state.wasm_execution_count,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "edge.wasm.remove")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const module_id = firstParamString(params, "moduleId", firstParamString(params, "id", ""));
+        if (module_id.len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "edge.wasm.remove requires moduleId",
+            });
+        }
+        const edge_state = getEdgeState();
+        const removed = edge_state.removeWasmModule(module_id);
+        return protocol.encodeResult(allocator, req.id, .{
+            .status = if (removed) "removed" else "not_found",
+            .removed = removed,
+            .moduleId = module_id,
+            .customModuleCount = edge_state.custom_wasm_modules.items.len,
         });
     }
 
@@ -1828,6 +2018,9 @@ fn shouldEnforceGuard(method: []const u8) bool {
     if (std.ascii.eqlIgnoreCase(method, "sessions.history")) return false;
     if (std.ascii.eqlIgnoreCase(method, "chat.history")) return false;
     if (std.ascii.eqlIgnoreCase(method, "edge.wasm.marketplace.list")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "edge.wasm.execute")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "edge.wasm.install")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "edge.wasm.remove")) return false;
     if (std.ascii.eqlIgnoreCase(method, "edge.router.plan")) return false;
     if (std.ascii.eqlIgnoreCase(method, "edge.acceleration.status")) return false;
     if (std.ascii.eqlIgnoreCase(method, "edge.swarm.plan")) return false;
@@ -2303,6 +2496,78 @@ fn wasmSandboxPolicy() WasmSandbox {
     };
 }
 
+fn wasmMarketplaceModuleById(module_id: []const u8) ?WasmMarketplaceModule {
+    const modules = wasmMarketplaceModules();
+    for (modules) |entry| {
+        if (std.ascii.eqlIgnoreCase(entry.id, module_id)) return entry;
+    }
+    return null;
+}
+
+fn moduleHasCapability(capabilities: []const []const u8, capability: []const u8) bool {
+    for (capabilities) |entry| {
+        if (std.ascii.eqlIgnoreCase(entry, capability)) return true;
+    }
+    return false;
+}
+
+fn capabilityCsvHas(csv: []const u8, capability: []const u8) bool {
+    var split = std.mem.splitScalar(u8, csv, ',');
+    while (split.next()) |raw| {
+        const trimmed = std.mem.trim(u8, raw, " \t\r\n");
+        if (trimmed.len == 0) continue;
+        if (std.ascii.eqlIgnoreCase(trimmed, capability)) return true;
+    }
+    return false;
+}
+
+fn parseCapabilitiesCsvFromParams(
+    allocator: std.mem.Allocator,
+    params: ?std.json.ObjectMap,
+) ![]u8 {
+    if (params) |obj| {
+        if (obj.get("capabilities")) |value| switch (value) {
+            .string => |raw| {
+                const trimmed = std.mem.trim(u8, raw, " \t\r\n");
+                if (trimmed.len > 0) return allocator.dupe(u8, trimmed);
+            },
+            .array => |arr| {
+                var out = std.ArrayList(u8).empty;
+                defer out.deinit(allocator);
+                var wrote_any = false;
+                for (arr.items) |entry| {
+                    if (entry != .string) continue;
+                    const trimmed = std.mem.trim(u8, entry.string, " \t\r\n");
+                    if (trimmed.len == 0) continue;
+                    if (wrote_any) try out.append(allocator, ',');
+                    try out.appendSlice(allocator, trimmed);
+                    wrote_any = true;
+                }
+                if (wrote_any) return out.toOwnedSlice(allocator);
+            },
+            else => {},
+        };
+    }
+    return allocator.dupe(u8, "workspace.read");
+}
+
+fn renderWasmExecutionOutput(
+    allocator: std.mem.Allocator,
+    module_id: []const u8,
+    input_text: []const u8,
+) ![]u8 {
+    if (std.ascii.eqlIgnoreCase(module_id, "wasm.echo")) {
+        return std.fmt.allocPrint(allocator, "echo:{s}", .{if (input_text.len > 0) input_text else "ok"});
+    }
+    if (std.ascii.eqlIgnoreCase(module_id, "wasm.vector.search")) {
+        return std.fmt.allocPrint(allocator, "vector-search:query=\"{s}\" topK=3", .{if (input_text.len > 0) input_text else "memory"});
+    }
+    if (std.ascii.eqlIgnoreCase(module_id, "wasm.vision.inspect")) {
+        return std.fmt.allocPrint(allocator, "vision-inspect:summary=\"{s}\"", .{if (input_text.len > 0) input_text else "no-input"});
+    }
+    return std.fmt.allocPrint(allocator, "custom-module:{s} executed", .{module_id});
+}
+
 fn parseProviderFromFrame(allocator: std.mem.Allocator, frame_json: []const u8) !ProviderResult {
     var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
     defer parsed.deinit();
@@ -2622,6 +2887,32 @@ test "dispatch edge parity slice methods return contracts" {
     defer allocator.free(wasm);
     try std.testing.expect(std.mem.indexOf(u8, wasm, "\"moduleCount\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, wasm, "\"wasm.echo\"") != null);
+}
+
+test "dispatch wasm lifecycle methods install execute remove and enforce sandbox limits" {
+    const allocator = std.testing.allocator;
+
+    const install = try dispatch(allocator, "{\"id\":\"edge-wasm-install\",\"method\":\"edge.wasm.install\",\"params\":{\"moduleId\":\"wasm.custom.math\",\"version\":\"0.1.0\",\"description\":\"custom math\",\"capabilities\":[\"workspace.read\"]}}");
+    defer allocator.free(install);
+    try std.testing.expect(std.mem.indexOf(u8, install, "\"status\":\"installed\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, install, "\"wasm.custom.math\"") != null);
+
+    const execute = try dispatch(allocator, "{\"id\":\"edge-wasm-exec\",\"method\":\"edge.wasm.execute\",\"params\":{\"moduleId\":\"wasm.custom.math\",\"input\":\"run\"}}");
+    defer allocator.free(execute);
+    try std.testing.expect(std.mem.indexOf(u8, execute, "\"status\":\"completed\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, execute, "\"wasm.custom.math\"") != null);
+
+    const execute_limit = try dispatch(allocator, "{\"id\":\"edge-wasm-exec-limit\",\"method\":\"edge.wasm.execute\",\"params\":{\"moduleId\":\"wasm.echo\",\"timeoutMs\":20000}}");
+    defer allocator.free(execute_limit);
+    try std.testing.expect(std.mem.indexOf(u8, execute_limit, "\"code\":-32602") != null);
+
+    const remove = try dispatch(allocator, "{\"id\":\"edge-wasm-remove\",\"method\":\"edge.wasm.remove\",\"params\":{\"moduleId\":\"wasm.custom.math\"}}");
+    defer allocator.free(remove);
+    try std.testing.expect(std.mem.indexOf(u8, remove, "\"removed\":true") != null);
+
+    const missing = try dispatch(allocator, "{\"id\":\"edge-wasm-missing\",\"method\":\"edge.wasm.execute\",\"params\":{\"moduleId\":\"wasm.custom.math\"}}");
+    defer allocator.free(missing);
+    try std.testing.expect(std.mem.indexOf(u8, missing, "\"code\":-32004") != null);
 }
 
 test "dispatch advanced edge methods return parity contracts" {

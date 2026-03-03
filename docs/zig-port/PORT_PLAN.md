@@ -78,6 +78,7 @@ Port OpenClaw Go runtime behavior from baseline commit `65c974b528e2` into a pro
     - `config.get` now returns gateway/runtime/browser/channel/memory/security/wasm snapshots with sandbox policy.
     - `tools.catalog` now exposes wasm/runtime/browser/message tool families and counts.
     - `edge.wasm.marketplace.list` now includes `witPackages` + `builderHints` parity metadata.
+    - explicit wasm lifecycle RPCs implemented: `edge.wasm.install`, `edge.wasm.execute`, and `edge.wasm.remove` (custom module state + sandbox enforcement).
   - Added Go-compat alias surfaces for auth/runtime callers:
     - `auth.oauth.providers|start|wait|complete|logout|import`
     - `browser.open`, `chat.send`, and `sessions.send`
