@@ -30,7 +30,13 @@ jobs:
 
       - name: Go-to-Zig method parity gate
         shell: pwsh
-        run: ./scripts/check-go-method-parity.ps1
+        run: ./scripts/check-go-method-parity.ps1 -OutputJsonPath parity-go-zig.json
+
+      - name: Upload parity report
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-go-zig
+          path: parity-go-zig.json
 
       - name: Build release (x86_64-linux)
         run: zig build -Dtarget=x86_64-linux -Doptimize=ReleaseFast --summary all

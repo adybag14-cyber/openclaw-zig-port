@@ -1,7 +1,9 @@
 param(
     [string] $GoRegistryPath = "",
     [string] $GoRegistryUrl = "https://raw.githubusercontent.com/adybag14-cyber/openclaw-go-port/65c974b528e2a960b171e3110e8e4e4dbb6fda63/go-agent/internal/rpc/registry.go",
-    [string] $ZigRegistryPath = ""
+    [string] $ZigRegistryPath = "",
+    [string] $OutputJsonPath = "",
+    [switch] $FailOnExtra
 )
 
 $ErrorActionPreference = "Stop"
@@ -114,6 +116,22 @@ foreach ($m in $zigMethods) {
     if (-not $goSet.Contains($m)) { $extraInZig.Add($m) | Out-Null }
 }
 
+$report = [ordered]@{
+    baseline = [ordered]@{
+        goRegistryPath = if ([string]::IsNullOrWhiteSpace($GoRegistryPath)) { $null } else { $GoRegistryPath }
+        goRegistryUrl = if ([string]::IsNullOrWhiteSpace($GoRegistryPath)) { $GoRegistryUrl } else { $null }
+        zigRegistryPath = $ZigRegistryPath
+    }
+    counts = [ordered]@{
+        go = $goMethods.Count
+        zig = $zigMethods.Count
+        missingInZig = $missingInZig.Count
+        extraInZig = $extraInZig.Count
+    }
+    missingInZig = @($missingInZig | Sort-Object)
+    extraInZig = @($extraInZig | Sort-Object)
+}
+
 Write-Output "GO_COUNT=$($goMethods.Count)"
 Write-Output "ZIG_COUNT=$($zigMethods.Count)"
 Write-Output "MISSING_IN_ZIG=$($missingInZig.Count)"
@@ -129,8 +147,22 @@ if ($extraInZig.Count -gt 0) {
     Write-Output "EXTRA_METHODS_END"
 }
 
+if (-not [string]::IsNullOrWhiteSpace($OutputJsonPath)) {
+    $outputDir = Split-Path -Parent $OutputJsonPath
+    if (-not [string]::IsNullOrWhiteSpace($outputDir)) {
+        New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+    }
+    $reportJson = $report | ConvertTo-Json -Depth 8
+    Set-Content -Path $OutputJsonPath -Value $reportJson -Encoding utf8
+    Write-Output "PARITY_REPORT_JSON=$OutputJsonPath"
+}
+
 if ($missingInZig.Count -gt 0) {
     throw "Go->Zig parity check failed: missing methods in Zig = $($missingInZig.Count)"
+}
+
+if ($FailOnExtra -and $extraInZig.Count -gt 0) {
+    throw "Go->Zig parity check failed: extra methods in Zig = $($extraInZig.Count)"
 }
 
 Write-Output "Go->Zig parity check passed."

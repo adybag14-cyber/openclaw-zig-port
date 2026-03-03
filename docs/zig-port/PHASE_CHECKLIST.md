@@ -119,3 +119,4 @@ Phase 6 progress notes:
 - [x] Added cross-repo method parity gate script (`scripts/check-go-method-parity.ps1`) and wired it into CI + release workflows as a blocking check.
 - [x] Parity gate baseline pinned to Go commit `65c974b528e2a960b171e3110e8e4e4dbb6fda63` for deterministic CI behavior.
 - [x] Release workflow hardened with upfront validate job (`build` + `test` + parity gate) and duplicate-tag guard before publish.
+- [x] Parity gate now emits machine-readable report (`parity-go-zig.json`) and CI/release workflows publish it as audit evidence.

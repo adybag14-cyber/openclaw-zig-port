@@ -32,7 +32,13 @@ jobs:
 
       - name: Go-to-Zig method parity gate
         shell: pwsh
-        run: ./scripts/check-go-method-parity.ps1
+        run: ./scripts/check-go-method-parity.ps1 -OutputJsonPath parity-go-zig.json
+
+      - name: Upload parity report
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-go-zig
+          path: parity-go-zig.json
 
       - name: Build and test baseline
         run: |
@@ -112,6 +118,12 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Download parity report
+        uses: actions/download-artifact@v4
+        with:
+          name: parity-go-zig
+          path: dist
+
       - name: Build checksum manifest
         shell: bash
         run: |
@@ -139,8 +151,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          ASSETS=(dist/*.zip dist/SHA256SUMS.txt)
+          if [ -f dist/parity-go-zig.json ]; then
+            ASSETS+=(dist/parity-go-zig.json)
+          fi
+
           gh release create "${{ inputs.version }}" \
-            dist/*.zip dist/SHA256SUMS.txt \
+            "${ASSETS[@]}" \
             --repo "${{ github.repository }}" \
             --title "${{ inputs.version }}" \
             --prerelease \

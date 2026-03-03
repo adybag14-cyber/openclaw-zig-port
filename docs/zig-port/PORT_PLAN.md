@@ -135,3 +135,4 @@ Port OpenClaw Go runtime behavior from baseline commit `65c974b528e2` into a pro
   - added `scripts/check-go-method-parity.ps1` and wired it into both CI workflows, enforcing that every Go registry method is present in Zig before merge/release.
   - parity gate now uses pinned Go baseline commit `65c974b528e2a960b171e3110e8e4e4dbb6fda63` by default, avoiding nondeterministic drift from moving `main`.
   - release workflow now runs an explicit `validate` job (parity + `zig build` + `zig build test`) before matrix artifact builds, and fails early if the requested release tag already exists.
+  - parity gate now writes a JSON audit payload (`parity-go-zig.json`) and CI/release flows publish it as traceable parity evidence.
