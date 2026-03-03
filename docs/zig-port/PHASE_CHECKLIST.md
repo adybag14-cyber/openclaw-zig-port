@@ -48,6 +48,11 @@ Phase 6 progress notes:
   - usage + heartbeat + presence methods: `usage.status`, `usage.cost`, `last-heartbeat`, `set-heartbeats`, `system-presence`, `system-event`, `wake`
   - session/log methods: `sessions.list`, `sessions.preview`, `session.status`, `sessions.reset`, `sessions.delete`, `sessions.compact`, `sessions.usage`, `sessions.usage.timeseries`, `sessions.usage.logs`, `logs.tail`
   - memory store now supports `count`, `removeSession`, and `trim` to back these contracts with real state mutations.
+- Added compat conversation/control slice:
+  - talk/voice methods: `talk.config`, `talk.mode`, `voicewake.get`, `voicewake.set`
+  - TTS methods: `tts.status`, `tts.enable`, `tts.disable`, `tts.providers`, `tts.setProvider`, `tts.convert`
+  - model/control methods: `models.list`, `chat.abort`, `chat.inject`, `push.test`, `canvas.present`, `update.run`
+  - stateful compat runtime now tracks talk mode/voice, TTS provider/enabled, voicewake phrase, and update jobs.
 - Remaining: expand edge depth to full Go parity set.
 
 ## Phase 7 - Validation + Release

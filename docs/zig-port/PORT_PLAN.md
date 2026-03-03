@@ -86,7 +86,11 @@ Port OpenClaw Go runtime behavior from baseline commit `65c974b528e2` into a pro
     - usage/heartbeat/presence: `usage.status`, `usage.cost`, `last-heartbeat`, `set-heartbeats`, `system-presence`, `system-event`, `wake`
     - session/log lifecycle: `sessions.list`, `sessions.preview`, `session.status`, `sessions.reset`, `sessions.delete`, `sessions.compact`, `sessions.usage`, `sessions.usage.timeseries`, `sessions.usage.logs`, `logs.tail`
     - memory primitives expanded (`count`, `removeSession`, `trim`) to support real reset/delete/compact semantics.
-  - Method surface moved to `72` Zig methods (from `55`) while preserving Lightpanda-only browser policy and green validation gates.
+  - Added compat conversation/control surfaces with stateful behavior:
+    - `talk.config`, `talk.mode`, `voicewake.get`, `voicewake.set`
+    - `tts.status`, `tts.enable`, `tts.disable`, `tts.providers`, `tts.setProvider`, `tts.convert`
+    - `models.list`, `chat.abort`, `chat.inject`, `push.test`, `canvas.present`, `update.run`
+  - Method surface moved to `88` Zig methods (from `72`) while preserving Lightpanda-only browser policy and green validation gates.
   - Added dispatcher contract tests for new edge methods and memory flows.
 - Toolchain/runtime notes (local Windows Zig master):
   - Codeberg `master` is currently `2d88a5a10334bddf3bd0b8bc98744ea6f239ce3a`.

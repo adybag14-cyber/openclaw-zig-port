@@ -49,6 +49,25 @@ const CompatEvent = struct {
     }
 };
 
+const CompatUpdateJob = struct {
+    id: []u8,
+    status: []u8,
+    phase: []u8,
+    progress: u8,
+    target_version: []u8,
+    dry_run: bool,
+    force: bool,
+    created_at_ms: i64,
+    updated_at_ms: i64,
+
+    fn deinit(self: *CompatUpdateJob, allocator: std.mem.Allocator) void {
+        allocator.free(self.id);
+        allocator.free(self.status);
+        allocator.free(self.phase);
+        allocator.free(self.target_version);
+    }
+};
+
 const CompatState = struct {
     const HeartbeatSnapshot = struct {
         enabled: bool,
@@ -63,8 +82,16 @@ const CompatState = struct {
     presence_mode: []u8,
     presence_source: []u8,
     presence_updated_ms: i64,
+    talk_mode: []u8,
+    talk_voice: []u8,
+    tts_enabled: bool,
+    tts_provider: []u8,
+    voicewake_enabled: bool,
+    voicewake_phrase: []u8,
     events: std.ArrayList(CompatEvent),
+    update_jobs: std.ArrayList(CompatUpdateJob),
     next_event_id: u64,
+    next_update_id: u64,
     session_tombstones: std.StringHashMap(void),
 
     fn init(allocator: std.mem.Allocator) !CompatState {
@@ -77,8 +104,16 @@ const CompatState = struct {
             .presence_mode = try allocator.dupe(u8, "ready"),
             .presence_source = try allocator.dupe(u8, "openclaw-zig"),
             .presence_updated_ms = now,
+            .talk_mode = try allocator.dupe(u8, "normal"),
+            .talk_voice = try allocator.dupe(u8, "default"),
+            .tts_enabled = true,
+            .tts_provider = try allocator.dupe(u8, "native"),
+            .voicewake_enabled = false,
+            .voicewake_phrase = try allocator.dupe(u8, "hey openclaw"),
             .events = .empty,
+            .update_jobs = .empty,
             .next_event_id = 1,
+            .next_update_id = 1,
             .session_tombstones = std.StringHashMap(void).init(allocator),
         };
     }
@@ -86,8 +121,14 @@ const CompatState = struct {
     fn deinit(self: *CompatState) void {
         self.allocator.free(self.presence_mode);
         self.allocator.free(self.presence_source);
+        self.allocator.free(self.talk_mode);
+        self.allocator.free(self.talk_voice);
+        self.allocator.free(self.tts_provider);
+        self.allocator.free(self.voicewake_phrase);
         for (self.events.items) |*event| event.deinit(self.allocator);
         self.events.deinit(self.allocator);
+        for (self.update_jobs.items) |*job| job.deinit(self.allocator);
+        self.update_jobs.deinit(self.allocator);
 
         var tombstones = self.session_tombstones.iterator();
         while (tombstones.next()) |entry| self.allocator.free(entry.key_ptr.*);
@@ -122,6 +163,44 @@ const CompatState = struct {
         self.presence_updated_ms = time_util.nowMs();
     }
 
+    fn setTalkConfig(self: *CompatState, mode: []const u8, voice: []const u8) !void {
+        if (mode.len > 0) {
+            self.allocator.free(self.talk_mode);
+            self.talk_mode = try self.allocator.dupe(u8, mode);
+        }
+        if (voice.len > 0) {
+            self.allocator.free(self.talk_voice);
+            self.talk_voice = try self.allocator.dupe(u8, voice);
+        }
+    }
+
+    fn talkConfigView(self: *const CompatState) struct {
+        mode: []const u8,
+        voice: []const u8,
+        ttsEnabled: bool,
+        ttsProvider: []const u8,
+    } {
+        return .{
+            .mode = self.talk_mode,
+            .voice = self.talk_voice,
+            .ttsEnabled = self.tts_enabled,
+            .ttsProvider = self.tts_provider,
+        };
+    }
+
+    fn setTTSProvider(self: *CompatState, provider: []const u8) !void {
+        self.allocator.free(self.tts_provider);
+        self.tts_provider = try self.allocator.dupe(u8, provider);
+    }
+
+    fn setVoicewake(self: *CompatState, enabled: bool, phrase: []const u8) !void {
+        self.voicewake_enabled = enabled;
+        if (phrase.len > 0) {
+            self.allocator.free(self.voicewake_phrase);
+            self.voicewake_phrase = try self.allocator.dupe(u8, phrase);
+        }
+    }
+
     fn presenceView(self: *const CompatState) struct {
         mode: []const u8,
         source: []const u8,
@@ -147,6 +226,36 @@ const CompatState = struct {
             removed.deinit(self.allocator);
         }
         return self.events.items[self.events.items.len - 1];
+    }
+
+    fn createUpdateJob(self: *CompatState, target_version: []const u8, dry_run: bool, force: bool) !CompatUpdateJob {
+        const now = time_util.nowMs();
+        const id = try std.fmt.allocPrint(self.allocator, "update-{d}", .{self.next_update_id});
+        self.next_update_id += 1;
+        var status: []const u8 = "queued";
+        var phase: []const u8 = "queued";
+        var progress: u8 = 0;
+        if (dry_run) {
+            status = "completed";
+            phase = "dry-run";
+            progress = 100;
+        }
+        try self.update_jobs.append(self.allocator, .{
+            .id = id,
+            .status = try self.allocator.dupe(u8, status),
+            .phase = try self.allocator.dupe(u8, phase),
+            .progress = progress,
+            .target_version = try self.allocator.dupe(u8, target_version),
+            .dry_run = dry_run,
+            .force = force,
+            .created_at_ms = now,
+            .updated_at_ms = now,
+        });
+        if (self.update_jobs.items.len > 256) {
+            var removed = self.update_jobs.orderedRemove(0);
+            removed.deinit(self.allocator);
+        }
+        return self.update_jobs.items[self.update_jobs.items.len - 1];
     }
 
     fn markSessionDeleted(self: *CompatState, session_id: []const u8) !void {
@@ -531,6 +640,248 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             .ok = true,
             .awakened = true,
             .heartbeat = compat.touchHeartbeat(true, interval_ms),
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "talk.config")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const mode = firstParamString(params, "mode", "");
+        const voice = firstParamString(params, "voice", "");
+        const compat = try getCompatState();
+        try compat.setTalkConfig(mode, voice);
+        return protocol.encodeResult(allocator, req.id, .{
+            .config = compat.talkConfigView(),
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "talk.mode")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const mode = firstParamString(params, "mode", "");
+        const compat = try getCompatState();
+        try compat.setTalkConfig(mode, "");
+        return protocol.encodeResult(allocator, req.id, .{
+            .mode = compat.talk_mode,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "tts.status")) {
+        const compat = try getCompatState();
+        return protocol.encodeResult(allocator, req.id, .{
+            .enabled = compat.tts_enabled,
+            .provider = compat.tts_provider,
+            .available = true,
+            .providerId = compat.tts_provider,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "tts.enable")) {
+        const compat = try getCompatState();
+        compat.tts_enabled = true;
+        return protocol.encodeResult(allocator, req.id, .{
+            .enabled = compat.tts_enabled,
+            .provider = compat.tts_provider,
+            .available = true,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "tts.disable")) {
+        const compat = try getCompatState();
+        compat.tts_enabled = false;
+        return protocol.encodeResult(allocator, req.id, .{
+            .enabled = compat.tts_enabled,
+            .provider = compat.tts_provider,
+            .available = true,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "tts.providers")) {
+        const providers = [_]struct {
+            id: []const u8,
+            name: []const u8,
+            enabled: bool,
+            available: bool,
+            reason: []const u8,
+        }{
+            .{ .id = "native", .name = "Native Synth", .enabled = true, .available = true, .reason = "built-in synthetic fallback" },
+            .{ .id = "openai-voice", .name = "OpenAI Voice", .enabled = true, .available = true, .reason = "browser bridge configured" },
+            .{ .id = "kittentts", .name = "KittenTTS", .enabled = true, .available = true, .reason = "runtime shim available" },
+            .{ .id = "elevenlabs", .name = "ElevenLabs", .enabled = false, .available = false, .reason = "api key missing" },
+        };
+        const compat = try getCompatState();
+        return protocol.encodeResult(allocator, req.id, .{
+            .providers = providers,
+            .current = .{
+                .provider = compat.tts_provider,
+                .enabled = compat.tts_enabled,
+                .available = true,
+            },
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "tts.setProvider")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const provider = firstParamString(params, "provider", "");
+        if (!isSupportedTTSProvider(provider)) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "unsupported provider",
+            });
+        }
+        const compat = try getCompatState();
+        try compat.setTTSProvider(provider);
+        return protocol.encodeResult(allocator, req.id, .{
+            .provider = compat.tts_provider,
+            .enabled = compat.tts_enabled,
+            .available = true,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "tts.convert")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const text = firstParamString(params, "text", firstParamString(params, "message", ""));
+        if (text.len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "tts.convert requires text",
+            });
+        }
+        const format = firstParamString(params, "format", "wav");
+        const compat = try getCompatState();
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = true,
+            .provider = compat.tts_provider,
+            .enabled = compat.tts_enabled,
+            .format = format,
+            .audioRef = "memory://tts/audio",
+            .bytes = text.len * 4,
+            .text = text,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "voicewake.get")) {
+        const compat = try getCompatState();
+        return protocol.encodeResult(allocator, req.id, .{
+            .enabled = compat.voicewake_enabled,
+            .phrase = compat.voicewake_phrase,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "voicewake.set")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const enabled = firstParamBool(params, "enabled", true);
+        const phrase = firstParamString(params, "phrase", firstParamString(params, "keyword", ""));
+        const compat = try getCompatState();
+        try compat.setVoicewake(enabled, phrase);
+        return protocol.encodeResult(allocator, req.id, .{
+            .enabled = compat.voicewake_enabled,
+            .phrase = compat.voicewake_phrase,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "models.list")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const provider_filter = firstParamString(params, "provider", "");
+        const models = try filteredModelCatalog(allocator, provider_filter);
+        defer allocator.free(models);
+        return protocol.encodeResult(allocator, req.id, .{
+            .count = models.len,
+            .items = models,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "update.run")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const target_version = firstParamString(params, "targetVersion", "edge");
+        const dry_run = firstParamBool(params, "dryRun", false);
+        const force = firstParamBool(params, "force", false);
+        const compat = try getCompatState();
+        const job = try compat.createUpdateJob(target_version, dry_run, force);
+        return protocol.encodeResult(allocator, req.id, .{
+            .jobId = job.id,
+            .status = job.status,
+            .phase = job.phase,
+            .progress = job.progress,
+            .targetVersion = job.target_version,
+            .dryRun = job.dry_run,
+            .force = job.force,
+            .startedAtMs = job.created_at_ms,
+            .updatedAtMs = job.updated_at_ms,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "push.test")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const channel = firstParamString(params, "channel", "webchat");
+        const message_id = try std.fmt.allocPrint(allocator, "push-{d}", .{time_util.nowMs()});
+        defer allocator.free(message_id);
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = true,
+            .channel = channel,
+            .messageId = message_id,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "canvas.present")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const frame_ref = firstParamString(params, "frameRef", "canvas://latest");
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = true,
+            .frameRef = frame_ref,
+            .presentedAtMs = time_util.nowMs(),
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "chat.abort")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const job_id = firstParamString(params, "jobId", "");
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = true,
+            .jobId = job_id,
+            .aborted = true,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "chat.inject")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const session_id = resolveSessionId(params);
+        const channel = firstParamString(params, "channel", "webchat");
+        const message = firstParamString(params, "message", firstParamString(params, "text", ""));
+        if (message.len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "chat.inject requires message",
+            });
+        }
+        const memory = try getMemoryStore();
+        try memory.append(session_id, channel, "chat.inject", "system", message);
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = true,
+            .sessionId = session_id,
+            .channel = channel,
+            .message = message,
+            .injectedAtMs = time_util.nowMs(),
         });
     }
 
@@ -2451,11 +2802,25 @@ fn shouldEnforceGuard(method: []const u8) bool {
     if (std.ascii.eqlIgnoreCase(method, "system-presence")) return false;
     if (std.ascii.eqlIgnoreCase(method, "system-event")) return false;
     if (std.ascii.eqlIgnoreCase(method, "wake")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "talk.config")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "talk.mode")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "tts.status")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "tts.enable")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "tts.disable")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "tts.convert")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "tts.setProvider")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "tts.providers")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "voicewake.get")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "voicewake.set")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "models.list")) return false;
     if (std.ascii.eqlIgnoreCase(method, "config.get")) return false;
     if (std.ascii.eqlIgnoreCase(method, "tools.catalog")) return false;
     if (std.ascii.eqlIgnoreCase(method, "channels.status")) return false;
     if (std.ascii.eqlIgnoreCase(method, "channels.logout")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "update.run")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "push.test")) return false;
     if (std.ascii.eqlIgnoreCase(method, "logs.tail")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "canvas.present")) return false;
     if (std.ascii.eqlIgnoreCase(method, "sessions.list")) return false;
     if (std.ascii.eqlIgnoreCase(method, "sessions.preview")) return false;
     if (std.ascii.eqlIgnoreCase(method, "session.status")) return false;
@@ -2481,6 +2846,8 @@ fn shouldEnforceGuard(method: []const u8) bool {
     if (std.ascii.eqlIgnoreCase(method, "browser.open")) return false;
     if (std.ascii.eqlIgnoreCase(method, "send")) return false;
     if (std.ascii.eqlIgnoreCase(method, "chat.send")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "chat.abort")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "chat.inject")) return false;
     if (std.ascii.eqlIgnoreCase(method, "sessions.send")) return false;
     if (std.ascii.eqlIgnoreCase(method, "poll")) return false;
     if (std.ascii.eqlIgnoreCase(method, "sessions.history")) return false;
@@ -3085,6 +3452,52 @@ fn buildMultimodalSummary(
     );
 }
 
+const ModelDescriptor = struct {
+    id: []const u8,
+    provider: []const u8,
+    name: []const u8,
+    mode: []const u8,
+};
+
+fn modelCatalog() []const ModelDescriptor {
+    return &[_]ModelDescriptor{
+        .{ .id = "gpt-5.2", .provider = "chatgpt", .name = "GPT-5.2", .mode = "auto" },
+        .{ .id = "gpt-5.2-thinking", .provider = "chatgpt", .name = "GPT-5.2 Thinking", .mode = "thinking" },
+        .{ .id = "gpt-5.2-pro", .provider = "chatgpt", .name = "GPT-5.2 Pro", .mode = "pro" },
+        .{ .id = "qwen-max", .provider = "qwen", .name = "Qwen Max", .mode = "auto" },
+        .{ .id = "glm-5", .provider = "zai", .name = "GLM-5", .mode = "auto" },
+        .{ .id = "mercury-2", .provider = "inception", .name = "Mercury 2", .mode = "auto" },
+        .{ .id = "openai/gpt-5.2-mini", .provider = "openrouter", .name = "OpenRouter GPT-5.2 Mini", .mode = "instant" },
+        .{ .id = "opencode/gpt-oss-20b", .provider = "opencode", .name = "OpenCode GPT-OSS 20B", .mode = "auto" },
+    };
+}
+
+fn filteredModelCatalog(allocator: std.mem.Allocator, provider_filter: []const u8) ![]ModelDescriptor {
+    const all = modelCatalog();
+    if (std.mem.trim(u8, provider_filter, " \t\r\n").len == 0) {
+        const out = try allocator.alloc(ModelDescriptor, all.len);
+        @memcpy(out, all);
+        return out;
+    }
+
+    var items: std.ArrayList(ModelDescriptor) = .empty;
+    defer items.deinit(allocator);
+    for (all) |model| {
+        if (std.ascii.eqlIgnoreCase(model.provider, provider_filter)) {
+            try items.append(allocator, model);
+        }
+    }
+    return items.toOwnedSlice(allocator);
+}
+
+fn isSupportedTTSProvider(provider: []const u8) bool {
+    if (provider.len == 0) return false;
+    return std.ascii.eqlIgnoreCase(provider, "native") or
+        std.ascii.eqlIgnoreCase(provider, "openai-voice") or
+        std.ascii.eqlIgnoreCase(provider, "kittentts") or
+        std.ascii.eqlIgnoreCase(provider, "elevenlabs");
+}
+
 fn wasmMarketplaceModules() []const WasmMarketplaceModule {
     return &[_]WasmMarketplaceModule{
         .{
@@ -3539,6 +3952,84 @@ test "dispatch compat usage and session lifecycle methods return contracts" {
     const status_missing = try dispatch(allocator, "{\"id\":\"compat-session-missing\",\"method\":\"session.status\",\"params\":{\"sessionId\":\"compat-s1\"}}");
     defer allocator.free(status_missing);
     try std.testing.expect(std.mem.indexOf(u8, status_missing, "\"code\":-32004") != null);
+}
+
+test "dispatch compat talk tts models and control methods return contracts" {
+    const allocator = std.testing.allocator;
+
+    const talk_config = try dispatch(allocator, "{\"id\":\"compat-talk-config\",\"method\":\"talk.config\",\"params\":{\"mode\":\"concise\",\"voice\":\"calm\"}}");
+    defer allocator.free(talk_config);
+    try std.testing.expect(std.mem.indexOf(u8, talk_config, "\"config\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, talk_config, "\"mode\":\"concise\"") != null);
+
+    const talk_mode = try dispatch(allocator, "{\"id\":\"compat-talk-mode\",\"method\":\"talk.mode\",\"params\":{\"mode\":\"detailed\"}}");
+    defer allocator.free(talk_mode);
+    try std.testing.expect(std.mem.indexOf(u8, talk_mode, "\"mode\":\"detailed\"") != null);
+
+    const tts_status = try dispatch(allocator, "{\"id\":\"compat-tts-status\",\"method\":\"tts.status\",\"params\":{}}");
+    defer allocator.free(tts_status);
+    try std.testing.expect(std.mem.indexOf(u8, tts_status, "\"provider\"") != null);
+
+    const tts_provider_bad = try dispatch(allocator, "{\"id\":\"compat-tts-provider-bad\",\"method\":\"tts.setProvider\",\"params\":{\"provider\":\"unsupported\"}}");
+    defer allocator.free(tts_provider_bad);
+    try std.testing.expect(std.mem.indexOf(u8, tts_provider_bad, "\"code\":-32602") != null);
+
+    const tts_provider = try dispatch(allocator, "{\"id\":\"compat-tts-provider\",\"method\":\"tts.setProvider\",\"params\":{\"provider\":\"kittentts\"}}");
+    defer allocator.free(tts_provider);
+    try std.testing.expect(std.mem.indexOf(u8, tts_provider, "\"provider\":\"kittentts\"") != null);
+
+    const tts_disable = try dispatch(allocator, "{\"id\":\"compat-tts-disable\",\"method\":\"tts.disable\",\"params\":{}}");
+    defer allocator.free(tts_disable);
+    try std.testing.expect(std.mem.indexOf(u8, tts_disable, "\"enabled\":false") != null);
+
+    const tts_enable = try dispatch(allocator, "{\"id\":\"compat-tts-enable\",\"method\":\"tts.enable\",\"params\":{}}");
+    defer allocator.free(tts_enable);
+    try std.testing.expect(std.mem.indexOf(u8, tts_enable, "\"enabled\":true") != null);
+
+    const tts_convert = try dispatch(allocator, "{\"id\":\"compat-tts-convert\",\"method\":\"tts.convert\",\"params\":{\"text\":\"hello tts\",\"format\":\"wav\"}}");
+    defer allocator.free(tts_convert);
+    try std.testing.expect(std.mem.indexOf(u8, tts_convert, "\"audioRef\"") != null);
+
+    const tts_providers = try dispatch(allocator, "{\"id\":\"compat-tts-providers\",\"method\":\"tts.providers\",\"params\":{}}");
+    defer allocator.free(tts_providers);
+    try std.testing.expect(std.mem.indexOf(u8, tts_providers, "\"providers\"") != null);
+
+    const voicewake_set = try dispatch(allocator, "{\"id\":\"compat-voicewake-set\",\"method\":\"voicewake.set\",\"params\":{\"enabled\":true,\"phrase\":\"hey edge\"}}");
+    defer allocator.free(voicewake_set);
+    try std.testing.expect(std.mem.indexOf(u8, voicewake_set, "\"phrase\":\"hey edge\"") != null);
+
+    const voicewake_get = try dispatch(allocator, "{\"id\":\"compat-voicewake-get\",\"method\":\"voicewake.get\",\"params\":{}}");
+    defer allocator.free(voicewake_get);
+    try std.testing.expect(std.mem.indexOf(u8, voicewake_get, "\"enabled\":true") != null);
+
+    const models_all = try dispatch(allocator, "{\"id\":\"compat-models-all\",\"method\":\"models.list\",\"params\":{}}");
+    defer allocator.free(models_all);
+    try std.testing.expect(std.mem.indexOf(u8, models_all, "\"items\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, models_all, "\"gpt-5.2\"") != null);
+
+    const models_qwen = try dispatch(allocator, "{\"id\":\"compat-models-qwen\",\"method\":\"models.list\",\"params\":{\"provider\":\"qwen\"}}");
+    defer allocator.free(models_qwen);
+    try std.testing.expect(std.mem.indexOf(u8, models_qwen, "\"qwen-max\"") != null);
+
+    const update_run = try dispatch(allocator, "{\"id\":\"compat-update-run\",\"method\":\"update.run\",\"params\":{\"targetVersion\":\"edge-next\",\"dryRun\":true}}");
+    defer allocator.free(update_run);
+    try std.testing.expect(std.mem.indexOf(u8, update_run, "\"status\":\"completed\"") != null);
+
+    const push_test = try dispatch(allocator, "{\"id\":\"compat-push-test\",\"method\":\"push.test\",\"params\":{\"channel\":\"telegram\"}}");
+    defer allocator.free(push_test);
+    try std.testing.expect(std.mem.indexOf(u8, push_test, "\"messageId\"") != null);
+
+    const canvas_present = try dispatch(allocator, "{\"id\":\"compat-canvas\",\"method\":\"canvas.present\",\"params\":{\"frameRef\":\"canvas://compat\"}}");
+    defer allocator.free(canvas_present);
+    try std.testing.expect(std.mem.indexOf(u8, canvas_present, "\"ok\":true") != null);
+
+    const chat_inject = try dispatch(allocator, "{\"id\":\"compat-chat-inject\",\"method\":\"chat.inject\",\"params\":{\"sessionId\":\"inject-s1\",\"channel\":\"telegram\",\"message\":\"system prompt note\"}}");
+    defer allocator.free(chat_inject);
+    try std.testing.expect(std.mem.indexOf(u8, chat_inject, "\"ok\":true") != null);
+
+    const chat_abort = try dispatch(allocator, "{\"id\":\"compat-chat-abort\",\"method\":\"chat.abort\",\"params\":{\"jobId\":\"job-1\"}}");
+    defer allocator.free(chat_abort);
+    try std.testing.expect(std.mem.indexOf(u8, chat_abort, "\"aborted\":true") != null);
 }
 
 test "dispatch edge parity slice methods return contracts" {
