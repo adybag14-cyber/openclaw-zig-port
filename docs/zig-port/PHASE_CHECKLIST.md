@@ -120,3 +120,4 @@ Phase 6 progress notes:
 - [x] Parity gate baseline pinned to Go commit `65c974b528e2a960b171e3110e8e4e4dbb6fda63` for deterministic CI behavior.
 - [x] Release workflow hardened with upfront validate job (`build` + `test` + parity gate) and duplicate-tag guard before publish.
 - [x] Parity gate now emits machine-readable report (`parity-go-zig.json`) and CI/release workflows publish it as audit evidence.
+- [x] Release workflow evidence update: run `22646343174` published `v0.1.0-zig-preview.ci-parityjson` including `parity-go-zig.json` alongside all target zips + `SHA256SUMS.txt`.
