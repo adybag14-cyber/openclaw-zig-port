@@ -117,3 +117,4 @@ CI workflow:
 - `.github/workflows/zig-ci.yml` runs on push/PR with Zig `master`
 - validates build/test gates
 - attempts cross-target release builds (x86_64-macos required, aarch64-linux/aarch64-macos optional)
+- supports manual dispatch (`workflow_dispatch`) for on-demand verification

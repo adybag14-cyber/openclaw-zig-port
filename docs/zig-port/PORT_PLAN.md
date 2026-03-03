@@ -129,3 +129,4 @@ Port OpenClaw Go runtime behavior from baseline commit `65c974b528e2` into a pro
   - added GitHub Actions workflow `.github/workflows/zig-ci.yml` to continuously run Zig master build/test and cross-target release build attempts.
   - added `scripts/zig-arm64-diagnose.ps1` to collect reproducible arm64 failure logs (`stdout`/`stderr`) for local Windows toolchain triage.
   - arm64 diagnostics now confirm a local toolchain failure class on this Windows Zig build (reproducible on minimal source): `compiler_rt` sub-compilation failure + `memory allocation failure`, with additional `invalid constraint: 'X'` for `aarch64-linux`.
+  - CI run `22645119953` validated that `aarch64-linux` and `aarch64-macos` cross-builds succeed on Ubuntu runners with Zig master, isolating the arm64 issue to the local Windows toolchain path.
