@@ -28,6 +28,10 @@ jobs:
       - name: Test
         run: zig build test --summary all
 
+      - name: Go-to-Zig method parity gate
+        shell: pwsh
+        run: ./scripts/check-go-method-parity.ps1
+
       - name: Build release (x86_64-linux)
         run: zig build -Dtarget=x86_64-linux -Doptimize=ReleaseFast --summary all
 

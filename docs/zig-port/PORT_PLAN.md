@@ -132,3 +132,4 @@ Port OpenClaw Go runtime behavior from baseline commit `65c974b528e2` into a pro
   - CI run `22645119953` validated that `aarch64-linux` and `aarch64-macos` cross-builds succeed on Ubuntu runners with Zig master, isolating the arm64 issue to the local Windows toolchain path.
   - added release automation workflow `.github/workflows/release-preview.yml` so preview tags can be built + published from Linux runners with full `x86_64` + `aarch64` target coverage.
   - release workflow smoke run `22645353103` succeeded and published `v0.1.0-zig-preview.ci-smoke` with `x86_64-windows`, `x86_64-linux`, `x86_64-macos`, `aarch64-linux`, `aarch64-macos`, and `SHA256SUMS.txt`.
+  - added `scripts/check-go-method-parity.ps1` and wired it into both CI workflows, enforcing that every Go registry method is present in Zig before merge/release.

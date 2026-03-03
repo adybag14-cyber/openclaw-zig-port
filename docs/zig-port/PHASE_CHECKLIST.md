@@ -116,3 +116,4 @@ Phase 6 progress notes:
 - [x] CI confirmation: GitHub Actions run `22645119953` passed all jobs, including `aarch64-linux` and `aarch64-macos` cross-target builds on Ubuntu Zig master.
 - [x] Added CI release workflow (`.github/workflows/release-preview.yml`) to publish full preview artifact matrix from Linux runners, including arm64 targets.
 - [x] Release workflow smoke validated: Actions run `22645353103` published `v0.1.0-zig-preview.ci-smoke` with full 5-target artifact set + `SHA256SUMS.txt`.
+- [x] Added cross-repo method parity gate script (`scripts/check-go-method-parity.ps1`) and wired it into CI + release workflows as a blocking check.

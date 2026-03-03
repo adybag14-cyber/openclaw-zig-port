@@ -87,6 +87,12 @@ Diagnose arm64 cross-build failures (logs written under `release/arm64-diagnosti
 ./scripts/zig-arm64-diagnose.ps1
 ```
 
+Run Go-to-Zig method parity gate locally:
+
+```powershell
+./scripts/check-go-method-parity.ps1
+```
+
 Run host + Docker smoke/system checks:
 
 ```powershell
@@ -116,6 +122,7 @@ Build preview release bundles (and optionally publish to GitHub Releases):
 CI workflow:
 - `.github/workflows/zig-ci.yml` runs on push/PR with Zig `master`
 - validates build/test gates
+- enforces Go->Zig method-set parity (`scripts/check-go-method-parity.ps1`)
 - attempts cross-target release builds (x86_64-macos required, aarch64-linux/aarch64-macos optional)
 - supports manual dispatch (`workflow_dispatch`) for on-demand verification
 
