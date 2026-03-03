@@ -21,9 +21,9 @@ Release lock: no release tag is allowed until all phases are complete and parity
 - [x] Add integration tests for request lifecycle
 
 ## Phase 4 - Security + Diagnostics
-- [ ] Port core guard flow (prompt/tool policy checks)
-- [ ] Implement `doctor` and `security.audit` base commands
-- [ ] Add remediation/reporting contract outputs
+- [x] Port core guard flow (prompt/tool policy checks)
+- [x] Implement `doctor` and `security.audit` base commands
+- [x] Add remediation/reporting contract outputs
 
 ## Phase 5 - Browser/Auth/Channels
 - [ ] Implement web login manager (`start/wait/complete/status`)
@@ -50,3 +50,4 @@ Release lock: no release tag is allowed until all phases are complete and parity
 - [x] `scripts/docker-smoke-check.ps1` (host + Docker HTTP 200 checks on `/health` and `/rpc`)
 - [x] Serve smoke: `GET /health` and `POST /rpc` (`shutdown`) both returned HTTP 200
 - [x] Serve smoke: `POST /rpc` `file.write`, `file.read`, and `exec.run` returned HTTP 200 with real payloads
+- [x] Serve smoke: `POST /rpc` `security.audit` and `doctor` return structured diagnostics payloads

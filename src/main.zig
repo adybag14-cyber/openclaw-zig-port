@@ -2,10 +2,16 @@ const std = @import("std");
 const config = @import("config.zig");
 const dispatcher = @import("gateway/dispatcher.zig");
 const http_server = @import("gateway/http_server.zig");
-const _registry = @import("gateway/registry.zig");
-const _protocol = @import("protocol/envelope.zig");
-const _lightpanda = @import("bridge/lightpanda.zig");
-const _runtime = @import("runtime/state.zig");
+const security_guard = @import("security/guard.zig");
+const security_audit = @import("security/audit.zig");
+
+const CliFlags = struct {
+    serve: bool = false,
+    doctor: bool = false,
+    security_audit: bool = false,
+    deep: bool = false,
+    fix: bool = false,
+};
 
 pub fn main(init: std.process.Init) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -13,8 +19,34 @@ pub fn main(init: std.process.Init) !void {
     const allocator = arena.allocator();
 
     const cfg = try config.loadFromEnviron(allocator, init.minimal.environ);
-    const run_server = try hasServeFlag(allocator, init.minimal.args);
-    if (run_server) {
+    dispatcher.setConfig(cfg);
+
+    const flags = try parseCliFlags(allocator, init.minimal.args);
+
+    if (flags.doctor or flags.security_audit) {
+        var runtime_guard = try security_guard.Guard.init(std.heap.page_allocator, cfg.security);
+        defer runtime_guard.deinit();
+
+        if (flags.doctor) {
+            var report = try security_audit.doctor(allocator, cfg, &runtime_guard, .{
+                .deep = flags.deep,
+                .fix = flags.fix,
+            });
+            defer report.deinit(allocator);
+            try printJson(report);
+            return;
+        }
+
+        var report = try security_audit.run(allocator, cfg, &runtime_guard, .{
+            .deep = flags.deep,
+            .fix = flags.fix,
+        });
+        defer report.deinit(allocator);
+        try printJson(report);
+        return;
+    }
+
+    if (flags.serve) {
         std.debug.print(
             "openclaw-zig server start ({s}:{d}) bridge=lightpanda endpoint={s}\n",
             .{ cfg.http_bind, cfg.http_port, cfg.lightpanda_endpoint },
@@ -35,24 +67,35 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("health -> {s}\n", .{health_frame});
 }
 
-fn hasServeFlag(allocator: std.mem.Allocator, args: std.process.Args) !bool {
+fn parseCliFlags(allocator: std.mem.Allocator, args: std.process.Args) !CliFlags {
+    var out: CliFlags = .{};
     var it = try std.process.Args.Iterator.initAllocator(args, allocator);
     defer it.deinit();
     var index: usize = 0;
     while (it.next()) |arg| {
         defer index += 1;
         if (index == 0) continue;
-        if (std.mem.eql(u8, arg, "--serve")) return true;
+        if (std.mem.eql(u8, arg, "--serve")) out.serve = true else if (std.mem.eql(u8, arg, "--doctor")) out.doctor = true else if (std.mem.eql(u8, arg, "--security-audit")) out.security_audit = true else if (std.mem.eql(u8, arg, "--deep")) out.deep = true else if (std.mem.eql(u8, arg, "--fix")) out.fix = true;
     }
-    return false;
+    return out;
 }
 
-fn hasServeFlagFromSlice(args: []const []const u8) bool {
-    if (args.len <= 1) return false;
+fn parseCliFlagsFromSlice(args: []const []const u8) CliFlags {
+    var out: CliFlags = .{};
+    if (args.len <= 1) return out;
     for (args[1..]) |arg| {
-        if (std.mem.eql(u8, arg, "--serve")) return true;
+        if (std.mem.eql(u8, arg, "--serve")) out.serve = true else if (std.mem.eql(u8, arg, "--doctor")) out.doctor = true else if (std.mem.eql(u8, arg, "--security-audit")) out.security_audit = true else if (std.mem.eql(u8, arg, "--deep")) out.deep = true else if (std.mem.eql(u8, arg, "--fix")) out.fix = true;
     }
-    return false;
+    return out;
+}
+
+fn printJson(value: anytype) !void {
+    var out: std.Io.Writer.Allocating = .init(std.heap.page_allocator);
+    errdefer out.deinit();
+    try std.json.Stringify.value(value, .{}, &out.writer);
+    const bytes = try out.toOwnedSlice();
+    defer std.heap.page_allocator.free(bytes);
+    std.debug.print("{s}\n", .{bytes});
 }
 
 test "bootstrap string is non-empty" {
@@ -70,10 +113,17 @@ test "main modules include lightpanda-only dispatcher" {
     try std.testing.expect(std.mem.indexOf(u8, out, "\"code\":-32602") != null);
 }
 
-test "hasServeFlag detects serve argument" {
+test "parseCliFlags detects serve/doctor/security flags" {
     const args = [_][]const u8{
         "openclaw-zig",
         "--serve",
+        "--doctor",
+        "--deep",
+        "--fix",
     };
-    try std.testing.expect(hasServeFlagFromSlice(&args));
+    const flags = parseCliFlagsFromSlice(&args);
+    try std.testing.expect(flags.serve);
+    try std.testing.expect(flags.doctor);
+    try std.testing.expect(flags.deep);
+    try std.testing.expect(flags.fix);
 }

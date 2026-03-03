@@ -57,3 +57,8 @@ Port OpenClaw Go runtime behavior from baseline commit `65c974b528e2` into a pro
   - Tool runtime actions (`exec.run`, `file.read`, `file.write`)
   - Dispatcher wiring and integration request lifecycle tests
   - Runtime status telemetry (`runtime_queue_depth`, `runtime_sessions`)
+- Phase 4 complete:
+  - Guard pipeline with prompt-risk scoring + loop-guard enforcement (`src/security/guard.zig`, `src/security/loop_guard.zig`)
+  - RPC diagnostics surfaces: `security.audit` and `doctor`
+  - CLI diagnostics surfaces: `--doctor`, `--security-audit`, optional `--deep` and `--fix`
+  - Security audit deep probe and remediation actions (`src/security/audit.zig`)

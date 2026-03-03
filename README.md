@@ -51,6 +51,16 @@ Current route surface:
   - `exec.run`
   - `file.read`
   - `file.write`
+  - `security.audit`
+  - `doctor`
+
+Run diagnostics directly from CLI:
+
+```powershell
+zig build run -- --doctor
+zig build run -- --security-audit --deep
+zig build run -- --security-audit --deep --fix
+```
 
 Or run the workspace checker with local Zig master:
 

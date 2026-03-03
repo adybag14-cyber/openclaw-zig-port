@@ -13,6 +13,8 @@ pub const supported_methods = [_][]const u8{
     "web.login.complete",
     "web.login.status",
     "browser.request",
+    "security.audit",
+    "doctor",
     "channels.status",
 };
 
