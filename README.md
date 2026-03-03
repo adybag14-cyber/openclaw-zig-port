@@ -13,6 +13,8 @@ Bootstrap repository for the next OpenClaw runtime port in Zig.
 - Rebuild OpenClaw runtime surfaces in Zig with end-to-end parity against the Go runtime baseline.
 - Keep RPC contract compatibility, channel behavior, auth/browser bridge semantics, and release packaging parity.
 - Treat this repo as the Zig-only source of truth for the new runtime.
+- Browser bridge policy for Zig is Lightpanda-only; Playwright and Puppeteer are intentionally rejected in dispatcher contracts.
+- Release policy: push each completed parity slice, but do not cut a release tag until parity is explicitly 100% and Phase 7 gates are green.
 
 ## Tracking
 
@@ -35,8 +37,35 @@ zig build run
 zig build test
 ```
 
+Run HTTP serve mode:
+
+```bash
+zig build run -- --serve
+```
+
+Current route surface:
+- `GET /health` -> JSON-RPC health payload
+- `POST /rpc` -> JSON-RPC dispatcher route
+- graceful shutdown via RPC method `shutdown`
+- runtime tool actions via RPC:
+  - `exec.run`
+  - `file.read`
+  - `file.write`
+
 Or run the workspace checker with local Zig master:
 
 ```powershell
 ./scripts/zig-syntax-check.ps1
+```
+
+Check Codeberg `master` freshness against local toolchain:
+
+```powershell
+./scripts/zig-codeberg-master-check.ps1
+```
+
+Run host + Docker smoke/system checks:
+
+```powershell
+./scripts/docker-smoke-check.ps1
 ```
