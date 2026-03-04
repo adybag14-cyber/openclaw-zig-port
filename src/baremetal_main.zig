@@ -158,6 +158,7 @@ var scheduler_state: BaremetalSchedulerState = .{
     .reserved1 = 0,
 };
 var scheduler_rr_cursor: u8 = 0;
+var scheduler_policy: u8 = abi.scheduler_policy_round_robin;
 
 const allocator_page_capacity: usize = 256;
 const allocator_record_capacity: usize = 64;
@@ -441,6 +442,10 @@ pub export fn oc_scheduler_task_capacity() u32 {
     return @as(u32, scheduler_task_capacity);
 }
 
+pub export fn oc_scheduler_policy() u8 {
+    return scheduler_policy;
+}
+
 pub export fn oc_scheduler_task_count() u32 {
     return scheduler_state.task_count;
 }
@@ -478,6 +483,7 @@ pub export fn oc_scheduler_reset() void {
         .reserved1 = 0,
     };
     scheduler_rr_cursor = 0;
+    scheduler_policy = abi.scheduler_policy_round_robin;
 }
 
 pub export fn oc_allocator_state_ptr() *const BaremetalAllocatorState {
@@ -938,6 +944,20 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
             scheduler_state.default_budget_ticks = @as(u32, @truncate(arg0));
             return abi.result_ok;
         },
+        abi.command_scheduler_set_policy => {
+            if (arg0 > std.math.maxInt(u8)) return abi.result_invalid_argument;
+            const policy: u8 = @as(u8, @truncate(arg0));
+            if (!abi.schedulerPolicyIsValid(policy)) return abi.result_invalid_argument;
+            scheduler_policy = policy;
+            return abi.result_ok;
+        },
+        abi.command_task_set_priority => {
+            if (arg0 == 0 or arg0 > std.math.maxInt(u32) or arg1 > std.math.maxInt(u8)) return abi.result_invalid_argument;
+            if (!schedulerSetTaskPriority(@as(u32, @truncate(arg0)), @as(u8, @truncate(arg1)))) {
+                return abi.result_not_found;
+            }
+            return abi.result_ok;
+        },
         abi.command_allocator_reset => {
             oc_allocator_reset();
             return abi.result_ok;
@@ -1344,6 +1364,16 @@ fn schedulerSetTaskWaiting(task_id: u32) bool {
     return true;
 }
 
+fn schedulerSetTaskPriority(task_id: u32, priority: u8) bool {
+    const slot = schedulerFindTaskSlot(task_id) orelse return false;
+    var task = &scheduler_tasks[slot];
+    if (task.state == abi.task_state_unused or task.state == abi.task_state_terminated or task.state == abi.task_state_completed) {
+        return false;
+    }
+    task.priority = priority;
+    return true;
+}
+
 fn schedulerWakeTask(task_id: u32, reason: u8, timer_id: u32, vector: u8, tick: u64) bool {
     const slot = schedulerFindTaskSlot(task_id) orelse return false;
     var task = &scheduler_tasks[slot];
@@ -1413,6 +1443,26 @@ fn schedulerTick(current_tick: u64) void {
 fn schedulerSelectReadySlot() ?u8 {
     if (scheduler_state.task_count == 0) return null;
     const cap_u8: u8 = @as(u8, scheduler_task_capacity);
+    if (scheduler_policy == abi.scheduler_policy_priority) {
+        var scans_priority: u8 = 0;
+        var best_slot: ?u8 = null;
+        var best_priority: u8 = 0;
+        while (scans_priority < cap_u8) : (scans_priority += 1) {
+            const slot = @mod(scheduler_rr_cursor + scans_priority, cap_u8);
+            scheduler_state.ready_scans +%= 1;
+            const task = scheduler_tasks[slot];
+            if (task.state != abi.task_state_ready or task.task_id == 0 or task.budget_remaining == 0) continue;
+            if (best_slot == null or task.priority > best_priority) {
+                best_slot = slot;
+                best_priority = task.priority;
+            }
+        }
+        if (best_slot) |slot| {
+            scheduler_rr_cursor = @mod(slot + 1, cap_u8);
+            return slot;
+        }
+        return null;
+    }
     var scans: u8 = 0;
     while (scans < cap_u8) : (scans += 1) {
         const slot = @mod(scheduler_rr_cursor + scans, cap_u8);
@@ -2605,4 +2655,96 @@ test "baremetal wake queue pop command removes oldest entries in order" {
     _ = oc_submit_command(abi.command_wake_queue_pop, 1, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_not_found), status.last_command_result);
+}
+
+test "baremetal scheduler priority policy favors highest priority and supports updates" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    status.tick_batch_hint = 1;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_scheduler_reset();
+    oc_timer_reset();
+    oc_wake_queue_clear();
+
+    _ = oc_submit_command(abi.command_scheduler_disable, 0, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_task_create, 6, 1); // low
+    oc_tick();
+    const low_id = oc_scheduler_task(0).task_id;
+    _ = oc_submit_command(abi.command_task_create, 6, 9); // high
+    oc_tick();
+    const high_id = oc_scheduler_task(1).task_id;
+    try std.testing.expect(low_id != 0 and high_id != 0);
+
+    _ = oc_submit_command(abi.command_scheduler_set_policy, abi.scheduler_policy_priority, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.scheduler_policy_priority), oc_scheduler_policy());
+
+    _ = oc_submit_command(abi.command_scheduler_enable, 0, 0);
+    oc_tick();
+    var low_task = oc_scheduler_task(0);
+    var high_task = oc_scheduler_task(1);
+    try std.testing.expectEqual(@as(u32, 0), low_task.run_count);
+    try std.testing.expectEqual(@as(u32, 1), high_task.run_count);
+
+    _ = oc_submit_command(abi.command_task_set_priority, low_id, 15);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    low_task = oc_scheduler_task(0);
+    high_task = oc_scheduler_task(1);
+    try std.testing.expect(low_task.run_count >= 1);
+    try std.testing.expectEqual(@as(u8, 15), low_task.priority);
+
+    _ = oc_submit_command(abi.command_scheduler_set_policy, 9, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+
+    _ = oc_submit_command(abi.command_task_set_priority, 99999, 3);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_not_found), status.last_command_result);
+}
+
+test "baremetal scheduler default round robin dispatch remains stable" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    status.tick_batch_hint = 1;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_scheduler_reset();
+    oc_timer_reset();
+
+    try std.testing.expectEqual(@as(u8, abi.scheduler_policy_round_robin), oc_scheduler_policy());
+    _ = oc_submit_command(abi.command_scheduler_disable, 0, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_task_create, 4, 1);
+    oc_tick();
+    _ = oc_submit_command(abi.command_task_create, 4, 9);
+    oc_tick();
+
+    _ = oc_submit_command(abi.command_scheduler_enable, 0, 0);
+    oc_tick();
+    const first = oc_scheduler_task(0);
+    const second = oc_scheduler_task(1);
+    try std.testing.expectEqual(@as(u32, 1), first.run_count);
+    try std.testing.expectEqual(@as(u32, 0), second.run_count);
 }

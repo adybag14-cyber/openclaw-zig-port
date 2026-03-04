@@ -149,6 +149,10 @@ while maintaining parity-first validation and release gating.
     - new opcodes: `command_task_wait_for`, `command_wake_queue_pop`.
     - wake queue exports extended: `oc_wake_queue_tail_index`, `oc_wake_queue_pop`.
     - runtime now supports atomic wait-with-deadline command flow and in-order wake queue consumption via explicit ring tail tracking.
+  - Bare-metal scheduler policy + priority depth expansion shipped:
+    - new control opcodes: `command_scheduler_set_policy`, `command_task_set_priority`.
+    - scheduler policy constants exported through ABI: `scheduler_policy_round_robin`, `scheduler_policy_priority`.
+    - scheduler selection now supports priority-aware dispatch while preserving default round-robin policy and cursor tie-break behavior.
     - runtime now provides contiguous page allocation/free on a bounded heap map and syscall registration/invocation/unregistration with dispatch telemetry.
 - Phase 4 complete:
   - Guard pipeline with prompt-risk scoring + loop-guard enforcement (`src/security/guard.zig`, `src/security/loop_guard.zig`)

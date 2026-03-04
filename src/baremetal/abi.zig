@@ -128,6 +128,8 @@ pub const command_task_resume: u16 = 51;
 pub const command_timer_cancel_task: u16 = 52;
 pub const command_task_wait_for: u16 = 53;
 pub const command_wake_queue_pop: u16 = 54;
+pub const command_scheduler_set_policy: u16 = 55;
+pub const command_task_set_priority: u16 = 56;
 
 pub const mode_change_reason_boot: u8 = 0;
 pub const mode_change_reason_command: u8 = 1;
@@ -150,6 +152,8 @@ pub const result_conflict: i16 = -17;
 
 pub const scheduler_state_disabled: u8 = 0;
 pub const scheduler_state_enabled: u8 = 1;
+pub const scheduler_policy_round_robin: u8 = 0;
+pub const scheduler_policy_priority: u8 = 1;
 
 pub const task_state_unused: u8 = 0;
 pub const task_state_ready: u8 = 1;
@@ -469,6 +473,10 @@ pub fn bootPhaseIsValid(phase: u8) bool {
         phase == boot_phase_panicked;
 }
 
+pub fn schedulerPolicyIsValid(policy: u8) bool {
+    return policy == scheduler_policy_round_robin or policy == scheduler_policy_priority;
+}
+
 test "baremetal abi layout contract stays stable" {
     try std.testing.expectEqual(@as(usize, 0), @offsetOf(BaremetalStatus, "magic"));
     try std.testing.expectEqual(@as(usize, 4), @offsetOf(BaremetalStatus, "api_version"));
@@ -516,4 +524,10 @@ test "baremetal boot phase helper validates supported phases" {
     try std.testing.expect(bootPhaseIsValid(boot_phase_runtime));
     try std.testing.expect(bootPhaseIsValid(boot_phase_panicked));
     try std.testing.expect(!bootPhaseIsValid(3));
+}
+
+test "baremetal scheduler policy helper validates supported policies" {
+    try std.testing.expect(schedulerPolicyIsValid(scheduler_policy_round_robin));
+    try std.testing.expect(schedulerPolicyIsValid(scheduler_policy_priority));
+    try std.testing.expect(!schedulerPolicyIsValid(2));
 }
