@@ -10,12 +10,21 @@ pub const SecurityConfig = struct {
     policy_bundle_path: []const u8,
 };
 
+pub const GatewayConfig = struct {
+    require_token: bool,
+    auth_token: []const u8,
+    rate_limit_enabled: bool,
+    rate_limit_window_ms: u32,
+    rate_limit_max_requests: u32,
+};
+
 pub const Config = struct {
     http_bind: []const u8,
     http_port: u16,
     state_path: []const u8,
     lightpanda_endpoint: []const u8,
     lightpanda_timeout_ms: u32,
+    gateway: GatewayConfig,
     security: SecurityConfig,
 };
 
@@ -26,6 +35,13 @@ pub fn defaults() Config {
         .state_path = ".openclaw-zig/state",
         .lightpanda_endpoint = "http://127.0.0.1:9222",
         .lightpanda_timeout_ms = 15_000,
+        .gateway = .{
+            .require_token = false,
+            .auth_token = "",
+            .rate_limit_enabled = true,
+            .rate_limit_window_ms = 60_000,
+            .rate_limit_max_requests = 300,
+        },
         .security = .{
             .loop_guard_enabled = true,
             .loop_guard_window_ms = 5_000,
@@ -46,6 +62,11 @@ pub fn loadFromEnviron(allocator: std.mem.Allocator, environ: std.process.Enviro
     cfg.state_path = try getEnvOrDefault(allocator, environ, "OPENCLAW_ZIG_STATE_PATH", cfg.state_path);
     cfg.lightpanda_endpoint = try getEnvOrDefault(allocator, environ, "OPENCLAW_ZIG_LIGHTPANDA_ENDPOINT", cfg.lightpanda_endpoint);
     cfg.lightpanda_timeout_ms = try parseU32EnvOrDefault(allocator, environ, "OPENCLAW_ZIG_LIGHTPANDA_TIMEOUT_MS", cfg.lightpanda_timeout_ms);
+    cfg.gateway.require_token = try parseBoolEnvOrDefault(allocator, environ, "OPENCLAW_ZIG_GATEWAY_REQUIRE_TOKEN", cfg.gateway.require_token);
+    cfg.gateway.auth_token = try getEnvOrDefault(allocator, environ, "OPENCLAW_ZIG_GATEWAY_AUTH_TOKEN", cfg.gateway.auth_token);
+    cfg.gateway.rate_limit_enabled = try parseBoolEnvOrDefault(allocator, environ, "OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_ENABLED", cfg.gateway.rate_limit_enabled);
+    cfg.gateway.rate_limit_window_ms = try parseU32EnvOrDefault(allocator, environ, "OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_WINDOW_MS", cfg.gateway.rate_limit_window_ms);
+    cfg.gateway.rate_limit_max_requests = try parseU32EnvOrDefault(allocator, environ, "OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_MAX_REQUESTS", cfg.gateway.rate_limit_max_requests);
     cfg.security.loop_guard_enabled = try parseBoolEnvOrDefault(allocator, environ, "OPENCLAW_ZIG_SECURITY_LOOP_GUARD_ENABLED", cfg.security.loop_guard_enabled);
     cfg.security.loop_guard_window_ms = try parseU32EnvOrDefault(allocator, environ, "OPENCLAW_ZIG_SECURITY_LOOP_GUARD_WINDOW_MS", cfg.security.loop_guard_window_ms);
     cfg.security.loop_guard_max_hits = try parseU16EnvOrDefault(allocator, environ, "OPENCLAW_ZIG_SECURITY_LOOP_GUARD_MAX_HITS", cfg.security.loop_guard_max_hits);
@@ -142,6 +163,9 @@ test "defaults are stable" {
     const cfg = defaults();
     try std.testing.expectEqual(@as(u16, 8080), cfg.http_port);
     try std.testing.expect(std.mem.eql(u8, cfg.http_bind, "127.0.0.1"));
+    try std.testing.expect(!cfg.gateway.require_token);
+    try std.testing.expect(cfg.gateway.rate_limit_enabled);
+    try std.testing.expectEqual(@as(u32, 300), cfg.gateway.rate_limit_max_requests);
     try std.testing.expect(cfg.security.loop_guard_enabled);
     try std.testing.expectEqual(@as(u8, 90), cfg.security.risk_block_threshold);
 }

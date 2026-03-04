@@ -25,6 +25,16 @@ Release lock: no release tag is allowed until all phases are complete and parity
 - [x] Implement `doctor` and `security.audit` base commands
 - [x] Add remediation/reporting contract outputs
 
+Phase 4 hardening notes:
+- Added optional gateway token auth enforcement for `/rpc`:
+  - `OPENCLAW_ZIG_GATEWAY_REQUIRE_TOKEN`
+  - `OPENCLAW_ZIG_GATEWAY_AUTH_TOKEN`
+- Added gateway `/rpc` rate limiting controls:
+  - `OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_ENABLED`
+  - `OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_WINDOW_MS`
+  - `OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_MAX_REQUESTS`
+- `security.audit` and `doctor` now report gateway auth/rate-limit posture with dedicated checks/findings.
+
 ## Phase 5 - Browser/Auth/Channels
 - [x] Implement web login manager (`start/wait/complete/status`)
 - [x] Implement browser completion bridge contract (Lightpanda-only provider policy)
@@ -163,7 +173,7 @@ Phase 6 progress notes:
 ## Latest Validation Snapshot
 - [x] `zig build`
 - [x] `zig build test`
-- [x] `zig build test --summary all` -> `77/77` passing (includes TTS provider-synthesis execution-path coverage + completion outcome semantics)
+- [x] `zig build test --summary all` -> `79/79` passing (includes gateway auth/rate-limit hardening tests and TTS/completion execution-path coverage)
 - [x] `scripts/generate-rpc-reference.ps1` (regenerates `docs/rpc-reference.md` from `src/gateway/registry.zig`, currently `153` methods)
 - [x] `scripts/npm-pack-check.ps1` (validates npm package dry-run for `npm/openclaw-zig-rpc-client`)
 - [x] `scripts/python-pack-check.ps1` (validates python client package tests + wheel/sdist + twine checks for `python/openclaw-zig-rpc-client`)

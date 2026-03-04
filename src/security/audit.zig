@@ -129,6 +129,43 @@ pub fn run(
         });
     }
 
+    const gateway_token = std.mem.trim(u8, cfg.gateway.auth_token, " \t\r\n");
+    if (!cfg.gateway.require_token) {
+        try findings.append(allocator, .{
+            .checkId = "gateway.auth.token.disabled",
+            .severity = "warn",
+            .title = "Gateway token authentication is disabled",
+            .detail = "gateway requires no auth token for /rpc requests",
+            .remediation = "set OPENCLAW_ZIG_GATEWAY_REQUIRE_TOKEN=true and configure OPENCLAW_ZIG_GATEWAY_AUTH_TOKEN",
+        });
+    } else if (gateway_token.len == 0) {
+        try findings.append(allocator, .{
+            .checkId = "gateway.auth.token.missing",
+            .severity = "critical",
+            .title = "Gateway token authentication is required but token is missing",
+            .detail = "OPENCLAW_ZIG_GATEWAY_REQUIRE_TOKEN=true without OPENCLAW_ZIG_GATEWAY_AUTH_TOKEN blocks all authenticated access",
+            .remediation = "set a non-empty OPENCLAW_ZIG_GATEWAY_AUTH_TOKEN value",
+        });
+    }
+
+    if (!cfg.gateway.rate_limit_enabled) {
+        try findings.append(allocator, .{
+            .checkId = "gateway.rate_limit.disabled",
+            .severity = "warn",
+            .title = "Gateway rate limiting is disabled",
+            .detail = "gateway /rpc endpoint has no request burst controls",
+            .remediation = "set OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_ENABLED=true",
+        });
+    } else if (cfg.gateway.rate_limit_window_ms == 0 or cfg.gateway.rate_limit_max_requests == 0) {
+        try findings.append(allocator, .{
+            .checkId = "gateway.rate_limit.invalid",
+            .severity = "warn",
+            .title = "Gateway rate limit thresholds are invalid",
+            .detail = "rate limit window/max requests must be positive values",
+            .remediation = "set positive OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_WINDOW_MS and OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_MAX_REQUESTS",
+        });
+    }
+
     if (!cfg.security.loop_guard_enabled) {
         try findings.append(allocator, .{
             .checkId = "security.loop_guard.disabled",
@@ -241,6 +278,19 @@ pub fn doctor(
         .status = if (isLoopbackBind(cfg.http_bind)) "pass" else "warn",
         .message = cfg.http_bind,
         .detail = "prefer loopback bind for local control endpoints",
+    });
+    const gateway_token = std.mem.trim(u8, cfg.gateway.auth_token, " \t\r\n");
+    try checks.append(allocator, .{
+        .id = "gateway.auth_token",
+        .status = if (!cfg.gateway.require_token) "warn" else if (gateway_token.len == 0) "fail" else "pass",
+        .message = if (!cfg.gateway.require_token) "disabled" else if (gateway_token.len == 0) "missing" else "configured",
+        .detail = "rpc token gate should be required with non-empty token in production",
+    });
+    try checks.append(allocator, .{
+        .id = "gateway.rate_limit",
+        .status = if (!cfg.gateway.rate_limit_enabled) "warn" else if (cfg.gateway.rate_limit_window_ms == 0 or cfg.gateway.rate_limit_max_requests == 0) "fail" else "pass",
+        .message = if (!cfg.gateway.rate_limit_enabled) "disabled" else if (cfg.gateway.rate_limit_window_ms == 0 or cfg.gateway.rate_limit_max_requests == 0) "invalid" else "enabled",
+        .detail = "gateway rpc rate limit thresholds should be enabled with positive window and quota",
     });
     try checks.append(allocator, .{
         .id = "security.loop_guard",
@@ -541,6 +591,47 @@ test "doctor includes docker binary check" {
             try std.testing.expect(
                 std.mem.eql(u8, check.status, "pass") or std.mem.eql(u8, check.status, "warn"),
             );
+        }
+    }
+    try std.testing.expect(found);
+}
+
+test "security audit includes gateway auth warning when token gate is disabled" {
+    const allocator = std.testing.allocator;
+    var cfg = config.defaults();
+    cfg.gateway.require_token = false;
+    var runtime_guard = try guard.Guard.init(allocator, cfg.security);
+    defer runtime_guard.deinit();
+
+    var report = try run(allocator, cfg, &runtime_guard, .{});
+    defer report.deinit(allocator);
+
+    var found = false;
+    for (report.findings) |finding| {
+        if (std.mem.eql(u8, finding.checkId, "gateway.auth.token.disabled")) {
+            found = true;
+            try std.testing.expect(std.mem.eql(u8, finding.severity, "warn"));
+        }
+    }
+    try std.testing.expect(found);
+}
+
+test "doctor exposes gateway auth token check" {
+    const allocator = std.testing.allocator;
+    var cfg = config.defaults();
+    cfg.gateway.require_token = true;
+    cfg.gateway.auth_token = "";
+    var runtime_guard = try guard.Guard.init(allocator, cfg.security);
+    defer runtime_guard.deinit();
+
+    var report = try doctor(allocator, cfg, &runtime_guard, .{});
+    defer report.deinit(allocator);
+
+    var found = false;
+    for (report.checks) |check| {
+        if (std.mem.eql(u8, check.id, "gateway.auth_token")) {
+            found = true;
+            try std.testing.expect(std.mem.eql(u8, check.status, "fail"));
         }
     }
     try std.testing.expect(found);

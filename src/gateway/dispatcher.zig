@@ -4046,7 +4046,12 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             .gateway = .{
                 .bind = cfg.http_bind,
                 .port = cfg.http_port,
-                .authMode = "none",
+                .authMode = if (cfg.gateway.require_token) "token" else "none",
+                .rateLimit = .{
+                    .enabled = cfg.gateway.rate_limit_enabled,
+                    .windowMs = cfg.gateway.rate_limit_window_ms,
+                    .maxRequests = cfg.gateway.rate_limit_max_requests,
+                },
             },
             .runtime = .{
                 .queueDepth = runtime.queueDepth(),

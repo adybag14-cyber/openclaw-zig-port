@@ -52,6 +52,11 @@ while maintaining parity-first validation and release gating.
 ## Current Progress Snapshot
 
 - Tracking and documentation refresh (2026-03-04):
+  - Gateway hardening slice shipped:
+    - optional `/rpc` token auth gate (`OPENCLAW_ZIG_GATEWAY_REQUIRE_TOKEN`, `OPENCLAW_ZIG_GATEWAY_AUTH_TOKEN`)
+    - in-process gateway rate limiting (`OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_ENABLED`, `OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_WINDOW_MS`, `OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_MAX_REQUESTS`)
+    - `security.audit` + `doctor` gateway auth/rate-limit checks and regression tests
+    - validation: `zig build`, `zig build test` (`79/79`), `scripts/runtime-smoke-check.ps1`, `scripts/web-login-smoke-check.ps1`
   - README refreshed with current parity/validation state and workflow guidance.
   - Local Zig toolchain reference doc refreshed to current local/remote hashes.
   - MkDocs documentation site scaffolded with full feature/domain documentation and GitHub Pages deployment workflow.
