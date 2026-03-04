@@ -106,6 +106,11 @@ Phase 6 progress notes:
   - new `secrets.store.*` methods: `status`, `set`, `get`, `delete`, `list`.
   - encrypted-file backend implemented with XChaCha20-Poly1305 persistence (`secrets.store.enc.json`) and backend selection abstraction (`env`, `encrypted-file`, `dpapi/keychain/keystore` -> encrypted fallback).
   - `secrets.resolve` now resolves in order: config overlay -> secure secret store -> environment aliases.
+- WASM trust/signature + host-hook hardening shipped:
+  - `edge.wasm.install` now computes deterministic module digests, supports expected hash checks, and enforces trust policy (`hash|signature|off`) with HMAC verification when signature mode is required (`OPENCLAW_ZIG_WASM_TRUST_KEY`).
+  - custom installed modules now persist trust metadata (`sha256`, `signature`, `signer`, `verificationMode`, `verified`, `sourceUrl`) in dispatcher state.
+  - `edge.wasm.execute` now parses requested host hooks and enforces capability mapping (`fs.read/write`, `memory.read/write`, `network.fetch`) for both marketplace and custom modules, returning deterministic sandbox denial on violations.
+  - wasm execution responses now surface trust metadata for downstream observability (`trust.verified`, `trust.verificationMode`, `trust.sha256`).
 - Implemented persistent memory store (`src/memory/store.zig`) with session/channel history handlers: `sessions.history`, `chat.history`, and `doctor.memory.status`.
 - Optimization hardening for Phase 6 shipped:
   - `memory/store.zig`: batched front-removal helper applied to overflow + trim, and `removeSession` rewritten to linear compaction while preserving order.
@@ -220,6 +225,8 @@ Phase 6 progress notes:
 - [x] `scripts/generate-rpc-reference.ps1` (regenerates `docs/rpc-reference.md` from `src/gateway/registry.zig`, currently `160` methods)
 - [x] `scripts/npm-pack-check.ps1` (validates npm package dry-run for `npm/openclaw-zig-rpc-client`)
 - [x] `scripts/python-pack-check.ps1` (validates python client package tests + wheel/sdist + twine checks for `python/openclaw-zig-rpc-client`)
+- [x] WASM trust-host hook hardening regression coverage:
+  - `gateway.dispatcher.test.dispatch wasm lifecycle methods install execute remove and enforce sandbox limits` now also checks trust mode metadata and host-hook allow/deny behavior.
 - [x] `zig test src/main.zig`
 - [x] `zig test src/baremetal_main.zig` (`37/37` passing; includes mode-history + boot-phase-history + command-result counter + scheduler + allocator/syscall + timer/wake queue telemetry coverage)
 - [x] Guest/auth parity tests:

@@ -89,6 +89,10 @@ while maintaining parity-first validation and release gating.
     - new RPC methods: `secrets.store.status`, `secrets.store.set`, `secrets.store.get`, `secrets.store.delete`, `secrets.store.list`.
     - encrypted fallback backend implemented with XChaCha20-Poly1305 persistence (`secrets.store.enc.json`) and backend-selection abstraction (`env` / `encrypted-file` / `dpapi|keychain|keystore` with encrypted fallback).
     - `secrets.resolve` now checks secure store entries between config overlay and environment aliases.
+  - WASM trust/signature + host-hook hardening shipped:
+    - `edge.wasm.install` now computes deterministic module digest metadata, validates optional expected hashes, and supports trust policy enforcement (`hash|signature|off`) with HMAC signature verification (`OPENCLAW_ZIG_WASM_TRUST_KEY`) when required.
+    - custom module records now retain trust metadata (`sourceUrl`, `sha256`, `signature`, `signer`, `verificationMode`, `verified`) for execute-time and response-time observability.
+    - `edge.wasm.execute` now validates requested host hooks against declared module capabilities (`fs.read/write`, `memory.read/write`, `network.fetch`) with deterministic sandbox-deny errors on violations.
   - README refreshed with current parity/validation state and workflow guidance.
   - Local Zig toolchain reference doc refreshed to current local/remote hashes.
   - MkDocs documentation site scaffolded with full feature/domain documentation and GitHub Pages deployment workflow.
@@ -305,6 +309,9 @@ while maintaining parity-first validation and release gating.
     - node: `node.pair.request|list|approve|reject|verify`, `node.rename`, `node.list`, `node.describe`, `node.invoke`, `node.invoke.result`, `node.event`, `node.canvas.capability.refresh`
     - approvals: `exec.approvals.get|set|node.get|node.set`, `exec.approval.request|waitdecision|resolve`
   - Method surface moved to `160` Zig methods (from `126`) while preserving Lightpanda-only browser policy and green validation gates.
+  - WASM lifecycle hardening now includes trust metadata + host-hook capability enforcement:
+    - install path supports hash/signature trust policy with deterministic verification errors.
+    - execute path rejects host hooks lacking declared capabilities and returns explicit deny telemetry.
   - Added dispatcher contract tests for new edge methods and memory flows.
   - Method/event parity is now tracked and enforced against Go + original stable + original beta baselines:
     - Go release baseline (`adybag14-cyber/openclaw-go-port`): `134/134` covered in Zig.

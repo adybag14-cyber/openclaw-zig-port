@@ -1556,12 +1556,23 @@ const CustomWasmModule = struct {
     version: []u8,
     description: []u8,
     capabilities_csv: []u8,
+    source_url: []u8,
+    digest_sha256: []u8,
+    signature: []u8,
+    signer: []u8,
+    verification_mode: []u8,
+    verified: bool,
 
     fn deinit(self: *CustomWasmModule, allocator: std.mem.Allocator) void {
         allocator.free(self.id);
         allocator.free(self.version);
         allocator.free(self.description);
         allocator.free(self.capabilities_csv);
+        allocator.free(self.source_url);
+        allocator.free(self.digest_sha256);
+        allocator.free(self.signature);
+        allocator.free(self.signer);
+        allocator.free(self.verification_mode);
     }
 };
 
@@ -1661,15 +1672,32 @@ const EdgeState = struct {
         version: []const u8,
         description: []const u8,
         capabilities_csv: []const u8,
+        source_url: []const u8,
+        digest_sha256: []const u8,
+        signature: []const u8,
+        signer: []const u8,
+        verification_mode: []const u8,
+        verified: bool,
     ) !void {
         for (self.custom_wasm_modules.items) |*existing| {
             if (std.ascii.eqlIgnoreCase(existing.id, module_id)) {
                 self.allocator.free(existing.version);
                 self.allocator.free(existing.description);
                 self.allocator.free(existing.capabilities_csv);
+                self.allocator.free(existing.source_url);
+                self.allocator.free(existing.digest_sha256);
+                self.allocator.free(existing.signature);
+                self.allocator.free(existing.signer);
+                self.allocator.free(existing.verification_mode);
                 existing.version = try self.allocator.dupe(u8, version);
                 existing.description = try self.allocator.dupe(u8, description);
                 existing.capabilities_csv = try self.allocator.dupe(u8, capabilities_csv);
+                existing.source_url = try self.allocator.dupe(u8, source_url);
+                existing.digest_sha256 = try self.allocator.dupe(u8, digest_sha256);
+                existing.signature = try self.allocator.dupe(u8, signature);
+                existing.signer = try self.allocator.dupe(u8, signer);
+                existing.verification_mode = try self.allocator.dupe(u8, verification_mode);
+                existing.verified = verified;
                 return;
             }
         }
@@ -1679,6 +1707,12 @@ const EdgeState = struct {
             .version = try self.allocator.dupe(u8, version),
             .description = try self.allocator.dupe(u8, description),
             .capabilities_csv = try self.allocator.dupe(u8, capabilities_csv),
+            .source_url = try self.allocator.dupe(u8, source_url),
+            .digest_sha256 = try self.allocator.dupe(u8, digest_sha256),
+            .signature = try self.allocator.dupe(u8, signature),
+            .signer = try self.allocator.dupe(u8, signer),
+            .verification_mode = try self.allocator.dupe(u8, verification_mode),
+            .verified = verified,
         });
     }
 
@@ -5019,9 +5053,68 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         const description = firstParamString(params, "description", "Custom installed wasm module");
         const capabilities_csv = try parseCapabilitiesCsvFromParams(allocator, params);
         defer allocator.free(capabilities_csv);
+        const source_url = firstParamString(params, "sourceUrl", firstParamString(params, "source_url", ""));
+        const expected_digest = firstParamString(params, "sha256", firstParamString(params, "digestSha256", firstParamString(params, "digest_sha256", "")));
+        const signature = firstParamString(params, "signature", firstParamString(params, "sig", ""));
+        const signer = firstParamString(params, "signer", "");
+        const require_signature = firstParamBool(params, "requireSignature", firstParamBool(params, "require_signature", false));
+        const trust_policy = try resolveWasmTrustPolicyAlloc(allocator, params);
+        defer allocator.free(trust_policy);
+        const computed_digest = try computeWasmModuleDigestHexAlloc(allocator, module_id, version, description, capabilities_csv, source_url);
+        defer allocator.free(computed_digest);
+
+        if (expected_digest.len > 0 and !std.ascii.eqlIgnoreCase(expected_digest, computed_digest)) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "edge.wasm.install sha256 mismatch",
+            });
+        }
+
+        var verified = true;
+        var verification_mode: []const u8 = "hash";
+        if (std.ascii.eqlIgnoreCase(trust_policy, "off")) {
+            verification_mode = "off";
+            verified = true;
+        } else if (std.ascii.eqlIgnoreCase(trust_policy, "signature") or require_signature) {
+            if (signature.len == 0) {
+                return protocol.encodeError(allocator, req.id, .{
+                    .code = -32602,
+                    .message = "edge.wasm.install requires signature under current trust policy",
+                });
+            }
+            const trust_key = try envLookupAlloc(allocator, "OPENCLAW_ZIG_WASM_TRUST_KEY");
+            defer if (trust_key) |value| allocator.free(value);
+            if (trust_key == null) {
+                return protocol.encodeError(allocator, req.id, .{
+                    .code = -32041,
+                    .message = "OPENCLAW_ZIG_WASM_TRUST_KEY is required for signature verification",
+                });
+            }
+            const expected_signature = try computeWasmModuleSignatureHexAlloc(allocator, computed_digest, trust_key.?);
+            defer allocator.free(expected_signature);
+            if (!std.ascii.eqlIgnoreCase(expected_signature, signature)) {
+                return protocol.encodeError(allocator, req.id, .{
+                    .code = -32042,
+                    .message = "edge.wasm.install signature verification failed",
+                });
+            }
+            verification_mode = "hmac-sha256";
+            verified = true;
+        }
 
         const edge_state = getEdgeState();
-        try edge_state.installWasmModule(module_id, version, description, capabilities_csv);
+        try edge_state.installWasmModule(
+            module_id,
+            version,
+            description,
+            capabilities_csv,
+            source_url,
+            computed_digest,
+            signature,
+            signer,
+            verification_mode,
+            verified,
+        );
         return protocol.encodeResult(allocator, req.id, .{
             .status = "installed",
             .module = .{
@@ -5029,7 +5122,14 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                 .version = version,
                 .description = description,
                 .capabilities = capabilities_csv,
+                .sourceUrl = source_url,
+                .sha256 = computed_digest,
+                .signature = signature,
+                .signer = signer,
+                .verified = verified,
+                .verificationMode = verification_mode,
             },
+            .trustPolicy = trust_policy,
             .customModuleCount = edge_state.custom_wasm_modules.items.len,
         });
     }
@@ -5064,10 +5164,36 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
 
         const edge_state = getEdgeState();
         var requires_network_fetch = false;
+        var verified = true;
+        var verification_mode: []const u8 = "builtin";
+        var digest_sha256: []const u8 = "";
+        const requested_host_hooks_csv = try parseHostHooksCsvFromParams(allocator, params);
+        defer allocator.free(requested_host_hooks_csv);
         if (wasmMarketplaceModuleById(module_id)) |module| {
             requires_network_fetch = moduleHasCapability(module.capabilities, "network.fetch");
+            if (try missingWasmHostHookCapabilityAlloc(allocator, requested_host_hooks_csv, module.capabilities, null)) |missing| {
+                defer allocator.free(missing);
+                const message = try std.fmt.allocPrint(allocator, "sandbox denied requested host hook capability: {s}", .{missing});
+                defer allocator.free(message);
+                return protocol.encodeError(allocator, req.id, .{
+                    .code = -32043,
+                    .message = message,
+                });
+            }
         } else if (edge_state.findCustomWasmModule(module_id)) |module| {
             requires_network_fetch = capabilityCsvHas(module.capabilities_csv, "network.fetch");
+            verified = module.verified;
+            verification_mode = module.verification_mode;
+            digest_sha256 = module.digest_sha256;
+            if (try missingWasmHostHookCapabilityAlloc(allocator, requested_host_hooks_csv, null, module.capabilities_csv)) |missing| {
+                defer allocator.free(missing);
+                const message = try std.fmt.allocPrint(allocator, "sandbox denied requested host hook capability: {s}", .{missing});
+                defer allocator.free(message);
+                return protocol.encodeError(allocator, req.id, .{
+                    .code = -32043,
+                    .message = message,
+                });
+            }
         } else {
             return protocol.encodeError(allocator, req.id, .{
                 .code = -32004,
@@ -5093,6 +5219,12 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             .timeoutMs = timeout_ms,
             .memoryMb = memory_mb,
             .sandbox = sandbox,
+            .hostHooks = requested_host_hooks_csv,
+            .trust = .{
+                .verified = verified,
+                .verificationMode = verification_mode,
+                .sha256 = digest_sha256,
+            },
             .output = output_text,
             .executionCount = edge_state.wasm_execution_count,
         });
@@ -8885,6 +9017,125 @@ fn parseCapabilitiesCsvFromParams(
     return allocator.dupe(u8, "workspace.read");
 }
 
+fn resolveWasmTrustPolicyAlloc(
+    allocator: std.mem.Allocator,
+    params: ?std.json.ObjectMap,
+) ![]u8 {
+    const requested = firstParamString(params, "trustPolicy", firstParamString(params, "trust_policy", ""));
+    if (requested.len > 0) return allocator.dupe(u8, requested);
+    if (try envLookupAlloc(allocator, "OPENCLAW_ZIG_WASM_TRUST_POLICY")) |value| return value;
+    return allocator.dupe(u8, "hash");
+}
+
+fn computeWasmModuleDigestHexAlloc(
+    allocator: std.mem.Allocator,
+    module_id: []const u8,
+    version: []const u8,
+    description: []const u8,
+    capabilities_csv: []const u8,
+    source_url: []const u8,
+) ![]u8 {
+    var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+    hasher.update("moduleId=");
+    hasher.update(module_id);
+    hasher.update(";version=");
+    hasher.update(version);
+    hasher.update(";description=");
+    hasher.update(description);
+    hasher.update(";capabilities=");
+    hasher.update(capabilities_csv);
+    hasher.update(";source=");
+    hasher.update(source_url);
+    var digest: [32]u8 = undefined;
+    hasher.final(&digest);
+    const digest_hex = std.fmt.bytesToHex(digest, .lower);
+    return allocator.dupe(u8, &digest_hex);
+}
+
+fn computeWasmModuleSignatureHexAlloc(
+    allocator: std.mem.Allocator,
+    digest_hex: []const u8,
+    trust_key: []const u8,
+) ![]u8 {
+    var mac: [std.crypto.auth.hmac.sha2.HmacSha256.mac_length]u8 = undefined;
+    std.crypto.auth.hmac.sha2.HmacSha256.create(mac[0..], digest_hex, trust_key);
+    const mac_hex = std.fmt.bytesToHex(mac, .lower);
+    return allocator.dupe(u8, &mac_hex);
+}
+
+fn parseHostHooksCsvFromParams(
+    allocator: std.mem.Allocator,
+    params: ?std.json.ObjectMap,
+) ![]u8 {
+    if (params) |obj| {
+        if (obj.get("hostHooks")) |value| {
+            return parseHooksCsvFromValue(allocator, value);
+        }
+        if (obj.get("host_hooks")) |value| {
+            return parseHooksCsvFromValue(allocator, value);
+        }
+    }
+    return allocator.dupe(u8, "");
+}
+
+fn parseHooksCsvFromValue(allocator: std.mem.Allocator, value: std.json.Value) ![]u8 {
+    return switch (value) {
+        .string => |raw| allocator.dupe(u8, std.mem.trim(u8, raw, " \t\r\n")),
+        .array => |arr| blk: {
+            var out = std.ArrayList(u8).empty;
+            defer out.deinit(allocator);
+            var wrote_any = false;
+            for (arr.items) |entry| {
+                if (entry != .string) continue;
+                const trimmed = std.mem.trim(u8, entry.string, " \t\r\n");
+                if (trimmed.len == 0) continue;
+                if (wrote_any) try out.append(allocator, ',');
+                try out.appendSlice(allocator, trimmed);
+                wrote_any = true;
+            }
+            if (!wrote_any) break :blk allocator.dupe(u8, "");
+            break :blk out.toOwnedSlice(allocator);
+        },
+        else => allocator.dupe(u8, ""),
+    };
+}
+
+fn hostHookRequiredCapability(hook: []const u8) ?[]const u8 {
+    if (std.ascii.eqlIgnoreCase(hook, "fs.read")) return "workspace.read";
+    if (std.ascii.eqlIgnoreCase(hook, "fs.write")) return "workspace.write";
+    if (std.ascii.eqlIgnoreCase(hook, "memory.read")) return "memory.read";
+    if (std.ascii.eqlIgnoreCase(hook, "memory.write")) return "memory.write";
+    if (std.ascii.eqlIgnoreCase(hook, "network.fetch")) return "network.fetch";
+    return null;
+}
+
+fn missingWasmHostHookCapabilityAlloc(
+    allocator: std.mem.Allocator,
+    host_hooks_csv: []const u8,
+    builtin_caps: ?[]const []const u8,
+    custom_caps_csv: ?[]const u8,
+) !?[]u8 {
+    const hooks = std.mem.trim(u8, host_hooks_csv, " \t\r\n");
+    if (hooks.len == 0) return null;
+
+    var split = std.mem.splitScalar(u8, hooks, ',');
+    while (split.next()) |raw_hook| {
+        const hook = std.mem.trim(u8, raw_hook, " \t\r\n");
+        if (hook.len == 0) continue;
+        const required_cap = hostHookRequiredCapability(hook) orelse return try allocator.dupe(u8, hook);
+        const allowed = if (builtin_caps) |caps|
+            moduleHasCapability(caps, required_cap)
+        else if (custom_caps_csv) |caps_csv|
+            capabilityCsvHas(caps_csv, required_cap)
+        else
+            false;
+        if (!allowed) {
+            return try std.fmt.allocPrint(allocator, "{s} -> {s}", .{ hook, required_cap });
+        }
+    }
+    return null;
+}
+
 fn renderWasmExecutionOutput(
     allocator: std.mem.Allocator,
     module_id: []const u8,
@@ -10288,11 +10539,20 @@ test "dispatch wasm lifecycle methods install execute remove and enforce sandbox
     defer allocator.free(install);
     try std.testing.expect(std.mem.indexOf(u8, install, "\"status\":\"installed\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, install, "\"wasm.custom.math\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, install, "\"verificationMode\":\"hash\"") != null);
 
     const execute = try dispatch(allocator, "{\"id\":\"edge-wasm-exec\",\"method\":\"edge.wasm.execute\",\"params\":{\"moduleId\":\"wasm.custom.math\",\"input\":\"run\"}}");
     defer allocator.free(execute);
     try std.testing.expect(std.mem.indexOf(u8, execute, "\"status\":\"completed\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, execute, "\"wasm.custom.math\"") != null);
+
+    const execute_hook_allow = try dispatch(allocator, "{\"id\":\"edge-wasm-exec-hook-allow\",\"method\":\"edge.wasm.execute\",\"params\":{\"moduleId\":\"wasm.custom.math\",\"hostHooks\":[\"fs.read\"]}}");
+    defer allocator.free(execute_hook_allow);
+    try std.testing.expect(std.mem.indexOf(u8, execute_hook_allow, "\"status\":\"completed\"") != null);
+
+    const execute_hook_deny = try dispatch(allocator, "{\"id\":\"edge-wasm-exec-hook-deny\",\"method\":\"edge.wasm.execute\",\"params\":{\"moduleId\":\"wasm.custom.math\",\"hostHooks\":[\"network.fetch\"]}}");
+    defer allocator.free(execute_hook_deny);
+    try std.testing.expect(std.mem.indexOf(u8, execute_hook_deny, "\"code\":-32043") != null);
 
     const execute_limit = try dispatch(allocator, "{\"id\":\"edge-wasm-exec-limit\",\"method\":\"edge.wasm.execute\",\"params\":{\"moduleId\":\"wasm.echo\",\"timeoutMs\":20000}}");
     defer allocator.free(execute_limit);
