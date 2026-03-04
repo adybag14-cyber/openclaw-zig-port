@@ -327,41 +327,8 @@ pub fn executeCompletion(
     };
     defer parsed.deinit();
 
-    var resolved_model = model;
-    var assistant_text: []const u8 = "";
-    if (parsed.value == .object) {
-        if (parsed.value.object.get("model")) |value| {
-            if (value == .string) {
-                const trimmed = std.mem.trim(u8, value.string, " \t\r\n");
-                if (trimmed.len > 0) resolved_model = trimmed;
-            }
-        }
-        if (parsed.value.object.get("choices")) |choices_value| {
-            if (choices_value == .array and choices_value.array.items.len > 0) {
-                const first = choices_value.array.items[0];
-                if (first == .object) {
-                    if (first.object.get("message")) |message_value| {
-                        if (message_value == .object) {
-                            if (message_value.object.get("content")) |content_value| {
-                                if (content_value == .string) {
-                                    const trimmed = std.mem.trim(u8, content_value.string, " \t\r\n");
-                                    if (trimmed.len > 0) assistant_text = trimmed;
-                                }
-                            }
-                        }
-                    }
-                    if (assistant_text.len == 0) {
-                        if (first.object.get("text")) |text_value| {
-                            if (text_value == .string) {
-                                const trimmed = std.mem.trim(u8, text_value.string, " \t\r\n");
-                                if (trimmed.len > 0) assistant_text = trimmed;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    const resolved_model = extractModelFromResponse(parsed.value, model);
+    const assistant_text = extractAssistantTextFromResponse(parsed.value);
 
     return .{
         .requested = true,
@@ -389,6 +356,130 @@ fn allocErrorSnippet(allocator: std.mem.Allocator, body: []const u8, status_code
         return std.fmt.allocPrint(allocator, "bridge returned status {d}: {s}...", .{ status_code, prefix });
     }
     return std.fmt.allocPrint(allocator, "bridge returned status {d}: {s}", .{ status_code, prefix });
+}
+
+fn extractModelFromResponse(value: std.json.Value, fallback: []const u8) []const u8 {
+    if (value != .object) return fallback;
+    if (value.object.get("model")) |model_value| {
+        if (model_value == .string) {
+            const trimmed = std.mem.trim(u8, model_value.string, " \t\r\n");
+            if (trimmed.len > 0) return trimmed;
+        }
+    }
+    return fallback;
+}
+
+fn extractAssistantTextFromResponse(value: std.json.Value) []const u8 {
+    if (value != .object) return "";
+
+    if (value.object.get("output_text")) |output_text| {
+        if (output_text == .string) {
+            const trimmed = std.mem.trim(u8, output_text.string, " \t\r\n");
+            if (trimmed.len > 0) return trimmed;
+        }
+    }
+
+    if (value.object.get("output")) |output_value| {
+        if (output_value == .array) {
+            for (output_value.array.items) |output_item| {
+                const text = extractAssistantTextFromOutputItem(output_item);
+                if (text.len > 0) return text;
+            }
+        }
+    }
+
+    if (value.object.get("choices")) |choices_value| {
+        if (choices_value == .array) {
+            for (choices_value.array.items) |choice| {
+                const text = extractAssistantTextFromChoice(choice);
+                if (text.len > 0) return text;
+            }
+        }
+    }
+
+    return "";
+}
+
+fn extractAssistantTextFromChoice(choice: std.json.Value) []const u8 {
+    if (choice != .object) return "";
+
+    if (choice.object.get("message")) |message_value| {
+        const text = extractAssistantTextFromMessageValue(message_value);
+        if (text.len > 0) return text;
+    }
+
+    if (choice.object.get("delta")) |delta_value| {
+        const text = extractAssistantTextFromMessageValue(delta_value);
+        if (text.len > 0) return text;
+    }
+
+    if (choice.object.get("text")) |text_value| {
+        if (text_value == .string) {
+            const trimmed = std.mem.trim(u8, text_value.string, " \t\r\n");
+            if (trimmed.len > 0) return trimmed;
+        }
+    }
+
+    return "";
+}
+
+fn extractAssistantTextFromOutputItem(item: std.json.Value) []const u8 {
+    if (item != .object) return "";
+    if (item.object.get("content")) |content_value| {
+        const text = extractAssistantTextFromMessageContent(content_value);
+        if (text.len > 0) return text;
+    }
+    return "";
+}
+
+fn extractAssistantTextFromMessageValue(value: std.json.Value) []const u8 {
+    if (value != .object) return "";
+    if (value.object.get("content")) |content_value| {
+        return extractAssistantTextFromMessageContent(content_value);
+    }
+    return "";
+}
+
+fn extractAssistantTextFromMessageContent(value: std.json.Value) []const u8 {
+    switch (value) {
+        .string => |raw| {
+            const trimmed = std.mem.trim(u8, raw, " \t\r\n");
+            if (trimmed.len > 0) return trimmed;
+        },
+        .array => |arr| {
+            for (arr.items) |part| {
+                const text = extractAssistantTextFromContentPart(part);
+                if (text.len > 0) return text;
+            }
+        },
+        else => {},
+    }
+    return "";
+}
+
+fn extractAssistantTextFromContentPart(value: std.json.Value) []const u8 {
+    switch (value) {
+        .string => |raw| {
+            const trimmed = std.mem.trim(u8, raw, " \t\r\n");
+            if (trimmed.len > 0) return trimmed;
+        },
+        .object => |obj| {
+            if (obj.get("text")) |text_value| {
+                if (text_value == .string) {
+                    const trimmed = std.mem.trim(u8, text_value.string, " \t\r\n");
+                    if (trimmed.len > 0) return trimmed;
+                }
+            }
+            if (obj.get("content")) |content_value| {
+                if (content_value == .string) {
+                    const trimmed = std.mem.trim(u8, content_value.string, " \t\r\n");
+                    if (trimmed.len > 0) return trimmed;
+                }
+            }
+        },
+        else => {},
+    }
+    return "";
 }
 
 fn normalizeEndpointForProbe(allocator: std.mem.Allocator, endpoint_raw: []const u8) ![]u8 {
@@ -487,4 +578,22 @@ test "execute completion returns failure telemetry for unreachable endpoint" {
     try std.testing.expect(std.mem.eql(u8, execution.provider, "chatgpt"));
     try std.testing.expect(std.mem.eql(u8, execution.requestUrl, "http://127.0.0.1:1/v1/chat/completions"));
     try std.testing.expect(execution.errorText.len > 0);
+}
+
+test "extract assistant text supports output_text and message content arrays" {
+    const allocator = std.testing.allocator;
+    const output_payload =
+        \\{"model":"gpt-5.2","output_text":"from-output-text"}
+    ;
+    var parsed_output = try std.json.parseFromSlice(std.json.Value, allocator, output_payload, .{});
+    defer parsed_output.deinit();
+    try std.testing.expect(std.mem.eql(u8, extractAssistantTextFromResponse(parsed_output.value), "from-output-text"));
+    try std.testing.expect(std.mem.eql(u8, extractModelFromResponse(parsed_output.value, "fallback"), "gpt-5.2"));
+
+    const array_payload =
+        \\{"choices":[{"message":{"content":[{"type":"output_text","text":"from-array"}]}}]}
+    ;
+    var parsed_array = try std.json.parseFromSlice(std.json.Value, allocator, array_payload, .{});
+    defer parsed_array.deinit();
+    try std.testing.expect(std.mem.eql(u8, extractAssistantTextFromResponse(parsed_array.value), "from-array"));
 }

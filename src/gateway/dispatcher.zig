@@ -5804,17 +5804,21 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                 browser_params.api_key,
             );
             defer bridge_completion.deinit(allocator);
+            const completion_ok = bridge_completion.ok;
+            const completion_status = if (completion_ok) completion.status else "failed";
+            const completion_message = if (completion_ok or bridge_completion.errorText.len == 0) completion.message else bridge_completion.errorText;
+            const result_model = if (bridge_completion.model.len > 0) bridge_completion.model else completion.model;
 
             return protocol.encodeResult(allocator, req.id, .{
-                .ok = completion.ok,
+                .ok = completion_ok,
                 .engine = completion.engine,
                 .provider = completion.provider,
-                .model = completion.model,
-                .status = completion.status,
+                .model = result_model,
+                .status = completion_status,
                 .authMode = completion.authMode,
                 .guestBypassSupported = completion.guestBypassSupported,
                 .popupBypassAction = completion.popupBypassAction,
-                .message = completion.message,
+                .message = completion_message,
                 .endpoint = probe.endpoint,
                 .requestTimeoutMs = browser_params.request_timeout_ms,
                 .probe = .{
@@ -7804,6 +7808,8 @@ test "dispatch browser.request executes completion payload path with failure tel
         "{\"id\":\"3d\",\"method\":\"browser.request\",\"params\":{\"provider\":\"chatgpt\",\"endpoint\":\"http://127.0.0.1:1\",\"prompt\":\"hello from zig\"}}",
     );
     defer allocator.free(out);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"ok\":false") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"status\":\"failed\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"bridgeCompletion\":{\"requested\":true") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"requestUrl\":\"http://127.0.0.1:1/v1/chat/completions\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"assistantText\":\"\"") != null);

@@ -52,6 +52,9 @@ Phase 5 enhancement notes:
   - When prompt/messages are present, dispatcher now POSTs to `<endpoint>/v1/chat/completions`.
   - RPC responses include structured `bridgeCompletion` telemetry (`requested/ok/provider/requestUrl/statusCode/model/assistantText/latencyMs/error`).
   - Request parsing now supports completion payload keys with normalization: `messages`, `prompt|message|text`, `temperature`, `max_tokens|maxTokens`, `loginSessionId|login_session_id`, and `apiKey|api_key`.
+- Completion semantics hardening:
+  - Top-level `ok/status/message` for `browser.request` now reflect live completion outcome when completion execution is requested (`status=failed` on bridge failure).
+  - Assistant text extraction now supports additional response shapes: `output_text`, `output[].content[]`, and array-based `choices[].message.content`.
 
 ## Phase 6 - Memory + Edge
 - [x] Port memory persistence primitives
@@ -144,7 +147,7 @@ Phase 6 progress notes:
 ## Latest Validation Snapshot
 - [x] `zig build`
 - [x] `zig build test`
-- [x] `zig build test --summary all` -> `73/73` passing (includes lightpanda completion execution + parser telemetry coverage)
+- [x] `zig build test --summary all` -> `74/74` passing (includes completion outcome semantics + richer assistant-text extraction coverage)
 - [x] `scripts/generate-rpc-reference.ps1` (regenerates `docs/rpc-reference.md` from `src/gateway/registry.zig`, currently `153` methods)
 - [x] `scripts/npm-pack-check.ps1` (validates npm package dry-run for `npm/openclaw-zig-rpc-client`)
 - [x] `zig test src/main.zig`
