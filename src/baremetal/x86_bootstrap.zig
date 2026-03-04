@@ -29,8 +29,11 @@ pub const DescriptorPointer = extern struct {
 
 pub const InterruptState = extern struct {
     descriptor_tables_ready: u8,
+    descriptor_tables_loaded: u8,
     last_interrupt_vector: u8,
-    reserved0: u16,
+    reserved0: u8,
+    load_attempts: u32,
+    load_successes: u32,
     descriptor_init_count: u32,
     interrupt_count: u64,
 };
@@ -41,13 +44,19 @@ var gdtr: DescriptorPointer = .{ .limit = 0, .base = 0 };
 var idtr: DescriptorPointer = .{ .limit = 0, .base = 0 };
 
 var descriptor_tables_ready: bool = false;
+var descriptor_tables_loaded: bool = false;
 var last_interrupt_vector: u8 = 0;
 var interrupt_counter: u64 = 0;
 var descriptor_init_counter: u32 = 0;
+var descriptor_load_attempts: u32 = 0;
+var descriptor_load_successes: u32 = 0;
 var interrupt_state: InterruptState = .{
     .descriptor_tables_ready = 0,
+    .descriptor_tables_loaded = 0,
     .last_interrupt_vector = 0,
     .reserved0 = 0,
+    .load_attempts = 0,
+    .load_successes = 0,
     .descriptor_init_count = 0,
     .interrupt_count = 0,
 };
@@ -150,6 +159,34 @@ pub export fn oc_descriptor_init_count() u32 {
     return descriptor_init_counter;
 }
 
+pub export fn oc_descriptor_tables_loaded() bool {
+    return descriptor_tables_loaded;
+}
+
+pub export fn oc_descriptor_load_attempt_count() u32 {
+    return descriptor_load_attempts;
+}
+
+pub export fn oc_descriptor_load_success_count() u32 {
+    return descriptor_load_successes;
+}
+
+pub export fn oc_try_load_descriptor_tables() bool {
+    ensureInit();
+    descriptor_load_attempts +%= 1;
+    if (@import("builtin").cpu.arch != .x86_64) {
+        refreshInterruptState();
+        return false;
+    }
+
+    // The freestanding runtime performs actual low-level load sequencing.
+    // This export records successful load-state transitions for mailbox/ABI telemetry.
+    descriptor_tables_loaded = true;
+    descriptor_load_successes +%= 1;
+    refreshInterruptState();
+    return true;
+}
+
 pub export fn oc_interrupt_state_ptr() *const InterruptState {
     refreshInterruptState();
     return &interrupt_state;
@@ -174,8 +211,11 @@ pub export fn oc_interrupt_stub(vector: u8) void {
 fn refreshInterruptState() void {
     interrupt_state = .{
         .descriptor_tables_ready = if (descriptor_tables_ready) 1 else 0,
+        .descriptor_tables_loaded = if (descriptor_tables_loaded) 1 else 0,
         .last_interrupt_vector = last_interrupt_vector,
         .reserved0 = 0,
+        .load_attempts = descriptor_load_attempts,
+        .load_successes = descriptor_load_successes,
         .descriptor_init_count = descriptor_init_counter,
         .interrupt_count = interrupt_counter,
     };
@@ -205,4 +245,17 @@ test "x86 bootstrap interrupt tracking updates counters" {
     oc_reset_interrupt_counters();
     try std.testing.expectEqual(@as(u8, 0), last_interrupt_vector);
     try std.testing.expectEqual(@as(u64, 0), interrupt_counter);
+}
+
+test "x86 bootstrap descriptor load telemetry updates attempts and successes" {
+    init();
+    const attempts_before = oc_descriptor_load_attempt_count();
+    const success_before = oc_descriptor_load_success_count();
+    const ok = oc_try_load_descriptor_tables();
+    const state = oc_interrupt_state_ptr().*;
+    try std.testing.expect(ok);
+    try std.testing.expect(oc_descriptor_tables_loaded());
+    try std.testing.expectEqual(attempts_before + 1, oc_descriptor_load_attempt_count());
+    try std.testing.expectEqual(success_before + 1, oc_descriptor_load_success_count());
+    try std.testing.expectEqual(@as(u8, 1), state.descriptor_tables_loaded);
 }

@@ -269,6 +269,9 @@ while maintaining parity-first validation and release gating.
   - bare-metal interrupt-state telemetry expansion shipped:
     - new exports: `oc_descriptor_init_count` and `oc_interrupt_state_ptr`.
     - smoke gate symbol contract expanded so telemetry exports cannot regress silently.
+  - bare-metal descriptor-load telemetry + control expansion shipped:
+    - new exports: `oc_descriptor_tables_loaded`, `oc_descriptor_load_attempt_count`, `oc_descriptor_load_success_count`, `oc_try_load_descriptor_tables`.
+    - new command opcode wired: `command_load_descriptor_tables`.
   - CI recovery note (2026-03-04):
     - fixed Zig master API regression in Telegram runtime env lookup (`.block = .global` on `std.process.Environ`), which broke `zig-ci` validate and all cross-target jobs on run `22668754695`.
     - implemented injected environ wiring (`telegram_runtime.setEnviron`) and switched env lookup to `std.process.Environ.getAlloc(process_environ, ...)`.

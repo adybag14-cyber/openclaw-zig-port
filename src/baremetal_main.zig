@@ -116,6 +116,7 @@ pub export fn oc_tick_n(iterations: u32) void {
 
 pub export fn _start() noreturn {
     x86_bootstrap.init();
+    _ = x86_bootstrap.oc_try_load_descriptor_tables();
     status.mode = abi.mode_running;
     if (qemu_smoke_enabled) {
         qemuExit(qemu_boot_ok_code);
@@ -181,6 +182,10 @@ fn executeCommand(opcode: u16, arg0: u64, _: u64) i16 {
         abi.command_reinit_descriptor_tables => {
             x86_bootstrap.init();
             return abi.result_ok;
+        },
+        abi.command_load_descriptor_tables => {
+            if (x86_bootstrap.oc_try_load_descriptor_tables()) return abi.result_ok;
+            return abi.result_not_supported;
         },
         else => return abi.result_not_supported,
     }

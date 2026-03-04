@@ -236,6 +236,9 @@ Phase 6 progress notes:
 - [x] Bare-metal interrupt-state telemetry exports added:
   - `oc_descriptor_init_count`
   - `oc_interrupt_state_ptr`
+- [x] Bare-metal descriptor-load telemetry exports + mailbox opcode added:
+  - exports: `oc_descriptor_tables_loaded`, `oc_descriptor_load_attempt_count`, `oc_descriptor_load_success_count`, `oc_try_load_descriptor_tables`
+  - opcode: `command_load_descriptor_tables`
 - [x] `scripts/baremetal-smoke-check.ps1` now validates Multiboot2 header fields and checksum (`magic`, `arch`, `header_length`, `checksum`, end-tag tuple) in addition to section/symbol invariants.
 - [x] Cross-target diagnostics matrix (`scripts/zig-cross-target-matrix.ps1`) now covers desktop + Android with per-target logs and JSON summary:
   - Local Windows Zig master result: `4/8` pass (`x86_64-windows`, `x86_64-linux`, `x86_64-macos`, `x86_64-linux-android`)
