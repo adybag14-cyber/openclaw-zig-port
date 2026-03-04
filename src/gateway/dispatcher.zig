@@ -9531,7 +9531,7 @@ test "dispatch browser.request direct provider rejects unsupported providers wit
         "{\"id\":\"3f\",\"method\":\"browser.request\",\"params\":{\"provider\":\"qwen\",\"directProvider\":true,\"prompt\":\"hello direct\"}}",
     );
     defer allocator.free(out);
-    try std.testing.expect(std.mem.indexOf(u8, out, "\"status\":\"failed\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"ok\":false") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"executionPath\":\"direct-provider\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "unsupported direct provider") != null);
 }
