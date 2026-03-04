@@ -12,7 +12,8 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 - Latest local validation: `zig build test --summary all` -> `66/66` passing
 - Dual runtime profiles available:
   - OS-hosted profile: `openclaw-zig` (`--serve`, doctor, security audit, full RPC stack)
-  - Bare-metal profile: `openclaw-zig-baremetal.elf` (`zig build baremetal`, freestanding runtime loop + Multiboot2 header)
+- Bare-metal profile: `openclaw-zig-baremetal.elf` (`zig build baremetal`, freestanding runtime loop + Multiboot2 header)
+  - smoke gate validates ELF class/endianness, Multiboot2 location/alignment, `.multiboot` section, and required exported symbols
 - Recent optimization slices (2026-03-04):
   - memory/runtime/channel queue compaction and retention hardening
   - diagnostics docker probe caching
