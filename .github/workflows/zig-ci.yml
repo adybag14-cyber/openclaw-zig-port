@@ -67,6 +67,10 @@ jobs:
         shell: pwsh
         run: ./scripts/update-lifecycle-smoke-check.ps1 -SkipBuild
 
+      - name: System maintenance smoke check (plan/run/status)
+        shell: pwsh
+        run: ./scripts/system-maintenance-smoke-check.ps1 -SkipBuild
+
   cross-targets:
     runs-on: ubuntu-latest
     strategy:
