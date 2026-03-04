@@ -328,6 +328,15 @@ $requiredSymbols = @(
     "oc_command_ptr",
     "oc_kernel_info_ptr",
     "oc_submit_command",
+    "oc_gdtr_ptr",
+    "oc_idtr_ptr",
+    "oc_gdt_ptr",
+    "oc_idt_ptr",
+    "oc_descriptor_tables_ready",
+    "oc_last_interrupt_vector",
+    "oc_interrupt_count",
+    "oc_trigger_interrupt",
+    "oc_interrupt_stub",
     "kernel_info",
     "multiboot2_header"
 )

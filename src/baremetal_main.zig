@@ -1,5 +1,6 @@
 const std = @import("std");
 const abi = @import("baremetal/abi.zig");
+const x86_bootstrap = @import("baremetal/x86_bootstrap.zig");
 const BaremetalStatus = abi.BaremetalStatus;
 const BaremetalCommand = abi.BaremetalCommand;
 const BaremetalKernelInfo = abi.BaremetalKernelInfo;
@@ -88,6 +89,9 @@ pub export fn oc_submit_command(opcode: u16, arg0: u64, arg1: u64) u32 {
 }
 
 pub export fn oc_tick() void {
+    if (!x86_bootstrap.oc_descriptor_tables_ready()) {
+        x86_bootstrap.init();
+    }
     processPendingCommand();
     if (status.mode == abi.mode_booting) {
         status.mode = abi.mode_running;
@@ -107,6 +111,7 @@ pub export fn oc_tick_n(iterations: u32) void {
 }
 
 pub export fn _start() noreturn {
+    x86_bootstrap.init();
     status.mode = abi.mode_running;
     while (true) {
         oc_tick();

@@ -17,11 +17,15 @@ pub const feature_memory_edge_contracts: u32 = 1 << 3;
 pub const feature_command_mailbox: u32 = 1 << 4;
 pub const feature_multiboot2_header: u32 = 1 << 5;
 pub const feature_kernel_info_export: u32 = 1 << 6;
+pub const feature_descriptor_tables_export: u32 = 1 << 7;
+pub const feature_interrupt_stub_export: u32 = 1 << 8;
 
 pub const kernel_abi_multiboot2: u32 = 1 << 0;
 pub const kernel_abi_command_mailbox: u32 = 1 << 1;
 pub const kernel_abi_panic_counter: u32 = 1 << 2;
 pub const kernel_abi_tick_batch: u32 = 1 << 3;
+pub const kernel_abi_descriptor_tables: u32 = 1 << 4;
+pub const kernel_abi_interrupt_stub: u32 = 1 << 5;
 
 pub const command_nop: u16 = 0;
 pub const command_set_health_code: u16 = 1;
@@ -77,14 +81,18 @@ pub fn defaultFeatureFlags() u32 {
         feature_memory_edge_contracts |
         feature_command_mailbox |
         feature_multiboot2_header |
-        feature_kernel_info_export;
+        feature_kernel_info_export |
+        feature_descriptor_tables_export |
+        feature_interrupt_stub_export;
 }
 
 pub fn defaultAbiFlags() u32 {
     return kernel_abi_multiboot2 |
         kernel_abi_command_mailbox |
         kernel_abi_panic_counter |
-        kernel_abi_tick_batch;
+        kernel_abi_tick_batch |
+        kernel_abi_descriptor_tables |
+        kernel_abi_interrupt_stub;
 }
 
 pub fn modeIsValid(mode: u8) bool {

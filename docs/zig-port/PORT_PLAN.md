@@ -256,6 +256,10 @@ while maintaining parity-first validation and release gating.
     - added shared ABI contracts module (`src/baremetal/abi.zig`) with explicit layout tests
     - added command mailbox + kernel info exports and runtime command-processing loop in `src/baremetal_main.zig`
     - validated with `zig build test --summary all` (`84/84`) and `scripts/baremetal-smoke-check.ps1`
+  - bare-metal x86 bootstrap depth expansion shipped:
+    - added descriptor-table + interrupt bootstrap module (`src/baremetal/x86_bootstrap.zig`)
+    - runtime now initializes descriptor tables via `x86_bootstrap.init()` on start/tick paths
+    - smoke gate required symbol set expanded with descriptor/interrupt exports (`oc_gdtr_ptr`, `oc_idtr_ptr`, `oc_gdt_ptr`, `oc_idt_ptr`, `oc_descriptor_tables_ready`, `oc_interrupt_stub`, `oc_trigger_interrupt`, `oc_interrupt_count`, `oc_last_interrupt_vector`)
   - CI recovery note (2026-03-04):
     - fixed Zig master API regression in Telegram runtime env lookup (`.block = .global` on `std.process.Environ`), which broke `zig-ci` validate and all cross-target jobs on run `22668754695`.
     - implemented injected environ wiring (`telegram_runtime.setEnviron`) and switched env lookup to `std.process.Environ.getAlloc(process_environ, ...)`.

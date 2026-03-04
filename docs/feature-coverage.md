@@ -10,6 +10,7 @@ This page summarizes functional coverage across all major OpenClaw Zig runtime d
   - freestanding runtime image (`zig build baremetal`)
   - exported lifecycle hooks for firmware/bootloader integration (`_start`, `oc_tick`, `oc_tick_n`, `oc_status_ptr`)
   - exported command/mailbox ABI (`oc_command_ptr`, `oc_submit_command`, `oc_kernel_info_ptr`, `kernel_info`)
+  - exported x86 descriptor/interrupt bootstrap ABI (`oc_gdtr_ptr`, `oc_idtr_ptr`, `oc_gdt_ptr`, `oc_idt_ptr`, `oc_interrupt_stub`, `oc_interrupt_count`, `oc_last_interrupt_vector`)
   - Multiboot2 header embedded for loader compatibility checks
 
 ## Protocol and Gateway

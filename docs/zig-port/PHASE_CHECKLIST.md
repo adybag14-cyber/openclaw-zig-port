@@ -221,6 +221,13 @@ Phase 6 progress notes:
   - shared ABI module: `src/baremetal/abi.zig` (status/command/kernel-info structs, mode/feature/opcode constants)
   - freestanding runtime exports command mailbox and kernel introspection hooks (`oc_command_ptr`, `oc_submit_command`, `oc_kernel_info_ptr`)
   - freestanding runtime supports command processing on tick loop (`set health`, `set feature flags`, `set mode`, `reset counters`, `set tick batch`, `panic flag`)
+- [x] Bare-metal x86 bootstrap slice shipped:
+  - new descriptor-table + interrupt module: `src/baremetal/x86_bootstrap.zig`
+  - runtime now initializes descriptor tables on bare-metal start/tick paths
+  - exported bootstrap contracts enforced in smoke gate:
+    - `oc_gdtr_ptr`, `oc_idtr_ptr`, `oc_gdt_ptr`, `oc_idt_ptr`
+    - `oc_descriptor_tables_ready`, `oc_interrupt_stub`, `oc_trigger_interrupt`
+    - `oc_interrupt_count`, `oc_last_interrupt_vector`
 - [x] `scripts/baremetal-smoke-check.ps1` now validates Multiboot2 header fields and checksum (`magic`, `arch`, `header_length`, `checksum`, end-tag tuple) in addition to section/symbol invariants.
 - [x] Cross-target diagnostics matrix (`scripts/zig-cross-target-matrix.ps1`) now covers desktop + Android with per-target logs and JSON summary:
   - Local Windows Zig master result: `4/8` pass (`x86_64-windows`, `x86_64-linux`, `x86_64-macos`, `x86_64-linux-android`)
