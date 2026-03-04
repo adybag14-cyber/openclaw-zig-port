@@ -155,9 +155,23 @@ pub const supported_methods = [_][]const u8{
 };
 
 pub fn supports(method: []const u8) bool {
+    var has_upper = false;
+    for (method) |ch| {
+        if (std.ascii.isUpper(ch)) {
+            has_upper = true;
+            break;
+        }
+    }
+
+    for (supported_methods) |entry| {
+        if (std.mem.eql(u8, entry, method)) return true;
+    }
+    if (!has_upper) return false;
+
     for (supported_methods) |entry| {
         if (std.ascii.eqlIgnoreCase(entry, method)) return true;
     }
+
     return false;
 }
 
@@ -168,5 +182,6 @@ pub fn count() usize {
 test "registry includes browser.request and health" {
     try std.testing.expect(supports("browser.request"));
     try std.testing.expect(supports("health"));
+    try std.testing.expect(supports("HeAlTh"));
     try std.testing.expect(!supports("unknown.method"));
 }

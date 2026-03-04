@@ -66,6 +66,9 @@ Phase 6 progress notes:
 - Channel retention hardening shipped:
   - `channels/telegram_runtime.zig`: bounded queue retention (`max_queue_entries=4096`) now drops oldest queued messages with single-pass front compaction.
   - Added regression test: `channels.telegram_runtime.test.telegram runtime queue retention keeps newest entries under cap`.
+- Registry hot-path optimization shipped:
+  - `gateway/registry.zig`: `supports` now checks exact-case method hits first and only performs case-insensitive fallback when request method contains uppercase characters.
+  - Added regression check for mixed-case compatibility: `supports(\"HeAlTh\")`.
 - Implemented edge contract slice in dispatcher: `edge.wasm.marketplace.list`, `edge.router.plan`, `edge.swarm.plan`, `edge.multimodal.inspect`, and `edge.voice.transcribe`.
 - Implemented advanced edge contract slice in dispatcher: `edge.enclave.status`, `edge.enclave.prove`, `edge.mesh.status`, `edge.homomorphic.compute`, `edge.finetune.status`, `edge.finetune.run`, `edge.identity.trust.status`, `edge.personality.profile`, `edge.handoff.plan`, `edge.marketplace.revenue.preview`, `edge.finetune.cluster.plan`, `edge.alignment.evaluate`, `edge.quantum.status`, and `edge.collaboration.plan`.
 - Added `edge.acceleration.status` parity handler with contract coverage.

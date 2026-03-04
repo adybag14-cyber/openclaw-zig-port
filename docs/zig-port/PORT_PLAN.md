@@ -100,6 +100,9 @@ while maintaining parity-first validation and release gating.
   - Channel retention hardening shipped:
     - Telegram runtime now enforces bounded queue retention (`max_queue_entries`, default `4096`) and drops oldest entries via single-pass compaction to prevent unbounded memory growth under delayed polling (`src/channels/telegram_runtime.zig`).
     - Added regression coverage to verify newest-entry retention ordering under queue cap.
+  - Gateway registry lookup optimization shipped:
+    - `registry.supports` now fast-paths exact lowercase method matches using `std.mem.eql` and only runs case-insensitive fallback scans when uppercase input is present (`src/gateway/registry.zig`).
+    - Added mixed-case compatibility regression check (`supports(\"HeAlTh\")`).
   - Dispatcher memory parity slice shipped: `sessions.history`, `chat.history`, and `doctor.memory.status`.
   - Edge handler parity slice shipped: `edge.wasm.marketplace.list`, `edge.router.plan`, `edge.swarm.plan`, `edge.multimodal.inspect`, and `edge.voice.transcribe`.
   - Advanced edge handler parity slice shipped: `edge.enclave.status`, `edge.enclave.prove`, `edge.mesh.status`, `edge.homomorphic.compute`, `edge.finetune.status`, `edge.finetune.run`, `edge.identity.trust.status`, `edge.personality.profile`, `edge.handoff.plan`, `edge.marketplace.revenue.preview`, `edge.finetune.cluster.plan`, `edge.alignment.evaluate`, `edge.quantum.status`, and `edge.collaboration.plan`.
