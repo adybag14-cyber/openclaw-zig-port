@@ -38,6 +38,9 @@ Phase 4 hardening notes:
   - `OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_WINDOW_MS`
   - `OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_MAX_REQUESTS`
 - `security.audit` and `doctor` now report gateway auth/rate-limit posture with dedicated checks/findings.
+- Added deterministic config fingerprinting for diagnostics posture tracking:
+  - `health`, `status`, and `config.get` now expose `configHash`.
+  - `doctor` now includes `configHash` (stable hash of active config + env overlays).
 
 ## Phase 5 - Browser/Auth/Channels
 - [x] Implement web login manager (`start/wait/complete/status`)

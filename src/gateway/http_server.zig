@@ -110,6 +110,7 @@ pub fn routeRequest(
                 .status = "ok",
                 .service = "openclaw-zig",
                 .bridge = "lightpanda",
+                .configHash = config.fingerprintHex(cfg),
             }),
         };
     }
@@ -437,6 +438,7 @@ test "routeRequest health returns a successful payload" {
     try std.testing.expectEqual(std.http.Status.ok, result.status);
     try std.testing.expect(!should_shutdown);
     try std.testing.expect(std.mem.indexOf(u8, result.body, "\"status\":\"ok\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.body, "\"configHash\":\"") != null);
 }
 
 test "routeRequest toggles shutdown on shutdown rpc method" {
@@ -496,6 +498,7 @@ test "routeRequest handles query-bearing health path" {
     defer allocator.free(result.body);
     try std.testing.expectEqual(std.http.Status.ok, result.status);
     try std.testing.expect(std.mem.indexOf(u8, result.body, "\"status\":\"ok\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.body, "\"configHash\":\"") != null);
 }
 
 test "routeRequest handles query-bearing websocket path" {

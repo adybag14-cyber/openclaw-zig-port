@@ -78,6 +78,7 @@ pub const DoctorCheck = struct {
 pub const DoctorReport = struct {
     checks: []DoctorCheck,
     security: Report,
+    configHash: [64]u8,
 
     pub fn deinit(self: *DoctorReport, allocator: std.mem.Allocator) void {
         allocator.free(self.checks);
@@ -315,6 +316,7 @@ pub fn doctor(
     return .{
         .checks = try checks.toOwnedSlice(allocator),
         .security = security,
+        .configHash = config.fingerprintHex(cfg),
     };
 }
 
@@ -635,4 +637,21 @@ test "doctor exposes gateway auth token check" {
         }
     }
     try std.testing.expect(found);
+}
+
+test "doctor includes deterministic config hash" {
+    const allocator = std.testing.allocator;
+    var cfg = config.defaults();
+    var runtime_guard = try guard.Guard.init(allocator, cfg.security);
+    defer runtime_guard.deinit();
+
+    var report_a = try doctor(allocator, cfg, &runtime_guard, .{});
+    defer report_a.deinit(allocator);
+    const hash_a = report_a.configHash;
+    try std.testing.expect(hash_a.len == 64);
+
+    cfg.gateway.require_token = true;
+    var report_b = try doctor(allocator, cfg, &runtime_guard, .{});
+    defer report_b.deinit(allocator);
+    try std.testing.expect(!std.mem.eql(u8, &hash_a, &report_b.configHash));
 }

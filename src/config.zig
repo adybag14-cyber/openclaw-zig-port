@@ -36,6 +36,39 @@ pub const Config = struct {
     security: SecurityConfig,
 };
 
+pub fn fingerprint(cfg: Config) [32]u8 {
+    var hasher = std.crypto.hash.sha2.Sha256.init(.{});
+    hashStringField(&hasher, "http_bind", cfg.http_bind);
+    hashIntField(&hasher, "http_port", cfg.http_port);
+    hashStringField(&hasher, "state_path", cfg.state_path);
+    hashStringField(&hasher, "lightpanda_endpoint", cfg.lightpanda_endpoint);
+    hashIntField(&hasher, "lightpanda_timeout_ms", cfg.lightpanda_timeout_ms);
+    hashBoolField(&hasher, "gateway.require_token", cfg.gateway.require_token);
+    hashStringField(&hasher, "gateway.auth_token", cfg.gateway.auth_token);
+    hashBoolField(&hasher, "gateway.rate_limit_enabled", cfg.gateway.rate_limit_enabled);
+    hashIntField(&hasher, "gateway.rate_limit_window_ms", cfg.gateway.rate_limit_window_ms);
+    hashIntField(&hasher, "gateway.rate_limit_max_requests", cfg.gateway.rate_limit_max_requests);
+    hashBoolField(&hasher, "runtime.file_sandbox_enabled", cfg.runtime.file_sandbox_enabled);
+    hashStringField(&hasher, "runtime.file_allowed_roots", cfg.runtime.file_allowed_roots);
+    hashBoolField(&hasher, "runtime.exec_enabled", cfg.runtime.exec_enabled);
+    hashStringField(&hasher, "runtime.exec_allowlist", cfg.runtime.exec_allowlist);
+    hashBoolField(&hasher, "security.loop_guard_enabled", cfg.security.loop_guard_enabled);
+    hashIntField(&hasher, "security.loop_guard_window_ms", cfg.security.loop_guard_window_ms);
+    hashIntField(&hasher, "security.loop_guard_max_hits", cfg.security.loop_guard_max_hits);
+    hashIntField(&hasher, "security.risk_review_threshold", cfg.security.risk_review_threshold);
+    hashIntField(&hasher, "security.risk_block_threshold", cfg.security.risk_block_threshold);
+    hashStringField(&hasher, "security.blocked_message_patterns", cfg.security.blocked_message_patterns);
+    hashStringField(&hasher, "security.policy_bundle_path", cfg.security.policy_bundle_path);
+    var out: [32]u8 = undefined;
+    hasher.final(&out);
+    return out;
+}
+
+pub fn fingerprintHex(cfg: Config) [64]u8 {
+    const digest = fingerprint(cfg);
+    return std.fmt.bytesToHex(digest, .lower);
+}
+
 pub fn defaults() Config {
     return .{
         .http_bind = "127.0.0.1",
@@ -177,6 +210,23 @@ fn parseBoolEnvOrDefault(
     return fallback;
 }
 
+fn hashStringField(hasher: *std.crypto.hash.sha2.Sha256, key: []const u8, value: []const u8) void {
+    hasher.update(key);
+    hasher.update("\n");
+    hasher.update(value);
+    hasher.update("\n");
+}
+
+fn hashBoolField(hasher: *std.crypto.hash.sha2.Sha256, key: []const u8, value: bool) void {
+    hashStringField(hasher, key, if (value) "1" else "0");
+}
+
+fn hashIntField(hasher: *std.crypto.hash.sha2.Sha256, key: []const u8, value: anytype) void {
+    var buf: [32]u8 = undefined;
+    const text = std.fmt.bufPrint(&buf, "{d}", .{value}) catch unreachable;
+    hashStringField(hasher, key, text);
+}
+
 test "defaults are stable" {
     const cfg = defaults();
     try std.testing.expectEqual(@as(u16, 8080), cfg.http_port);
@@ -190,4 +240,16 @@ test "defaults are stable" {
     try std.testing.expect(std.mem.eql(u8, cfg.runtime.exec_allowlist, ""));
     try std.testing.expect(cfg.security.loop_guard_enabled);
     try std.testing.expectEqual(@as(u8, 90), cfg.security.risk_block_threshold);
+}
+
+test "fingerprint is deterministic and sensitive to config changes" {
+    const cfg_a = defaults();
+    const hash_a = fingerprintHex(cfg_a);
+    const hash_a_repeat = fingerprintHex(cfg_a);
+    try std.testing.expect(std.mem.eql(u8, &hash_a, &hash_a_repeat));
+
+    var cfg_b = cfg_a;
+    cfg_b.gateway.require_token = true;
+    const hash_b = fingerprintHex(cfg_b);
+    try std.testing.expect(!std.mem.eql(u8, &hash_a, &hash_b));
 }

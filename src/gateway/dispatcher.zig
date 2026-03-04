@@ -1753,15 +1753,18 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
     }
 
     if (std.ascii.eqlIgnoreCase(req.method, "health")) {
+        const cfg = currentConfig();
         return protocol.encodeResult(allocator, req.id, .{
             .status = "ok",
             .service = "openclaw-zig",
             .bridge = "lightpanda",
             .phase = "phase5-auth-channels",
+            .configHash = config.fingerprintHex(cfg),
         });
     }
 
     if (std.ascii.eqlIgnoreCase(req.method, "status")) {
+        const cfg = currentConfig();
         const runtime = getRuntime();
         const guard = try getGuard();
         return protocol.encodeResult(allocator, req.id, .{
@@ -1771,6 +1774,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             .runtime_queue_depth = runtime.queueDepth(),
             .runtime_sessions = runtime.sessionCount(),
             .security = guard.snapshot(),
+            .configHash = config.fingerprintHex(cfg),
         });
     }
 
@@ -4047,6 +4051,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         const edge_state = getEdgeState();
         const total_module_count = modules.len + edge_state.custom_wasm_modules.items.len;
         return protocol.encodeResult(allocator, req.id, .{
+            .configHash = config.fingerprintHex(cfg),
             .gateway = .{
                 .bind = cfg.http_bind,
                 .port = cfg.http_port,
@@ -8671,6 +8676,7 @@ test "dispatch returns health result" {
     const out = try dispatch(allocator, "{\"id\":\"1\",\"method\":\"health\",\"params\":{}}");
     defer allocator.free(out);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"status\":\"ok\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"configHash\":\"") != null);
 }
 
 test "dispatch covers every registered method name" {
@@ -8753,6 +8759,7 @@ test "dispatch config.get and tools.catalog expose runtime + wasm contracts" {
 
     const config_out = try dispatch(allocator, "{\"id\":\"cfg-1\",\"method\":\"config.get\",\"params\":{}}");
     defer allocator.free(config_out);
+    try std.testing.expect(std.mem.indexOf(u8, config_out, "\"configHash\":\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, config_out, "\"gateway\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, config_out, "\"browserBridge\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, config_out, "\"wasm\"") != null);
@@ -8902,6 +8909,7 @@ test "dispatch exposes security.audit and doctor methods" {
     const doctor = try dispatch(allocator, "{\"id\":\"doctor-1\",\"method\":\"doctor\",\"params\":{}}");
     defer allocator.free(doctor);
     try std.testing.expect(std.mem.indexOf(u8, doctor, "\"checks\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, doctor, "\"configHash\":\"") != null);
 }
 
 test "dispatch web.login lifecycle start wait complete status" {

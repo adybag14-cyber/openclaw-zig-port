@@ -61,7 +61,10 @@ while maintaining parity-first validation and release gating.
     - target-path normalization for gateway route matching (`/health|/rpc|/ws` now correctly match query-bearing targets like `/rpc?x=1` and `/ws?mode=compat`)
     - websocket RPC parity expanded to accept binary websocket frames in addition to text frames (aligned with Go transport behavior)
     - `security.audit` + `doctor` gateway auth/rate-limit checks and regression tests
-    - validation: `zig build`, `zig build test` (`95/95`), `scripts/runtime-smoke-check.ps1`, `scripts/gateway-auth-smoke-check.ps1`, `scripts/websocket-smoke-check.ps1`, `scripts/web-login-smoke-check.ps1`
+    - deterministic config fingerprint surfaced in diagnostics:
+      - `health`, `status`, and `config.get` now include `configHash`
+      - `doctor` report now includes `configHash`
+    - validation: `zig build`, `zig build test` (`98/98`), `scripts/runtime-smoke-check.ps1`, `scripts/gateway-auth-smoke-check.ps1`, `scripts/websocket-smoke-check.ps1`, `scripts/web-login-smoke-check.ps1`
   - README refreshed with current parity/validation state and workflow guidance.
   - Local Zig toolchain reference doc refreshed to current local/remote hashes.
   - MkDocs documentation site scaffolded with full feature/domain documentation and GitHub Pages deployment workflow.
