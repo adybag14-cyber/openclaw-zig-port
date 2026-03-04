@@ -167,11 +167,22 @@ pub fn routeRequest(
                 should_shutdown.* = true;
             }
         }
+        const stream_options = parseWebSocketStreamOptions(allocator, body);
+        const dispatch_body = try dispatcher.dispatch(allocator, body);
+        if (stream_options.enabled) {
+            defer allocator.free(dispatch_body);
+            const rpc_id = if (parsed) |req| req.id else "unknown";
+            return .{
+                .status = .ok,
+                .content_type = "application/json",
+                .body = try encodeHttpStreamEnvelope(allocator, rpc_id, dispatch_body, stream_options.chunk_bytes),
+            };
+        }
 
         return .{
             .status = .ok,
             .content_type = "application/json",
-            .body = try dispatcher.dispatch(allocator, body),
+            .body = dispatch_body,
         };
     }
 
@@ -537,6 +548,57 @@ fn writeWebSocketStreamChunks(
     }
 }
 
+fn encodeHttpStreamEnvelope(
+    allocator: std.mem.Allocator,
+    rpc_id: []const u8,
+    payload: []const u8,
+    chunk_bytes: usize,
+) ![]u8 {
+    const chunk_count = streamChunkCount(payload.len, chunk_bytes);
+    const Chunk = struct {
+        chunkIndex: usize,
+        chunkCount: usize,
+        done: bool,
+        chunkBytes: usize,
+        totalBytes: usize,
+        chunk: []const u8,
+    };
+    var chunks = std.ArrayList(Chunk).empty;
+    defer chunks.deinit(allocator);
+
+    var chunk_index: usize = 0;
+    var offset: usize = 0;
+    while (offset < payload.len) : (chunk_index += 1) {
+        const remaining = payload.len - offset;
+        const take = @min(chunk_bytes, remaining);
+        const next_offset = offset + take;
+        const chunk = payload[offset..next_offset];
+        offset = next_offset;
+        try chunks.append(allocator, .{
+            .chunkIndex = chunk_index,
+            .chunkCount = chunk_count,
+            .done = chunk_index + 1 == chunk_count,
+            .chunkBytes = chunk.len,
+            .totalBytes = payload.len,
+            .chunk = chunk,
+        });
+    }
+
+    return encodeJson(allocator, .{
+        .jsonrpc = "2.0",
+        .id = rpc_id,
+        .stream = .{
+            .enabled = true,
+            .transport = "http",
+            .chunkCount = chunk_count,
+            .chunkBytes = chunk_bytes,
+            .totalBytes = payload.len,
+            .done = true,
+        },
+        .chunks = chunks.items,
+    });
+}
+
 fn boolFromJson(value: std.json.Value, fallback: bool) bool {
     return switch (value) {
         .bool => |b| b,
@@ -795,6 +857,27 @@ test "routeRequest enforces rpc rate limiting context" {
     defer allocator.free(result.body);
     try std.testing.expectEqual(std.http.Status.too_many_requests, result.status);
     try std.testing.expect(std.mem.indexOf(u8, result.body, "rate_limited") != null);
+}
+
+test "routeRequest rpc stream envelope returns chunk metadata for http transport" {
+    const allocator = std.testing.allocator;
+    const cfg = config.defaults();
+    var should_shutdown = false;
+    const result = try routeRequest(
+        allocator,
+        cfg,
+        .{},
+        .POST,
+        "/rpc",
+        "{\"id\":\"stream-http-1\",\"method\":\"config.get\",\"params\":{\"stream\":true,\"streamChunkBytes\":256}}",
+        &should_shutdown,
+    );
+    defer allocator.free(result.body);
+    try std.testing.expectEqual(std.http.Status.ok, result.status);
+    try std.testing.expect(std.mem.indexOf(u8, result.body, "\"stream\":{\"enabled\":true,\"transport\":\"http\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.body, "\"chunks\":[") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.body, "\"chunkIndex\":0") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.body, "\"chunkCount\":") != null);
 }
 
 test "header token matcher accepts bearer and raw token headers" {

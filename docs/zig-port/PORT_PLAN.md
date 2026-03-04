@@ -64,6 +64,9 @@ while maintaining parity-first validation and release gating.
       - client may request chunked response frames with `params.stream=true`
       - optional bounded chunk-size hint via `params.streamChunkBytes` (clamped for backpressure safety)
       - websocket replies emit ordered stream envelopes with `chunkIndex/chunkCount/done/chunkBytes/totalBytes`
+    - HTTP `/rpc` stream envelope parity added for unified transport semantics:
+      - `params.stream=true` now wraps HTTP RPC responses into chunk-envelope payloads (`stream.transport=http`, `chunks[]`)
+      - HTTP stream chunks reuse the same chunk metadata fields as websocket streaming (`chunkIndex/chunkCount/done/chunkBytes/totalBytes`)
     - `security.audit` + `doctor` gateway auth/rate-limit checks and regression tests
     - non-loopback bind token policy enforcement shipped:
       - `/rpc` and websocket paths now enforce token auth on non-loopback bind regardless of `OPENCLAW_ZIG_GATEWAY_REQUIRE_TOKEN`
