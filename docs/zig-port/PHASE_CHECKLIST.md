@@ -211,7 +211,7 @@ Phase 6 progress notes:
 ## Latest Validation Snapshot
 - [x] `zig build`
 - [x] `zig build test`
-- [x] `zig build test --summary all` -> `118/118` passing (includes gateway auth/rate-limit hardening tests, runtime file/exec policy hardening tests, config-hash diagnostics coverage, bind-policy token enforcement checks, TTS/completion execution-path coverage, PAL extraction coverage, secure secret-store backend coverage, and bare-metal ABI v2 contract tests)
+- [x] `zig build test --summary all` -> `117/117` passing (includes gateway auth/rate-limit hardening tests, runtime file/exec policy hardening tests, config-hash diagnostics coverage, bind-policy token enforcement checks, TTS/completion execution-path coverage, PAL extraction coverage, secure secret-store backend coverage, and bare-metal ABI v2 contract tests)
 - [x] Runtime policy hardening slice shipped:
   - `file.read` / `file.write` optional sandbox enforcement with traversal + symlink denial paths:
     - `OPENCLAW_ZIG_RUNTIME_FILE_SANDBOX_ENABLED`
@@ -226,6 +226,10 @@ Phase 6 progress notes:
 - [x] `scripts/npm-pack-check.ps1` (validates npm package dry-run for `npm/openclaw-zig-rpc-client`)
 - [x] `scripts/python-pack-check.ps1` (validates python client package tests + wheel/sdist + twine checks for `python/openclaw-zig-rpc-client`)
 - [x] `scripts/generate-release-evidence.ps1` (generates release trust artifacts from packaged assets: `release-manifest.json`, `sbom.spdx.json`, `provenance.intoto.json`)
+- [x] Gateway control-plane UI bootstrap + node-pair consolidation shipped:
+  - `GET /ui` now serves an interactive status/doctor/logs/node-pair control panel for bootstrap operations.
+  - node-pair methods now accept additional alias payloads (`node_id/deviceId`, `pair_id/nodePairId/id`) and return consolidated `pairing` envelopes (`node.pair.request`, `node.pair.approve|reject|verify`, `node.pair.list` with `pairs` alias).
+  - regression coverage added in gateway + dispatcher tests for `/ui` and node-pair alias/response compatibility.
 - [x] WASM trust-host hook hardening regression coverage:
   - `gateway.dispatcher.test.dispatch wasm lifecycle methods install execute remove and enforce sandbox limits` now also checks trust mode metadata and host-hook allow/deny behavior.
 - [x] `zig test src/main.zig`

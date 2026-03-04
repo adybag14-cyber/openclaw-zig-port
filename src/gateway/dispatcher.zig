@@ -2802,18 +2802,34 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
         defer parsed.deinit();
         const params = getParamsObjectOrNull(parsed.value);
-        var node_id = firstParamString(params, "nodeId", "");
+        var node_id = firstParamString(
+            params,
+            "nodeId",
+            firstParamString(
+                params,
+                "node_id",
+                firstParamString(params, "deviceId", firstParamString(params, "device_id", "")),
+            ),
+        );
         var generated_node_id: ?[]u8 = null;
         defer if (generated_node_id) |entry| allocator.free(entry);
         if (node_id.len == 0) {
             generated_node_id = try std.fmt.allocPrint(allocator, "node-{d}", .{time_util.nowMs()});
             node_id = generated_node_id.?;
         }
-        const name = firstParamString(params, "name", node_id);
+        const name = firstParamString(params, "name", firstParamString(params, "label", node_id));
         const compat = try getCompatState();
         const pair = try compat.createNodePairRequest(node_id, name);
         return protocol.encodeResult(allocator, req.id, .{
             .pair = .{
+                .pairId = pair.pair_id,
+                .nodeId = pair.node_id,
+                .status = pair.status,
+                .createdAtMs = pair.created_at_ms,
+                .updatedAtMs = pair.updated_at_ms,
+            },
+            .pairing = .{
+                .id = pair.pair_id,
                 .pairId = pair.pair_id,
                 .nodeId = pair.node_id,
                 .status = pair.status,
@@ -2846,6 +2862,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         return protocol.encodeResult(allocator, req.id, .{
             .count = items.items.len,
             .items = items.items,
+            .pairs = items.items,
         });
     }
 
@@ -2853,19 +2870,37 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
         defer parsed.deinit();
         const params = getParamsObjectOrNull(parsed.value);
-        const pair_id = firstParamString(params, "pairId", "");
+        const pair_id = firstParamString(
+            params,
+            "pairId",
+            firstParamString(
+                params,
+                "pair_id",
+                firstParamString(params, "nodePairId", firstParamString(params, "id", "")),
+            ),
+        );
         if (pair_id.len == 0) {
             return protocol.encodeError(allocator, req.id, .{
                 .code = -32602,
                 .message = "missing pairId",
             });
         }
-        const status: []const u8 = if (std.ascii.eqlIgnoreCase(req.method, "node.pair.approve"))
+        var status: []const u8 = if (std.ascii.eqlIgnoreCase(req.method, "node.pair.approve"))
             "approved"
         else if (std.ascii.eqlIgnoreCase(req.method, "node.pair.reject"))
             "rejected"
         else
             "verified";
+        const requested_status = firstParamString(params, "status", firstParamString(params, "decision", ""));
+        if (requested_status.len > 0) {
+            if (std.ascii.eqlIgnoreCase(requested_status, "approve") or std.ascii.eqlIgnoreCase(requested_status, "approved")) {
+                status = "approved";
+            } else if (std.ascii.eqlIgnoreCase(requested_status, "reject") or std.ascii.eqlIgnoreCase(requested_status, "rejected")) {
+                status = "rejected";
+            } else if (std.ascii.eqlIgnoreCase(requested_status, "verify") or std.ascii.eqlIgnoreCase(requested_status, "verified")) {
+                status = "verified";
+            }
+        }
         const compat = try getCompatState();
         const pair = compat.updateNodePairStatus(pair_id, status) orelse {
             return protocol.encodeError(allocator, req.id, .{
@@ -2875,6 +2910,14 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         };
         return protocol.encodeResult(allocator, req.id, .{
             .pair = .{
+                .pairId = pair.pair_id,
+                .nodeId = pair.node_id,
+                .status = pair.status,
+                .createdAtMs = pair.created_at_ms,
+                .updatedAtMs = pair.updated_at_ms,
+            },
+            .pairing = .{
+                .id = pair.pair_id,
                 .pairId = pair.pair_id,
                 .nodeId = pair.node_id,
                 .status = pair.status,
@@ -10367,18 +10410,27 @@ test "dispatch compat node methods return contracts" {
     const node_id = try extractResultObjectStringField(allocator, pair_request, "pair", "nodeId");
     defer allocator.free(node_id);
     try std.testing.expect(std.mem.indexOf(u8, pair_request, "\"status\":\"pending\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, pair_request, "\"pairing\"") != null);
 
     const pair_approve_frame = try encodeFrame(allocator, "compat-node-pair-approve", "node.pair.approve", .{
-        .pairId = pair_id,
+        .id = pair_id,
+        .status = "approved",
     });
     defer allocator.free(pair_approve_frame);
     const pair_approve = try dispatch(allocator, pair_approve_frame);
     defer allocator.free(pair_approve);
     try std.testing.expect(std.mem.indexOf(u8, pair_approve, "\"status\":\"approved\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, pair_approve, "\"pairing\"") != null);
 
     const pair_list = try dispatch(allocator, "{\"id\":\"compat-node-pair-list\",\"method\":\"node.pair.list\",\"params\":{}}");
     defer allocator.free(pair_list);
     try std.testing.expect(std.mem.indexOf(u8, pair_list, pair_id) != null);
+    try std.testing.expect(std.mem.indexOf(u8, pair_list, "\"pairs\"") != null);
+
+    const pair_request_alias = try dispatch(allocator, "{\"id\":\"compat-node-pair-request-alias\",\"method\":\"node.pair.request\",\"params\":{\"deviceId\":\"node-alias-1\",\"label\":\"edge-alias\"}}");
+    defer allocator.free(pair_request_alias);
+    try std.testing.expect(std.mem.indexOf(u8, pair_request_alias, "\"nodeId\":\"node-alias-1\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, pair_request_alias, "\"pairing\"") != null);
 
     const rename_frame = try encodeFrame(allocator, "compat-node-rename", "node.rename", .{
         .nodeId = node_id,

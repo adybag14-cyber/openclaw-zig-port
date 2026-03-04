@@ -60,6 +60,89 @@ const WebSocketStreamOptions = struct {
     chunk_bytes: usize,
 };
 
+const control_ui_html =
+    \\<!doctype html>
+    \\<html lang="en">
+    \\<head>
+    \\  <meta charset="utf-8" />
+    \\  <meta name="viewport" content="width=device-width, initial-scale=1" />
+    \\  <title>OpenClaw Zig Control UI</title>
+    \\  <style>
+    \\    :root { color-scheme: dark; }
+    \\    body { margin: 0; font-family: "Segoe UI", sans-serif; background: #0f172a; color: #e2e8f0; }
+    \\    main { max-width: 920px; margin: 24px auto; padding: 0 16px 24px; }
+    \\    h1 { margin: 0 0 8px; font-size: 1.6rem; }
+    \\    p { margin: 0 0 16px; color: #cbd5e1; }
+    \\    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    \\    input, button { border-radius: 8px; border: 1px solid #334155; background: #111827; color: #f8fafc; padding: 8px 10px; }
+    \\    input { min-width: 220px; }
+    \\    button { cursor: pointer; }
+    \\    button:hover { background: #1f2937; }
+    \\    pre { background: #020617; border: 1px solid #1e293b; border-radius: 10px; padding: 12px; min-height: 260px; overflow: auto; }
+    \\    code { color: #93c5fd; }
+    \\  </style>
+    \\</head>
+    \\<body>
+    \\  <main>
+    \\    <h1>OpenClaw Zig Control UI</h1>
+    \\    <p>Bootstrap controls for <code>status</code>, <code>doctor</code>, <code>logs.tail</code>, and <code>node.pair.list</code>.</p>
+    \\    <div class="row">
+    \\      <input id="token" type="password" placeholder="Gateway token (if required)" />
+    \\      <input id="logsLimit" type="number" min="1" value="25" />
+    \\    </div>
+    \\    <div class="row">
+    \\      <button onclick="runRpc('status', {})">Status</button>
+    \\      <button onclick="runRpc('doctor', {})">Doctor</button>
+    \\      <button onclick="runLogs()">Logs</button>
+    \\      <button onclick="runRpc('node.pair.list', {})">Node Pairs</button>
+    \\    </div>
+    \\    <pre id="output">Ready.</pre>
+    \\  </main>
+    \\  <script>
+    \\    const output = document.getElementById('output');
+    \\    const tokenInput = document.getElementById('token');
+    \\    const logsLimitInput = document.getElementById('logsLimit');
+    \\
+    \\    async function runRpc(method, params) {
+    \\      const headers = { 'content-type': 'application/json' };
+    \\      const token = tokenInput.value.trim();
+    \\      if (token) headers.authorization = 'Bearer ' + token;
+    \\      const frame = {
+    \\        jsonrpc: '2.0',
+    \\        id: 'ui-' + Date.now(),
+    \\        method: method,
+    \\        params: params
+    \\      };
+    \\      try {
+    \\        const res = await fetch('/rpc', {
+    \\          method: 'POST',
+    \\          headers: headers,
+    \\          body: JSON.stringify(frame)
+    \\        });
+    \\        const text = await res.text();
+    \\        try {
+    \\          output.textContent = JSON.stringify(JSON.parse(text), null, 2);
+    \\        } catch (_err) {
+    \\          output.textContent = text;
+    \\        }
+    \\      } catch (err) {
+    \\        output.textContent = 'request failed: ' + err;
+    \\      }
+    \\    }
+    \\
+    \\    async function runLogs() {
+    \\      const parsed = Number.parseInt(logsLimitInput.value || '25', 10);
+    \\      const limit = Number.isFinite(parsed) && parsed > 0 ? parsed : 25;
+    \\      await runRpc('logs.tail', { limit: limit });
+    \\    }
+    \\
+    \\    window.runRpc = runRpc;
+    \\    window.runLogs = runLogs;
+    \\  </script>
+    \\</body>
+    \\</html>
+;
+
 pub fn serve(allocator: std.mem.Allocator, cfg: config.Config, options: ServeOptions) !void {
     const io = std.Io.Threaded.global_single_threaded.io();
     var address = try std.Io.net.IpAddress.resolve(io, cfg.http_bind, cfg.http_port);
@@ -120,6 +203,14 @@ pub fn routeRequest(
                 .bridge = "lightpanda",
                 .configHash = config.fingerprintHex(cfg),
             }),
+        };
+    }
+
+    if (method == .GET and (std.mem.eql(u8, target_path, "/ui") or std.mem.eql(u8, target_path, "/ui/"))) {
+        return .{
+            .status = .ok,
+            .content_type = "text/html; charset=utf-8",
+            .body = try allocator.dupe(u8, control_ui_html),
         };
     }
 
@@ -678,6 +769,28 @@ test "routeRequest health returns a successful payload" {
     try std.testing.expect(!should_shutdown);
     try std.testing.expect(std.mem.indexOf(u8, result.body, "\"status\":\"ok\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, result.body, "\"configHash\":\"") != null);
+}
+
+test "routeRequest serves control ui bootstrap html" {
+    const allocator = std.testing.allocator;
+    const cfg = config.defaults();
+    var should_shutdown = false;
+    const result = try routeRequest(allocator, cfg, .{}, .GET, "/ui", "", &should_shutdown);
+    defer allocator.free(result.body);
+    try std.testing.expectEqual(std.http.Status.ok, result.status);
+    try std.testing.expect(std.mem.indexOf(u8, result.content_type, "text/html") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.body, "OpenClaw Zig Control UI") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.body, "logs.tail") != null);
+}
+
+test "routeRequest handles query-bearing ui path" {
+    const allocator = std.testing.allocator;
+    const cfg = config.defaults();
+    var should_shutdown = false;
+    const result = try routeRequest(allocator, cfg, .{}, .GET, "/ui?panel=doctor", "", &should_shutdown);
+    defer allocator.free(result.body);
+    try std.testing.expectEqual(std.http.Status.ok, result.status);
+    try std.testing.expect(std.mem.indexOf(u8, result.body, "node.pair.list") != null);
 }
 
 test "routeRequest toggles shutdown on shutdown rpc method" {

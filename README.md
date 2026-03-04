@@ -4,14 +4,14 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 
 ## Current Status
 
-- RPC method surface in Zig: `153`
+- RPC method surface in Zig: `160`
 - Latest parity gate (tri-baseline):
   - Go baseline (`v2.14.0-go`): `134/134` covered
   - Original OpenClaw baseline (`v2026.3.2`): `94/94` covered
   - Original OpenClaw beta baseline (`v2026.3.2-beta.1`): `94/94` covered
   - Union baseline: `135/135` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
-- Latest local validation: `zig build test --summary all` -> `95/95` passing
+- Latest local validation: `zig build test --summary all` -> `117/117` passing
 - Latest edge release tag: `v0.2.0-zig-edge.19`
 - Dual runtime profiles available:
   - OS-hosted profile: `openclaw-zig` (`--serve`, doctor, security audit, full RPC stack)
@@ -74,7 +74,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - OS-hosted runtime: full HTTP/RPC gateway and feature surface.
   - Bare-metal runtime: freestanding image exporting lifecycle hooks (`_start`, `oc_tick`, `oc_tick_n`, `oc_status_ptr`) plus command/mailbox ABI (`oc_command_ptr`, `oc_submit_command`, `oc_kernel_info_ptr`), descriptor table/int-vector bootstrap exports, and a Multiboot2 header for bootloader/hypervisor integration.
 - Protocol: JSON-RPC request/response envelopes with deterministic error semantics.
-- Gateway: HTTP/WebSocket server with `GET /health`, `POST /rpc`, and websocket RPC routes (`GET /ws` + root compatibility on `GET /`), graceful shutdown via RPC.
+- Gateway: HTTP/WebSocket server with `GET /health`, `GET /ui`, `POST /rpc`, and websocket RPC routes (`GET /ws` + root compatibility on `GET /`), graceful shutdown via RPC.
 - Dispatcher: method routing and contract handling across runtime, security, browser/auth, channels, memory, and edge domains.
 - Runtime: session/job state, tool runtime actions, compat state surfaces.
 - Security: guard, loop-guard, doctor/security audit, remediation (`--fix`) path.
