@@ -157,6 +157,10 @@ while maintaining parity-first validation and release gating.
     - new interrupt-wait opcode: `command_task_wait_interrupt` with `wait_interrupt_any_vector` sentinel semantics.
     - scheduler interrupt wait telemetry export: `oc_scheduler_wait_interrupt_count`.
     - interrupt wake path now filters by explicit wait condition (any or vector-specific), preventing unintended wakeups of manual-wait tasks on interrupt noise.
+  - Bare-metal interrupt-wait timeout depth expansion shipped:
+    - new interrupt-wait timeout opcode: `command_task_wait_interrupt_for`.
+    - scheduler timeout telemetry export: `oc_scheduler_wait_timeout_count`.
+    - runtime now supports deadline-based interrupt waits that wake with timer reason on expiry while still waking immediately on matching interrupts.
     - runtime now provides contiguous page allocation/free on a bounded heap map and syscall registration/invocation/unregistration with dispatch telemetry.
 - Phase 4 complete:
   - Guard pipeline with prompt-risk scoring + loop-guard enforcement (`src/security/guard.zig`, `src/security/loop_guard.zig`)

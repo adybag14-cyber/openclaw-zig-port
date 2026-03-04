@@ -151,6 +151,7 @@ const wait_condition_interrupt_vector: u8 = 4;
 var scheduler_tasks: [scheduler_task_capacity]BaremetalTask = std.mem.zeroes([scheduler_task_capacity]BaremetalTask);
 var scheduler_wait_kind: [scheduler_task_capacity]u8 = [_]u8{wait_condition_none} ** scheduler_task_capacity;
 var scheduler_wait_interrupt_vector: [scheduler_task_capacity]u8 = [_]u8{0} ** scheduler_task_capacity;
+var scheduler_wait_timeout_tick: [scheduler_task_capacity]u64 = [_]u64{0} ** scheduler_task_capacity;
 var scheduler_state: BaremetalSchedulerState = .{
     .enabled = abi.scheduler_state_disabled,
     .task_count = 0,
@@ -474,6 +475,15 @@ pub export fn oc_scheduler_wait_interrupt_count() u32 {
     return count;
 }
 
+pub export fn oc_scheduler_wait_timeout_count() u32 {
+    var count: u32 = 0;
+    for (scheduler_wait_timeout_tick, 0..) |deadline, idx| {
+        if (scheduler_tasks[idx].state != abi.task_state_waiting) continue;
+        if (deadline != 0) count +%= 1;
+    }
+    return count;
+}
+
 pub export fn oc_scheduler_task(index: u32) BaremetalTask {
     if (index >= @as(u32, scheduler_task_capacity)) return std.mem.zeroes(BaremetalTask);
     return scheduler_tasks[@as(usize, @intCast(index))];
@@ -487,6 +497,7 @@ pub export fn oc_scheduler_reset() void {
     @memset(&scheduler_tasks, std.mem.zeroes(BaremetalTask));
     @memset(&scheduler_wait_kind, wait_condition_none);
     @memset(&scheduler_wait_interrupt_vector, 0);
+    @memset(&scheduler_wait_timeout_tick, 0);
     scheduler_state = .{
         .enabled = abi.scheduler_state_disabled,
         .task_count = 0,
@@ -952,6 +963,15 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
             }
             return abi.result_ok;
         },
+        abi.command_task_wait_interrupt_for => {
+            if (arg0 == 0 or arg0 > std.math.maxInt(u32) or arg1 == 0 or arg1 > std.math.maxInt(u32)) {
+                return abi.result_invalid_argument;
+            }
+            if (!schedulerSetTaskWaitingInterruptFor(@as(u32, @truncate(arg0)), @as(u32, @truncate(arg1)), status.ticks)) {
+                return abi.result_not_found;
+            }
+            return abi.result_ok;
+        },
         abi.command_task_wait_for => {
             if (arg0 == 0 or arg0 > std.math.maxInt(u32) or arg1 == 0 or arg1 > std.math.maxInt(u32)) {
                 return abi.result_invalid_argument;
@@ -1212,6 +1232,16 @@ fn timerTick(current_tick: u64) void {
     }
     timer_state.last_interrupt_count = interrupt_count;
 
+    var slot_idx: usize = 0;
+    while (slot_idx < scheduler_task_capacity) : (slot_idx += 1) {
+        if (scheduler_tasks[slot_idx].state != abi.task_state_waiting) continue;
+        const kind = scheduler_wait_kind[slot_idx];
+        if (kind != wait_condition_interrupt_any and kind != wait_condition_interrupt_vector) continue;
+        const deadline = scheduler_wait_timeout_tick[slot_idx];
+        if (deadline == 0 or deadline > current_tick) continue;
+        _ = schedulerWakeTask(scheduler_tasks[slot_idx].task_id, abi.wake_reason_timer, 0, 0, current_tick);
+    }
+
     const quantum = if (timer_state.tick_quantum == 0) @as(u32, 1) else timer_state.tick_quantum;
     if (@mod(current_tick, @as(u64, quantum)) != 0) {
         timerRecountEntries();
@@ -1411,6 +1441,13 @@ fn schedulerFindTaskSlot(task_id: u32) ?usize {
 fn schedulerSetWaitCondition(slot: usize, kind: u8, vector: u8) void {
     scheduler_wait_kind[slot] = kind;
     scheduler_wait_interrupt_vector[slot] = vector;
+    scheduler_wait_timeout_tick[slot] = 0;
+}
+
+fn schedulerSetWaitConditionWithTimeout(slot: usize, kind: u8, vector: u8, deadline_tick: u64) void {
+    scheduler_wait_kind[slot] = kind;
+    scheduler_wait_interrupt_vector[slot] = vector;
+    scheduler_wait_timeout_tick[slot] = deadline_tick;
 }
 
 fn schedulerSetTaskWaiting(task_id: u32) bool {
@@ -1437,6 +1474,18 @@ fn schedulerSetTaskWaitingInterrupt(task_id: u32, vector: ?u8) bool {
     } else {
         schedulerSetWaitCondition(slot, wait_condition_interrupt_any, 0);
     }
+    schedulerRecountTasks();
+    return true;
+}
+
+fn schedulerSetTaskWaitingInterruptFor(task_id: u32, timeout_ticks: u32, current_tick: u64) bool {
+    const slot = schedulerFindTaskSlot(task_id) orelse return false;
+    var task = &scheduler_tasks[slot];
+    if (task.state == abi.task_state_unused or task.state == abi.task_state_terminated or task.state == abi.task_state_completed) {
+        return false;
+    }
+    task.state = abi.task_state_waiting;
+    schedulerSetWaitConditionWithTimeout(slot, wait_condition_interrupt_any, 0, current_tick + @as(u64, timeout_ticks));
     schedulerRecountTasks();
     return true;
 }
@@ -2899,6 +2948,100 @@ test "baremetal task wait interrupt command honors vector filters and any mode" 
     _ = oc_submit_command(abi.command_task_wait_interrupt, task_vec_id, @as(u64, abi.wait_interrupt_any_vector) + 1);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+}
+
+test "baremetal interrupt wait with timeout wakes on timer when no interrupt arrives" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    status.tick_batch_hint = 1;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_scheduler_reset();
+    oc_timer_reset();
+    oc_wake_queue_clear();
+    x86_bootstrap.oc_reset_interrupt_counters();
+
+    _ = oc_submit_command(abi.command_scheduler_disable, 0, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_task_create, 5, 0);
+    oc_tick();
+    const task_id = oc_scheduler_task(0).task_id;
+    try std.testing.expect(task_id != 0);
+
+    _ = oc_submit_command(abi.command_task_wait_interrupt_for, task_id, 2);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_waiting_count());
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_interrupt_count());
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_timeout_count());
+
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
+
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 0), oc_scheduler_waiting_count());
+    try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_interrupt_count());
+    try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_timeout_count());
+    const evt = oc_wake_queue_event(0);
+    try std.testing.expectEqual(task_id, evt.task_id);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_timer), evt.reason);
+}
+
+test "baremetal interrupt wait with timeout wakes on interrupt before deadline" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    status.tick_batch_hint = 1;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_scheduler_reset();
+    oc_timer_reset();
+    oc_wake_queue_clear();
+    x86_bootstrap.oc_reset_interrupt_counters();
+
+    _ = oc_submit_command(abi.command_scheduler_disable, 0, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_task_create, 5, 0);
+    oc_tick();
+    const task_id = oc_scheduler_task(0).task_id;
+    try std.testing.expect(task_id != 0);
+
+    _ = oc_submit_command(abi.command_task_wait_interrupt_for, task_id, 5);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_timeout_count());
+
+    _ = oc_submit_command(abi.command_trigger_interrupt, 31, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 0), oc_scheduler_waiting_count());
+    try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_interrupt_count());
+    try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_timeout_count());
+    const evt = oc_wake_queue_event(0);
+    try std.testing.expectEqual(task_id, evt.task_id);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_interrupt), evt.reason);
+    try std.testing.expectEqual(@as(u8, 31), evt.vector);
+
+    oc_tick_n(8);
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
 }
 
 test "baremetal manual wait does not wake on interrupt path" {
