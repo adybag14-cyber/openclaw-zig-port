@@ -16,6 +16,8 @@ pub const GatewayConfig = struct {
     rate_limit_enabled: bool,
     rate_limit_window_ms: u32,
     rate_limit_max_requests: u32,
+    stream_chunk_default_bytes: u32 = 4096,
+    stream_chunk_max_bytes: u32 = 64 * 1024,
 };
 
 pub const RuntimeConfig = struct {
@@ -48,6 +50,8 @@ pub fn fingerprint(cfg: Config) [32]u8 {
     hashBoolField(&hasher, "gateway.rate_limit_enabled", cfg.gateway.rate_limit_enabled);
     hashIntField(&hasher, "gateway.rate_limit_window_ms", cfg.gateway.rate_limit_window_ms);
     hashIntField(&hasher, "gateway.rate_limit_max_requests", cfg.gateway.rate_limit_max_requests);
+    hashIntField(&hasher, "gateway.stream_chunk_default_bytes", cfg.gateway.stream_chunk_default_bytes);
+    hashIntField(&hasher, "gateway.stream_chunk_max_bytes", cfg.gateway.stream_chunk_max_bytes);
     hashBoolField(&hasher, "runtime.file_sandbox_enabled", cfg.runtime.file_sandbox_enabled);
     hashStringField(&hasher, "runtime.file_allowed_roots", cfg.runtime.file_allowed_roots);
     hashBoolField(&hasher, "runtime.exec_enabled", cfg.runtime.exec_enabled);
@@ -82,6 +86,8 @@ pub fn defaults() Config {
             .rate_limit_enabled = true,
             .rate_limit_window_ms = 60_000,
             .rate_limit_max_requests = 300,
+            .stream_chunk_default_bytes = 4096,
+            .stream_chunk_max_bytes = 64 * 1024,
         },
         .runtime = .{
             .file_sandbox_enabled = false,
@@ -114,6 +120,8 @@ pub fn loadFromEnviron(allocator: std.mem.Allocator, environ: std.process.Enviro
     cfg.gateway.rate_limit_enabled = try parseBoolEnvOrDefault(allocator, environ, "OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_ENABLED", cfg.gateway.rate_limit_enabled);
     cfg.gateway.rate_limit_window_ms = try parseU32EnvOrDefault(allocator, environ, "OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_WINDOW_MS", cfg.gateway.rate_limit_window_ms);
     cfg.gateway.rate_limit_max_requests = try parseU32EnvOrDefault(allocator, environ, "OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_MAX_REQUESTS", cfg.gateway.rate_limit_max_requests);
+    cfg.gateway.stream_chunk_default_bytes = try parseU32EnvOrDefault(allocator, environ, "OPENCLAW_ZIG_GATEWAY_STREAM_CHUNK_DEFAULT_BYTES", cfg.gateway.stream_chunk_default_bytes);
+    cfg.gateway.stream_chunk_max_bytes = try parseU32EnvOrDefault(allocator, environ, "OPENCLAW_ZIG_GATEWAY_STREAM_CHUNK_MAX_BYTES", cfg.gateway.stream_chunk_max_bytes);
     cfg.runtime.file_sandbox_enabled = try parseBoolEnvOrDefault(allocator, environ, "OPENCLAW_ZIG_RUNTIME_FILE_SANDBOX_ENABLED", cfg.runtime.file_sandbox_enabled);
     cfg.runtime.file_allowed_roots = try getEnvOrDefault(allocator, environ, "OPENCLAW_ZIG_RUNTIME_FILE_ALLOWED_ROOTS", cfg.runtime.file_allowed_roots);
     cfg.runtime.exec_enabled = try parseBoolEnvOrDefault(allocator, environ, "OPENCLAW_ZIG_RUNTIME_EXEC_ENABLED", cfg.runtime.exec_enabled);
@@ -234,6 +242,8 @@ test "defaults are stable" {
     try std.testing.expect(!cfg.gateway.require_token);
     try std.testing.expect(cfg.gateway.rate_limit_enabled);
     try std.testing.expectEqual(@as(u32, 300), cfg.gateway.rate_limit_max_requests);
+    try std.testing.expectEqual(@as(u32, 4096), cfg.gateway.stream_chunk_default_bytes);
+    try std.testing.expectEqual(@as(u32, 64 * 1024), cfg.gateway.stream_chunk_max_bytes);
     try std.testing.expect(!cfg.runtime.file_sandbox_enabled);
     try std.testing.expect(std.mem.eql(u8, cfg.runtime.file_allowed_roots, ""));
     try std.testing.expect(cfg.runtime.exec_enabled);

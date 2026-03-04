@@ -17,6 +17,10 @@ Release lock: no release tag is allowed until all phases are complete and parity
 - [x] Normalize gateway route matching for query-bearing targets (`/health?`, `/rpc?`, `/ws?`) to preserve transport compatibility
 - [x] Accept websocket RPC frames over both text and binary message types for transport parity with Go
 - [x] Add stream-chunk envelope path across websocket + HTTP `/rpc` with bounded chunk sizing (`params.stream=true`, `params.streamChunkBytes`) and backpressure-oriented chunk limits
+  - Gateway stream chunk defaults/max are now tunable via env:
+    - `OPENCLAW_ZIG_GATEWAY_STREAM_CHUNK_DEFAULT_BYTES`
+    - `OPENCLAW_ZIG_GATEWAY_STREAM_CHUNK_MAX_BYTES`
+  - Stream-option parsing now seeds config-driven chunk defaults and clamps requested chunk sizes to gateway min/max bounds with deterministic fallbacks.
 - [x] Dispatcher fallback for registered methods now fails fast (`-32603 dispatcher gap`) instead of returning scaffold success payloads.
 
 ## Phase 3 - Runtime + Tooling

@@ -52,12 +52,12 @@ const RateLimiter = struct {
 
 const max_rpc_body_bytes: usize = 1024 * 1024;
 const ws_stream_chunk_min_bytes: usize = 256;
-const ws_stream_chunk_default_bytes: usize = 4096;
-const ws_stream_chunk_max_bytes: usize = 64 * 1024;
+const ws_stream_chunk_default_fallback_bytes: usize = 4096;
+const ws_stream_chunk_max_fallback_bytes: usize = 64 * 1024;
 
 const WebSocketStreamOptions = struct {
     enabled: bool = false,
-    chunk_bytes: usize = ws_stream_chunk_default_bytes,
+    chunk_bytes: usize,
 };
 
 pub fn serve(allocator: std.mem.Allocator, cfg: config.Config, options: ServeOptions) !void {
@@ -167,7 +167,7 @@ pub fn routeRequest(
                 should_shutdown.* = true;
             }
         }
-        const stream_options = parseWebSocketStreamOptions(allocator, body);
+        const stream_options = parseWebSocketStreamOptions(allocator, cfg, body);
         const dispatch_body = try dispatcher.dispatch(allocator, body);
         if (stream_options.enabled) {
             defer allocator.free(dispatch_body);
@@ -401,7 +401,7 @@ fn serveWebSocket(
             continue;
         }
 
-        const stream_options = parseWebSocketStreamOptions(allocator, frame);
+        const stream_options = parseWebSocketStreamOptions(allocator, cfg, frame);
         var parsed = protocol.parseRequest(allocator, frame) catch null;
         defer if (parsed) |*req| req.deinit(allocator);
         if (parsed) |req| {
@@ -476,21 +476,23 @@ fn headerTokenMatches(raw_value: []const u8, expected_token: []const u8) bool {
     return std.mem.eql(u8, trimmed, expected);
 }
 
-fn parseWebSocketStreamOptions(allocator: std.mem.Allocator, frame: []const u8) WebSocketStreamOptions {
-    var parsed = std.json.parseFromSlice(std.json.Value, allocator, frame, .{}) catch return .{};
+fn parseWebSocketStreamOptions(allocator: std.mem.Allocator, cfg: config.Config, frame: []const u8) WebSocketStreamOptions {
+    var out: WebSocketStreamOptions = .{
+        .chunk_bytes = effectiveWebSocketStreamChunkDefaultBytes(cfg.gateway),
+    };
+    var parsed = std.json.parseFromSlice(std.json.Value, allocator, frame, .{}) catch return out;
     defer parsed.deinit();
 
-    if (parsed.value != .object) return .{};
-    const params = parsed.value.object.get("params") orelse return .{};
-    if (params != .object) return .{};
+    if (parsed.value != .object) return out;
+    const params = parsed.value.object.get("params") orelse return out;
+    if (params != .object) return out;
 
-    var out: WebSocketStreamOptions = .{};
     if (params.object.get("stream")) |value| {
         out.enabled = boolFromJson(value, false);
     }
     if (params.object.get("streamChunkBytes")) |value| {
         const requested = parsePositiveU64FromJson(value) orelse return out;
-        out.chunk_bytes = normalizeWebSocketStreamChunkBytes(requested);
+        out.chunk_bytes = normalizeWebSocketStreamChunkBytes(cfg.gateway, requested);
     }
     return out;
 }
@@ -499,11 +501,25 @@ fn shouldStreamPayload(options: WebSocketStreamOptions, payload_len: usize) bool
     return options.enabled and payload_len > options.chunk_bytes;
 }
 
-fn normalizeWebSocketStreamChunkBytes(requested: u64) usize {
+fn effectiveWebSocketStreamChunkMaxBytes(gateway: config.GatewayConfig) usize {
+    const configured_max = @as(usize, @intCast(gateway.stream_chunk_max_bytes));
+    if (configured_max == 0) return ws_stream_chunk_max_fallback_bytes;
+    return @max(ws_stream_chunk_min_bytes, configured_max);
+}
+
+fn effectiveWebSocketStreamChunkDefaultBytes(gateway: config.GatewayConfig) usize {
+    const max_chunk_bytes = effectiveWebSocketStreamChunkMaxBytes(gateway);
+    const configured_default = @as(usize, @intCast(gateway.stream_chunk_default_bytes));
+    const raw_default = if (configured_default == 0) ws_stream_chunk_default_fallback_bytes else configured_default;
+    return @min(@max(ws_stream_chunk_min_bytes, raw_default), max_chunk_bytes);
+}
+
+fn normalizeWebSocketStreamChunkBytes(gateway: config.GatewayConfig, requested: u64) usize {
+    const max_chunk_bytes = effectiveWebSocketStreamChunkMaxBytes(gateway);
     const clamped = std.math.clamp(
         requested,
         @as(u64, ws_stream_chunk_min_bytes),
-        @as(u64, ws_stream_chunk_max_bytes),
+        @as(u64, @intCast(max_chunk_bytes)),
     );
     return @as(usize, @intCast(clamped));
 }
@@ -903,15 +919,21 @@ test "rate limiter enforces max requests within window" {
 }
 
 test "websocket stream chunk size normalization clamps bounds" {
-    try std.testing.expectEqual(@as(usize, ws_stream_chunk_min_bytes), normalizeWebSocketStreamChunkBytes(1));
-    try std.testing.expectEqual(@as(usize, ws_stream_chunk_default_bytes), normalizeWebSocketStreamChunkBytes(ws_stream_chunk_default_bytes));
-    try std.testing.expectEqual(@as(usize, ws_stream_chunk_max_bytes), normalizeWebSocketStreamChunkBytes(2 * ws_stream_chunk_max_bytes));
+    const cfg = config.defaults();
+    try std.testing.expectEqual(@as(usize, ws_stream_chunk_min_bytes), normalizeWebSocketStreamChunkBytes(cfg.gateway, 1));
+    try std.testing.expectEqual(@as(usize, 4096), normalizeWebSocketStreamChunkBytes(cfg.gateway, 4096));
+    try std.testing.expectEqual(@as(usize, 64 * 1024), normalizeWebSocketStreamChunkBytes(cfg.gateway, 2 * 64 * 1024));
 }
 
 test "websocket stream options parse stream flag and bounded chunk bytes" {
     const allocator = std.testing.allocator;
+    var cfg = config.defaults();
+    cfg.gateway.stream_chunk_default_bytes = 1024;
+    cfg.gateway.stream_chunk_max_bytes = 8192;
+
     const options = parseWebSocketStreamOptions(
         allocator,
+        cfg,
         "{\"id\":\"ws1\",\"method\":\"chat.send\",\"params\":{\"stream\":true,\"streamChunkBytes\":128}}",
     );
     try std.testing.expect(options.enabled);
@@ -919,10 +941,42 @@ test "websocket stream options parse stream flag and bounded chunk bytes" {
 
     const disabled = parseWebSocketStreamOptions(
         allocator,
+        cfg,
         "{\"id\":\"ws2\",\"method\":\"chat.send\",\"params\":{\"stream\":false,\"streamChunkBytes\":8192}}",
     );
     try std.testing.expect(!disabled.enabled);
     try std.testing.expectEqual(@as(usize, 8192), disabled.chunk_bytes);
+
+    const defaulted = parseWebSocketStreamOptions(
+        allocator,
+        cfg,
+        "{\"id\":\"ws3\",\"method\":\"chat.send\",\"params\":{\"stream\":true}}",
+    );
+    try std.testing.expect(defaulted.enabled);
+    try std.testing.expectEqual(@as(usize, 1024), defaulted.chunk_bytes);
+}
+
+test "websocket stream options clamp defaults using configured max and fallbacks" {
+    const allocator = std.testing.allocator;
+    var cfg = config.defaults();
+    cfg.gateway.stream_chunk_default_bytes = 32 * 1024;
+    cfg.gateway.stream_chunk_max_bytes = 8 * 1024;
+
+    const configured = parseWebSocketStreamOptions(
+        allocator,
+        cfg,
+        "{\"id\":\"ws4\",\"method\":\"chat.send\",\"params\":{\"stream\":true}}",
+    );
+    try std.testing.expectEqual(@as(usize, 8 * 1024), configured.chunk_bytes);
+
+    cfg.gateway.stream_chunk_default_bytes = 0;
+    cfg.gateway.stream_chunk_max_bytes = 0;
+    const fallback = parseWebSocketStreamOptions(
+        allocator,
+        cfg,
+        "{\"id\":\"ws5\",\"method\":\"chat.send\",\"params\":{\"stream\":true}}",
+    );
+    try std.testing.expectEqual(@as(usize, ws_stream_chunk_default_fallback_bytes), fallback.chunk_bytes);
 }
 
 test "stream chunk count computes expected fragment count" {
