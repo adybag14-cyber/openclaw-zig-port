@@ -94,6 +94,28 @@ function Connect-WebSocket {
     return $ws
 }
 
+function Read-WebSocketTextMessage {
+    param(
+        [System.Net.WebSockets.ClientWebSocket] $Socket,
+        [int] $TimeoutSeconds = 20
+    )
+
+    $buffer = New-Object byte[] 16384
+    $builder = [System.Text.StringBuilder]::new()
+    do {
+        $segment = [ArraySegment[byte]]::new($buffer)
+        $recvCts = [System.Threading.CancellationTokenSource]::new([TimeSpan]::FromSeconds($TimeoutSeconds))
+        $receive = $Socket.ReceiveAsync($segment, $recvCts.Token).GetAwaiter().GetResult()
+        if ($receive.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) {
+            throw "authorized websocket closed before rpc response"
+        }
+        $chunk = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $receive.Count)
+        [void]$builder.Append($chunk)
+    } while (-not $receive.EndOfMessage)
+
+    return $builder.ToString()
+}
+
 $zig = Resolve-ZigExecutable
 if (-not $SkipBuild) {
     & $zig build --summary all
@@ -195,19 +217,8 @@ try {
     $frameSegment = [ArraySegment[byte]]::new($frameBytes)
     $null = $ws.SendAsync($frameSegment, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, [System.Threading.CancellationToken]::None).GetAwaiter().GetResult()
 
-    $buffer = New-Object byte[] 16384
-    $builder = [System.Text.StringBuilder]::new()
-    do {
-        $segment = [ArraySegment[byte]]::new($buffer)
-        $receive = $ws.ReceiveAsync($segment, [System.Threading.CancellationToken]::None).GetAwaiter().GetResult()
-        if ($receive.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) {
-            throw "authorized websocket closed before rpc response"
-        }
-        $chunk = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $receive.Count)
-        [void]$builder.Append($chunk)
-    } while (-not $receive.EndOfMessage)
-
-    $wsJson = $builder.ToString() | ConvertFrom-Json
+    $wsResponseText = Read-WebSocketTextMessage -Socket $ws
+    $wsJson = $wsResponseText | ConvertFrom-Json
     if ($null -eq $wsJson.result) {
         throw "authorized websocket response missing result payload"
     }

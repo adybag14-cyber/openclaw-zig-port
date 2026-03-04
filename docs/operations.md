@@ -32,6 +32,7 @@ Recommended sequence:
 - runtime + gateway-auth + websocket smoke checks
 - parity evidence artifacts
   - websocket smoke validates `/ws` and root compatibility route `/`, including binary-frame RPC dispatch
+  - gateway-auth and websocket smokes use bounded receive timeouts to prevent hanging CI jobs
 
 ### `release-preview.yml`
 

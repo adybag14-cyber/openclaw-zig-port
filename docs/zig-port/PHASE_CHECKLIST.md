@@ -204,6 +204,7 @@ Phase 6 progress notes:
 - [x] `scripts/docker-smoke-check.ps1` (host + Docker HTTP 200 checks on `/health` and `/rpc`)
 - [x] `scripts/gateway-auth-smoke-check.ps1` (`OPENCLAW_ZIG_GATEWAY_REQUIRE_TOKEN=true` with verified 401/200 for `/rpc` and unauthorized/authorized websocket upgrade behavior)
 - [x] `scripts/websocket-smoke-check.ps1` (`GET /ws` websocket upgrade + root websocket compatibility route + status/health RPC text and binary-frame dispatch)
+- [x] Websocket smoke scripts now use bounded receive timeouts to prevent indefinite hangs on stalled websocket frames.
 - [x] `scripts/web-login-smoke-check.ps1` (`web.login.start -> wait -> complete -> status` all HTTP 200 with authorized completion)
 - [x] `scripts/telegram-reply-loop-smoke-check.ps1` (`send /auth start -> send /auth complete -> send chat -> poll` all HTTP 200 with non-empty queued replies)
 - [x] `scripts/telegram-reply-loop-smoke-check.ps1` now also validates `/auth link` guidance payload includes active code/session + completion command hints.
