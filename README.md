@@ -140,7 +140,7 @@ All major runtime feature domains are implemented and dispatchable. Representati
   - `send`, `chat.send`, `sessions.send`
   - `poll`
 - Telegram command surface:
-  - `/auth` lifecycle (`start`, `status`, `wait`, `complete`, `guest`, `cancel`, `providers`, `bridge`)
+  - `/auth` lifecycle (`start`, `status`, `wait`, `link`, `open`, `complete`, `guest`, `cancel`, `providers`, `bridge`)
   - `/model` lifecycle (set/status/reset)
   - account-scoped auth bindings and `--force` session rotation
 - Queue behavior:

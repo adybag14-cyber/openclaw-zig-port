@@ -44,6 +44,7 @@ Phase 5 enhancement notes:
   - `/auth providers` now includes auth mode + guest/popup hints.
   - `/auth bridge <provider>` now returns provider-specific lightpanda guidance.
   - `/auth wait` supports backward-compatible positional timeout (`/auth wait <provider> [account] <seconds>`) in addition to `--timeout`.
+  - `/auth link|open` now re-surfaces active login URL + code + exact completion commands for phone-only flows.
 
 ## Phase 6 - Memory + Edge
 - [x] Port memory persistence primitives

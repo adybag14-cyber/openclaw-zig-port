@@ -19,6 +19,8 @@
   - `start`
   - `status`
   - `wait`
+  - `link`
+  - `open` (alias of `link`)
   - `complete`
   - `guest`
   - `cancel`

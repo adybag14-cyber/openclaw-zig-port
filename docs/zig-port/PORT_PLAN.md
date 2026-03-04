@@ -102,6 +102,7 @@ while maintaining parity-first validation and release gating.
     - `/auth providers` output now exposes mode/guest/popup metadata.
     - `/auth bridge <provider>` returns provider-specific lightpanda guest/auth guidance.
     - `/auth wait` now accepts positional timeout syntax in addition to `--timeout`.
+    - `/auth link|open` now re-surfaces pending auth URL/code/session details with provider/account aware completion commands.
   - Dispatcher `channels.status` now includes telegram queue/target/auth telemetry
   - Added auth + reply-loop smokes (`scripts/web-login-smoke-check.ps1`, `scripts/telegram-reply-loop-smoke-check.ps1`)
 - Phase 6 in progress:

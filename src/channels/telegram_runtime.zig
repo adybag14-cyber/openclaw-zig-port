@@ -419,7 +419,7 @@ pub const TelegramRuntime = struct {
             return .{
                 .is_command = true,
                 .command_name = "auth",
-                .reply = try allocator.dupe(u8, "Usage: /auth [start|status|wait|complete|guest|cancel|providers|bridge]\nExamples:\n/auth start qwen mobile --force\n/auth wait qwen mobile --timeout 45\n/auth complete qwen <callback_url_or_code> <session_id> mobile"),
+                .reply = try allocator.dupe(u8, "Usage: /auth [start|status|wait|link|open|complete|guest|cancel|providers|bridge]\nExamples:\n/auth start qwen mobile --force\n/auth link qwen mobile\n/auth wait qwen mobile --timeout 45\n/auth complete qwen <callback_url_or_code> <session_id> mobile"),
                 .provider = default_provider,
                 .model = default_model,
                 .login_session_id = "",
@@ -465,6 +465,92 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+            };
+        }
+        if (std.ascii.eqlIgnoreCase(action, "link") or std.ascii.eqlIgnoreCase(action, "open")) {
+            var provider = default_provider;
+            var account: []const u8 = "default";
+            var session_token: []const u8 = "";
+            var index: usize = 0;
+            if (rest.len > 0 and isKnownProvider(rest[0])) {
+                provider = normalizeProvider(rest[0]);
+                index = 1;
+            }
+            while (index < rest.len) : (index += 1) {
+                const token = std.mem.trim(u8, rest[index], " \t\r\n");
+                if (token.len == 0) continue;
+                if (session_token.len == 0 and looksLikeLoginSessionID(token)) {
+                    session_token = token;
+                    continue;
+                }
+                if (std.mem.eql(u8, normalizeAccount(account), "default")) {
+                    account = token;
+                    continue;
+                }
+            }
+
+            const bound_session = try self.getAuthBinding(allocator, target, provider, account);
+            const login_session = if (std.mem.trim(u8, session_token, " \t\r\n").len > 0) session_token else bound_session;
+            if (std.mem.trim(u8, login_session, " \t\r\n").len == 0) {
+                return .{
+                    .is_command = true,
+                    .command_name = "auth",
+                    .reply = try std.fmt.allocPrint(allocator, "No active auth session for `{s}` account `{s}`. Start with `/auth start {s} {s}`.", .{ provider, normalizeAccount(account), provider, normalizeAccount(account) }),
+                    .provider = provider,
+                    .model = defaultModelForProvider(provider),
+                    .login_session_id = "",
+                    .login_code = "",
+                    .auth_status = "pending",
+                };
+            }
+
+            const view = self.login_manager.get(login_session) orelse return .{
+                .is_command = true,
+                .command_name = "auth",
+                .reply = try allocator.dupe(u8, "Auth session not found."),
+                .provider = provider,
+                .model = defaultModelForProvider(provider),
+                .login_session_id = login_session,
+                .login_code = "",
+                .auth_status = "missing",
+            };
+            const account_norm = normalizeAccount(account);
+            const account_is_default = std.mem.eql(u8, account_norm, "default");
+            const reply = if (view.guestBypassSupported)
+                (if (account_is_default)
+                    try std.fmt.allocPrint(
+                        allocator,
+                        "Auth link for `{s}`.\nStatus: `{s}`\nSession: `{s}`\nOpen: {s}\nCode: `{s}`\nThen run `/auth guest {s}` or `/auth complete {s} <callback_url_or_code> {s}`.",
+                        .{ provider, view.status, view.loginSessionId, view.verificationUriComplete, view.code, provider, provider, view.loginSessionId },
+                    )
+                else
+                    try std.fmt.allocPrint(
+                        allocator,
+                        "Auth link for `{s}` account `{s}`.\nStatus: `{s}`\nSession: `{s}`\nOpen: {s}\nCode: `{s}`\nThen run `/auth guest {s} {s}` or `/auth complete {s} <callback_url_or_code> {s} {s}`.",
+                        .{ provider, account_norm, view.status, view.loginSessionId, view.verificationUriComplete, view.code, provider, account_norm, provider, view.loginSessionId, account_norm },
+                    ))
+            else
+                (if (account_is_default)
+                    try std.fmt.allocPrint(
+                        allocator,
+                        "Auth link for `{s}`.\nStatus: `{s}`\nSession: `{s}`\nOpen: {s}\nCode: `{s}`\nThen run `/auth complete {s} <callback_url_or_code> {s}`.",
+                        .{ provider, view.status, view.loginSessionId, view.verificationUriComplete, view.code, provider, view.loginSessionId },
+                    )
+                else
+                    try std.fmt.allocPrint(
+                        allocator,
+                        "Auth link for `{s}` account `{s}`.\nStatus: `{s}`\nSession: `{s}`\nOpen: {s}\nCode: `{s}`\nThen run `/auth complete {s} <callback_url_or_code> {s} {s}`.",
+                        .{ provider, account_norm, view.status, view.loginSessionId, view.verificationUriComplete, view.code, provider, view.loginSessionId, account_norm },
+                    ));
+            return .{
+                .is_command = true,
+                .command_name = "auth",
+                .reply = reply,
+                .provider = provider,
+                .model = view.model,
+                .login_session_id = view.loginSessionId,
+                .login_code = view.code,
+                .auth_status = view.status,
             };
         }
         if (std.ascii.eqlIgnoreCase(action, "start")) {
@@ -1424,6 +1510,47 @@ test "telegram runtime auth bridge and providers help include guest guidance" {
     defer bridge_qwen.deinit(allocator);
     try std.testing.expect(std.mem.indexOf(u8, bridge_qwen.reply, "Stay logged out") != null);
     try std.testing.expect(std.mem.indexOf(u8, bridge_qwen.reply, "/auth guest qwen") != null);
+}
+
+test "telegram runtime auth link command surfaces pending qwen session details" {
+    var login = web_login.LoginManager.init(std.testing.allocator, 5 * 60 * 1000);
+    defer login.deinit();
+    var runtime = TelegramRuntime.init(std.testing.allocator, &login);
+    defer runtime.deinit();
+
+    const allocator = std.testing.allocator;
+    var start = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-start-link-qwen\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-link\",\"sessionId\":\"sess-link\",\"message\":\"/auth start qwen mobile\"}}");
+    defer start.deinit(allocator);
+    try std.testing.expect(start.loginSessionId.len > 0);
+    try std.testing.expect(start.loginCode.len > 0);
+
+    var link = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-link-qwen\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-link\",\"sessionId\":\"sess-link\",\"message\":\"/auth link qwen mobile\"}}");
+    defer link.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, link.authStatus, "pending"));
+    try std.testing.expect(std.mem.indexOf(u8, link.reply, "Auth link for `qwen` account `mobile`.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, link.reply, "Open: https://chat.qwen.ai/?openclaw_code=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, link.reply, "/auth guest qwen mobile") != null);
+    try std.testing.expect(std.mem.indexOf(u8, link.reply, start.loginCode) != null);
+}
+
+test "telegram runtime auth open alias surfaces chatgpt completion command" {
+    var login = web_login.LoginManager.init(std.testing.allocator, 5 * 60 * 1000);
+    defer login.deinit();
+    var runtime = TelegramRuntime.init(std.testing.allocator, &login);
+    defer runtime.deinit();
+
+    const allocator = std.testing.allocator;
+    var start = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-start-link-chatgpt\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-link-chatgpt\",\"sessionId\":\"sess-link-chatgpt\",\"message\":\"/auth start chatgpt\"}}");
+    defer start.deinit(allocator);
+    try std.testing.expect(start.loginSessionId.len > 0);
+    try std.testing.expect(start.loginCode.len > 0);
+
+    var open = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-open-chatgpt\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-link-chatgpt\",\"sessionId\":\"sess-link-chatgpt\",\"message\":\"/auth open chatgpt\"}}");
+    defer open.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, open.authStatus, "pending"));
+    try std.testing.expect(std.mem.indexOf(u8, open.reply, "Auth link for `chatgpt`.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, open.reply, "/auth complete chatgpt <callback_url_or_code>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, open.reply, start.loginCode) != null);
 }
 
 test "telegram runtime wait supports positional timeout with account" {
