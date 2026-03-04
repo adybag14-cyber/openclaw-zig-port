@@ -71,6 +71,40 @@ const CompatUpdateJob = struct {
     }
 };
 
+const MaintenanceAction = struct {
+    id: []const u8,
+    title: []const u8,
+    severity: []const u8,
+    detail: []const u8,
+    recommended: bool,
+    auto: bool,
+    compactLimit: ?usize = null,
+};
+
+const MaintenancePlan = struct {
+    generatedAtMs: i64,
+    critical: usize,
+    warnings: usize,
+    info: usize,
+    healthScore: u8,
+    doctorCheckFail: usize,
+    doctorCheckWarn: usize,
+    memoryEntries: usize,
+    memoryMaxEntries: usize,
+    memoryUsageRatio: f64,
+    heartbeatEnabled: bool,
+    suggestedCompactLimit: usize,
+    actions: []MaintenanceAction,
+};
+
+const MaintenanceActionResult = struct {
+    id: []const u8,
+    status: []const u8,
+    ok: bool,
+    detail: []const u8,
+    changed: usize,
+};
+
 const CompatAgent = struct {
     agent_id: []u8,
     name: []u8,
@@ -636,6 +670,33 @@ const CompatState = struct {
             removed.deinit(self.allocator);
         }
         return self.update_jobs.items[self.update_jobs.items.len - 1];
+    }
+
+    fn findUpdateJobIndex(self: *const CompatState, update_id: []const u8) ?usize {
+        const normalized = std.mem.trim(u8, update_id, " \t\r\n");
+        if (normalized.len == 0) return null;
+        for (self.update_jobs.items, 0..) |entry, idx| {
+            if (std.ascii.eqlIgnoreCase(entry.id, normalized)) return idx;
+        }
+        return null;
+    }
+
+    fn setUpdateJobState(
+        self: *CompatState,
+        update_id: []const u8,
+        status: []const u8,
+        phase: []const u8,
+        progress: u8,
+    ) bool {
+        const idx = self.findUpdateJobIndex(update_id) orelse return false;
+        var entry = &self.update_jobs.items[idx];
+        self.allocator.free(entry.status);
+        self.allocator.free(entry.phase);
+        entry.status = self.allocator.dupe(u8, status) catch return false;
+        entry.phase = self.allocator.dupe(u8, phase) catch return false;
+        entry.progress = progress;
+        entry.updated_at_ms = time_util.nowMs();
+        return true;
     }
 
     fn findAgentIndex(self: *const CompatState, agent_id: []const u8) ?usize {
@@ -2869,6 +2930,247 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             .method = job.method,
             .session = job.session_id,
             .updatedAtMs = job.updated_at_ms,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "system.maintenance.plan")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const deep = firstParamBool(params, "deep", false);
+        const guard = try getGuard();
+        const memory = try getMemoryStore();
+        const compat = try getCompatState();
+        const plan = try buildMaintenancePlan(allocator, currentConfig(), guard, compat, memory, deep);
+        defer allocator.free(plan.actions);
+
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = true,
+            .kind = "system-maintenance-plan",
+            .generatedAtMs = plan.generatedAtMs,
+            .healthScore = plan.healthScore,
+            .summary = .{
+                .critical = plan.critical,
+                .warn = plan.warnings,
+                .info = plan.info,
+                .doctorFail = plan.doctorCheckFail,
+                .doctorWarn = plan.doctorCheckWarn,
+            },
+            .memory = .{
+                .entries = plan.memoryEntries,
+                .maxEntries = plan.memoryMaxEntries,
+                .usageRatio = plan.memoryUsageRatio,
+                .suggestedCompactLimit = plan.suggestedCompactLimit,
+            },
+            .heartbeat = .{
+                .enabled = plan.heartbeatEnabled,
+            },
+            .actions = plan.actions,
+            .actionCount = plan.actions.len,
+            .recommendedCount = countRecommendedMaintenanceActions(plan.actions),
+            .deep = deep,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "system.maintenance.run")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const deep = firstParamBool(params, "deep", false);
+        const dry_run = firstParamBool(params, "dryRun", false);
+        const apply = if (dry_run) false else firstParamBool(params, "apply", true);
+        const compact_limit_param = firstParamInt(params, "compactLimit", 0);
+
+        const guard = try getGuard();
+        const memory = try getMemoryStore();
+        const compat = try getCompatState();
+        const plan = try buildMaintenancePlan(allocator, currentConfig(), guard, compat, memory, deep);
+        defer allocator.free(plan.actions);
+
+        var action_results: std.ArrayList(MaintenanceActionResult) = .empty;
+        defer action_results.deinit(allocator);
+        var applied_count: usize = 0;
+        var failed_count: usize = 0;
+        var skipped_count: usize = 0;
+
+        if (apply) {
+            for (plan.actions) |action| {
+                if (std.ascii.eqlIgnoreCase(action.id, "security.audit.fix")) {
+                    var audit = try security_audit.run(allocator, currentConfig(), guard, .{ .deep = deep, .fix = true });
+                    defer audit.deinit(allocator);
+                    const fix_ok = if (audit.fix) |fix| fix.ok else false;
+                    const changed = if (audit.fix) |fix| fix.changes.len else 0;
+                    if (fix_ok) applied_count += 1 else failed_count += 1;
+                    try action_results.append(allocator, .{
+                        .id = action.id,
+                        .status = if (fix_ok) "applied" else "failed",
+                        .ok = fix_ok,
+                        .detail = if (fix_ok) "security audit auto-remediation applied" else "security remediation failed",
+                        .changed = changed,
+                    });
+                    continue;
+                }
+                if (std.ascii.eqlIgnoreCase(action.id, "sessions.compact")) {
+                    const resolved_limit = resolveMaintenanceCompactLimit(compact_limit_param, plan.suggestedCompactLimit, plan.memoryEntries);
+                    const removed = memory.trim(resolved_limit) catch |err| {
+                        failed_count += 1;
+                        try action_results.append(allocator, .{
+                            .id = action.id,
+                            .status = "failed",
+                            .ok = false,
+                            .detail = @errorName(err),
+                            .changed = 0,
+                        });
+                        continue;
+                    };
+                    applied_count += 1;
+                    try action_results.append(allocator, .{
+                        .id = action.id,
+                        .status = "applied",
+                        .ok = true,
+                        .detail = "memory compaction completed",
+                        .changed = removed,
+                    });
+                    continue;
+                }
+                if (std.ascii.eqlIgnoreCase(action.id, "set-heartbeats")) {
+                    _ = compat.touchHeartbeat(true, 15_000);
+                    applied_count += 1;
+                    try action_results.append(allocator, .{
+                        .id = action.id,
+                        .status = "applied",
+                        .ok = true,
+                        .detail = "heartbeat scheduling enabled",
+                        .changed = 1,
+                    });
+                    continue;
+                }
+                skipped_count += 1;
+                try action_results.append(allocator, .{
+                    .id = action.id,
+                    .status = "skipped",
+                    .ok = false,
+                    .detail = "manual action required",
+                    .changed = 0,
+                });
+            }
+        } else {
+            for (plan.actions) |action| {
+                try action_results.append(allocator, .{
+                    .id = action.id,
+                    .status = "planned",
+                    .ok = true,
+                    .detail = "dry-run planning only",
+                    .changed = 0,
+                });
+            }
+        }
+
+        const action_slice = try action_results.toOwnedSlice(allocator);
+        defer allocator.free(action_slice);
+        const run_id = try std.fmt.allocPrint(allocator, "maint-{d}", .{time_util.nowMs()});
+        defer allocator.free(run_id);
+
+        const run_status: []const u8 = if (!apply)
+            "planned"
+        else if (failed_count > 0)
+            "completed_with_errors"
+        else
+            "completed";
+        const phase: []const u8 = if (!apply) "maintenance-plan" else "maintenance-run";
+        const progress: u8 = if (!apply) 100 else if (failed_count > 0) 80 else 100;
+
+        const update_job = try compat.createUpdateJob("self-maintain", !apply, false);
+        _ = compat.setUpdateJobState(update_job.id, run_status, phase, progress);
+        const evt = try compat.addEvent(if (apply) "maintenance.run" else "maintenance.plan");
+
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = failed_count == 0,
+            .runId = run_id,
+            .status = run_status,
+            .phase = phase,
+            .apply = apply,
+            .dryRun = !apply,
+            .deep = deep,
+            .generatedAtMs = plan.generatedAtMs,
+            .summary = .{
+                .critical = plan.critical,
+                .warn = plan.warnings,
+                .info = plan.info,
+                .healthScore = plan.healthScore,
+            },
+            .counts = .{
+                .total = action_slice.len,
+                .applied = applied_count,
+                .failed = failed_count,
+                .skipped = skipped_count,
+            },
+            .actions = action_slice,
+            .updateJob = .{
+                .jobId = update_job.id,
+                .status = run_status,
+                .phase = phase,
+                .progress = progress,
+                .updatedAtMs = time_util.nowMs(),
+            },
+            .event = .{
+                .id = evt.id,
+                .kind = evt.kind,
+                .createdAtMs = evt.created_at_ms,
+            },
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "system.maintenance.status")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const deep = firstParamBool(params, "deep", false);
+        const guard = try getGuard();
+        const memory = try getMemoryStore();
+        const compat = try getCompatState();
+        const plan = try buildMaintenancePlan(allocator, currentConfig(), guard, compat, memory, deep);
+        defer allocator.free(plan.actions);
+
+        var latest_maintenance: ?CompatUpdateJob = null;
+        var idx = compat.update_jobs.items.len;
+        while (idx > 0) : (idx -= 1) {
+            const entry = compat.update_jobs.items[idx - 1];
+            if (startsWithIgnoreCase(entry.target_version, "self-maintain")) {
+                latest_maintenance = entry;
+                break;
+            }
+        }
+
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = true,
+            .status = if (latest_maintenance != null) latest_maintenance.?.status else "idle",
+            .phase = if (latest_maintenance != null) latest_maintenance.?.phase else "idle",
+            .healthScore = plan.healthScore,
+            .latestRun = if (latest_maintenance != null) .{
+                .jobId = latest_maintenance.?.id,
+                .status = latest_maintenance.?.status,
+                .phase = latest_maintenance.?.phase,
+                .progress = latest_maintenance.?.progress,
+                .createdAtMs = latest_maintenance.?.created_at_ms,
+                .updatedAtMs = latest_maintenance.?.updated_at_ms,
+            } else null,
+            .pendingActions = countRecommendedMaintenanceActions(plan.actions),
+            .summary = .{
+                .critical = plan.critical,
+                .warn = plan.warnings,
+                .info = plan.info,
+                .doctorFail = plan.doctorCheckFail,
+                .doctorWarn = plan.doctorCheckWarn,
+            },
+            .memory = .{
+                .entries = plan.memoryEntries,
+                .maxEntries = plan.memoryMaxEntries,
+                .usageRatio = plan.memoryUsageRatio,
+            },
+            .heartbeat = .{
+                .enabled = plan.heartbeatEnabled,
+            },
         });
     }
 
@@ -5462,6 +5764,9 @@ fn shouldEnforceGuard(method: []const u8) bool {
     if (std.ascii.eqlIgnoreCase(method, "sessions.usage.logs")) return false;
     if (std.ascii.eqlIgnoreCase(method, "sessions.patch")) return false;
     if (std.ascii.eqlIgnoreCase(method, "sessions.resolve")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "system.maintenance.plan")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "system.maintenance.run")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "system.maintenance.status")) return false;
     if (std.ascii.eqlIgnoreCase(method, "security.audit")) return false;
     if (std.ascii.eqlIgnoreCase(method, "doctor")) return false;
     if (std.ascii.eqlIgnoreCase(method, "doctor.memory.status")) return false;
@@ -5509,6 +5814,170 @@ fn shouldEnforceGuard(method: []const u8) bool {
     if (std.ascii.eqlIgnoreCase(method, "edge.alignment.evaluate")) return false;
     if (std.ascii.eqlIgnoreCase(method, "edge.quantum.status")) return false;
     if (std.ascii.eqlIgnoreCase(method, "edge.collaboration.plan")) return false;
+    return true;
+}
+
+fn buildMaintenancePlan(
+    allocator: std.mem.Allocator,
+    cfg: config.Config,
+    runtime_guard: *security_guard.Guard,
+    compat: *CompatState,
+    memory: *memory_store.Store,
+    deep: bool,
+) !MaintenancePlan {
+    var doctor = try security_audit.doctor(allocator, cfg, runtime_guard, .{
+        .deep = deep,
+        .fix = false,
+    });
+    defer doctor.deinit(allocator);
+
+    const fail_checks = countDoctorChecksByStatus(doctor.checks, "fail");
+    const warn_checks = countDoctorChecksByStatus(doctor.checks, "warn");
+    const mem = memory.stats();
+    const usage_ratio = if (mem.maxEntries == 0)
+        0
+    else
+        (@as(f64, @floatFromInt(mem.entries)) / @as(f64, @floatFromInt(mem.maxEntries)));
+    const suggested_compact_limit = if (mem.maxEntries > 0)
+        @max(mem.maxEntries * 3 / 4, @as(usize, 128))
+    else
+        @as(usize, 500);
+
+    var actions: std.ArrayList(MaintenanceAction) = .empty;
+    defer actions.deinit(allocator);
+
+    const summary = doctor.security.summary;
+    if (summary.critical > 0 or summary.warn > 0) {
+        try actions.append(allocator, .{
+            .id = "security.audit.fix",
+            .title = "Apply security remediation",
+            .severity = if (summary.critical > 0) "critical" else "warn",
+            .detail = "run security.audit with fix=true to remediate policy and config findings",
+            .recommended = true,
+            .auto = true,
+        });
+    }
+    if (usage_ratio >= 0.75) {
+        try actions.append(allocator, .{
+            .id = "sessions.compact",
+            .title = "Compact memory/session history",
+            .severity = "warn",
+            .detail = "trim persisted memory entries to reduce state growth and startup overhead",
+            .recommended = true,
+            .auto = true,
+            .compactLimit = suggested_compact_limit,
+        });
+    }
+    if (!compat.heartbeat_enabled) {
+        try actions.append(allocator, .{
+            .id = "set-heartbeats",
+            .title = "Enable heartbeat scheduler",
+            .severity = "warn",
+            .detail = "reactivate heartbeat telemetry to preserve liveness supervision",
+            .recommended = true,
+            .auto = true,
+        });
+    }
+    if (!isLoopbackBind(cfg.http_bind)) {
+        try actions.append(allocator, .{
+            .id = "gateway.bind.loopback",
+            .title = "Rebind gateway to loopback",
+            .severity = "warn",
+            .detail = "manual config update required: OPENCLAW_ZIG_HTTP_BIND should be loopback-scoped",
+            .recommended = true,
+            .auto = false,
+        });
+    }
+    if (actions.items.len == 0) {
+        try actions.append(allocator, .{
+            .id = "noop",
+            .title = "Maintenance baseline healthy",
+            .severity = "info",
+            .detail = "no maintenance actions required at this time",
+            .recommended = false,
+            .auto = false,
+        });
+    }
+
+    const health_score = computeMaintenanceHealthScore(summary, fail_checks, warn_checks, usage_ratio, compat.heartbeat_enabled);
+
+    return .{
+        .generatedAtMs = time_util.nowMs(),
+        .critical = summary.critical,
+        .warnings = summary.warn,
+        .info = summary.info,
+        .healthScore = health_score,
+        .doctorCheckFail = fail_checks,
+        .doctorCheckWarn = warn_checks,
+        .memoryEntries = mem.entries,
+        .memoryMaxEntries = mem.maxEntries,
+        .memoryUsageRatio = usage_ratio,
+        .heartbeatEnabled = compat.heartbeat_enabled,
+        .suggestedCompactLimit = suggested_compact_limit,
+        .actions = try actions.toOwnedSlice(allocator),
+    };
+}
+
+fn countDoctorChecksByStatus(checks: []const security_audit.DoctorCheck, status: []const u8) usize {
+    var count: usize = 0;
+    for (checks) |check| {
+        if (std.ascii.eqlIgnoreCase(check.status, status)) count += 1;
+    }
+    return count;
+}
+
+fn computeMaintenanceHealthScore(
+    summary: security_audit.Summary,
+    doctor_fail: usize,
+    doctor_warn: usize,
+    usage_ratio: f64,
+    heartbeat_enabled: bool,
+) u8 {
+    var penalty: i64 = 0;
+    penalty += @as(i64, @intCast(summary.critical)) * 25;
+    penalty += @as(i64, @intCast(summary.warn)) * 6;
+    penalty += @as(i64, @intCast(doctor_fail)) * 10;
+    penalty += @as(i64, @intCast(doctor_warn)) * 3;
+    if (usage_ratio > 0.90) {
+        penalty += 15;
+    } else if (usage_ratio > 0.75) {
+        penalty += 7;
+    }
+    if (!heartbeat_enabled) penalty += 5;
+    const score_i64 = std.math.clamp(@as(i64, 100) - penalty, 0, 100);
+    return @as(u8, @intCast(score_i64));
+}
+
+fn countRecommendedMaintenanceActions(actions: []const MaintenanceAction) usize {
+    var count: usize = 0;
+    for (actions) |action| {
+        if (action.recommended and !std.ascii.eqlIgnoreCase(action.id, "noop")) count += 1;
+    }
+    return count;
+}
+
+fn resolveMaintenanceCompactLimit(raw_limit: i64, suggested: usize, current_entries: usize) usize {
+    if (raw_limit > 0 and raw_limit <= std.math.maxInt(usize)) {
+        return @as(usize, @intCast(raw_limit));
+    }
+    if (suggested > 0 and suggested < current_entries) return suggested;
+    if (current_entries > 0) return @max(current_entries / 2, @as(usize, 128));
+    return 128;
+}
+
+fn isLoopbackBind(bind: []const u8) bool {
+    const trimmed = std.mem.trim(u8, bind, " \t\r\n");
+    if (trimmed.len == 0) return false;
+    return std.ascii.eqlIgnoreCase(trimmed, "127.0.0.1") or
+        std.ascii.eqlIgnoreCase(trimmed, "::1") or
+        std.ascii.eqlIgnoreCase(trimmed, "localhost");
+}
+
+fn startsWithIgnoreCase(value: []const u8, prefix: []const u8) bool {
+    if (value.len < prefix.len) return false;
+    for (prefix, 0..) |ch, idx| {
+        if (std.ascii.toLower(value[idx]) != std.ascii.toLower(ch)) return false;
+    }
     return true;
 }
 
@@ -7101,6 +7570,21 @@ test "dispatch compat talk tts models and control methods return contracts" {
     const update_run = try dispatch(allocator, "{\"id\":\"compat-update-run\",\"method\":\"update.run\",\"params\":{\"targetVersion\":\"edge-next\",\"dryRun\":true}}");
     defer allocator.free(update_run);
     try std.testing.expect(std.mem.indexOf(u8, update_run, "\"status\":\"completed\"") != null);
+
+    const maintenance_plan = try dispatch(allocator, "{\"id\":\"compat-maint-plan\",\"method\":\"system.maintenance.plan\",\"params\":{\"deep\":false}}");
+    defer allocator.free(maintenance_plan);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_plan, "\"healthScore\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_plan, "\"actions\"") != null);
+
+    const maintenance_run = try dispatch(allocator, "{\"id\":\"compat-maint-run\",\"method\":\"system.maintenance.run\",\"params\":{\"dryRun\":true}}");
+    defer allocator.free(maintenance_run);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_run, "\"status\":\"planned\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_run, "\"updateJob\"") != null);
+
+    const maintenance_status = try dispatch(allocator, "{\"id\":\"compat-maint-status\",\"method\":\"system.maintenance.status\",\"params\":{}}");
+    defer allocator.free(maintenance_status);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_status, "\"latestRun\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_status, "\"healthScore\"") != null);
 
     const push_test = try dispatch(allocator, "{\"id\":\"compat-push-test\",\"method\":\"push.test\",\"params\":{\"channel\":\"telegram\"}}");
     defer allocator.free(push_test);

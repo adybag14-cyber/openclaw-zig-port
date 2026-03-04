@@ -96,6 +96,10 @@ while maintaining parity-first validation and release gating.
     - `edge.finetune.run` now normalizes provider aliases/model defaults, emits full trainer argv (`rank/epochs/lr/max-samples/output[/dataset]`), honors `OPENCLAW_ZIG_LORA_TRAINER_TIMEOUT_MS`, and executes real trainer command in non-dry-run mode with execution telemetry.
     - `edge.finetune.status` now exposes richer job metadata (`statusReason`, `updatedAtMs`) and dataset source surfaces (`zvec` + `graphlite`).
     - Added evolution job-control methods: `edge.finetune.job.get` and `edge.finetune.cancel`.
+  - Self-maintenance/update system slice shipped:
+    - Added `system.maintenance.plan` to synthesize doctor/security/memory liveness into actionable maintenance plans with health scoring.
+    - Added `system.maintenance.run` to execute auto-remediation actions (`security.audit` fix path, memory compaction, heartbeat restoration) and persist run status through update-job tracking.
+    - Added `system.maintenance.status` to expose latest maintenance run status plus current health and pending action counts.
   - Added `edge.acceleration.status` parity contract and test coverage.
   - Added runtime/wasm contract depth slice:
     - `config.get` now returns gateway/runtime/browser/channel/memory/security/wasm snapshots with sandbox policy.
@@ -131,13 +135,13 @@ while maintaining parity-first validation and release gating.
   - Added compat node + exec-approval surfaces with stateful behavior:
     - node: `node.pair.request|list|approve|reject|verify`, `node.rename`, `node.list`, `node.describe`, `node.invoke`, `node.invoke.result`, `node.event`, `node.canvas.capability.refresh`
     - approvals: `exec.approvals.get|set|node.get|node.set`, `exec.approval.request|waitdecision|resolve`
-  - Method surface moved to `148` Zig methods (from `126`) while preserving Lightpanda-only browser policy and green validation gates.
+  - Method surface moved to `151` Zig methods (from `126`) while preserving Lightpanda-only browser policy and green validation gates.
   - Added dispatcher contract tests for new edge methods and memory flows.
   - Method-set parity is now tracked and enforced against both latest upstream release baselines:
     - Go release baseline (`adybag14-cyber/openclaw-go-port`): `134/134` covered in Zig.
     - Original OpenClaw release baseline (`openclaw/openclaw`): `94/94` covered in Zig.
     - Union baseline coverage: `135/135` covered in Zig.
-    - Intentional Zig-only extras retained for edge/runtime depth: `13`.
+    - Intentional Zig-only extras retained for edge/runtime depth: `16`.
   - Hardened smoke scripts to avoid flaky `zig build run` startup timing by prebuilding and launching the binary directly (`zig-out/bin/openclaw-zig.exe`) with explicit readiness and exit diagnostics.
 - Toolchain/runtime notes (local Windows Zig master):
   - Codeberg `master` is currently `ce32003625566dcc3687e9e32be411ccb83a4aaa`.
