@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling>=1.26.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openclaw-zig-rpc-client"
+version = "0.2.0.dev0"
+description = "Python JSON-RPC client for OpenClaw Zig gateway endpoints."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [
+  { name = "Ady" }
+]
+keywords = ["openclaw", "zig", "rpc", "json-rpc", "agent"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Libraries",
+]
+
+[project.urls]
+Homepage = "https://github.com/adybag14-cyber/openclaw-zig-port"
+Repository = "https://github.com/adybag14-cyber/openclaw-zig-port"
+Issues = "https://github.com/adybag14-cyber/openclaw-zig-port/issues"
+
+[project.scripts]
+openclaw-zig-rpc = "openclaw_zig_rpc_client.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openclaw_zig_rpc_client"]

@@ -2,8 +2,8 @@
 
 ## Current Snapshot
 
-- Latest edge release: `v0.2.0-zig-edge.11`
-- Latest local test gate: `zig build test --summary all` -> `74/74` passing
+- Latest edge release: `v0.2.0-zig-edge.12`
+- Latest local test gate: `zig build test --summary all` -> `77/77` passing
 - Latest parity gate: `scripts/check-go-method-parity.ps1` -> `MISSING_IN_ZIG=0`, `ZIG_COUNT=153`
 
 ## Local Validation Matrix
@@ -18,6 +18,7 @@ Recommended sequence:
 ./scripts/web-login-smoke-check.ps1
 ./scripts/telegram-reply-loop-smoke-check.ps1
 ./scripts/npm-pack-check.ps1
+./scripts/python-pack-check.ps1
 ```
 
 ## CI Workflows
@@ -35,6 +36,7 @@ Recommended sequence:
 - duplicate release-tag protection
 - preview artifact publishing with parity evidence
 - npm package dry-run validation in release validate stage
+- python package validation (unit tests + build + twine check) in release validate stage
 
 ### `npm-release.yml`
 
@@ -43,6 +45,14 @@ Recommended sequence:
 - uses `NPM_TOKEN` when present for npmjs publish
 - falls back to GitHub Packages publish when `NPM_TOKEN` is not configured
 - attaches built npm tarball to the matching GitHub release tag when available
+
+### `pypi-release.yml`
+
+- builds and validates `python/openclaw-zig-rpc-client`
+- supports manual dispatch with explicit PEP 440 version
+- maps release tags to Python versions for `release.published` trigger
+- publishes to PyPI when `PYPI_API_TOKEN` is configured
+- uploads and optionally attaches wheel/sdist assets to matching GitHub release tags
 
 ## Release Notes
 

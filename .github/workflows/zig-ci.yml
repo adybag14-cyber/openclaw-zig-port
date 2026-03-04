@@ -24,12 +24,21 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
       - name: Zig version
         run: zig version
 
       - name: Validate npm package (dry-run)
         working-directory: npm/openclaw-zig-rpc-client
         run: npm pack --dry-run
+
+      - name: Validate python package (tests + build)
+        shell: pwsh
+        run: ./scripts/python-pack-check.ps1
 
       - name: Regenerate RPC reference
         shell: pwsh

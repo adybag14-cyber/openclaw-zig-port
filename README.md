@@ -9,8 +9,8 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - Go baseline (`v2.14.0-go`): `134/134` covered
   - Original OpenClaw baseline (`v2026.3.2`): `94/94` covered
   - Union baseline: `135/135` covered (`MISSING_IN_ZIG=0`)
-- Latest local validation: `zig build test --summary all` -> `74/74` passing
-- Latest edge release tag: `v0.2.0-zig-edge.11`
+- Latest local validation: `zig build test --summary all` -> `77/77` passing
+- Latest edge release tag: `v0.2.0-zig-edge.12`
 - Dual runtime profiles available:
   - OS-hosted profile: `openclaw-zig` (`--serve`, doctor, security audit, full RPC stack)
 - Bare-metal profile: `openclaw-zig-baremetal.elf` (`zig build baremetal`, freestanding runtime loop + Multiboot2 header)
@@ -25,6 +25,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 - Next-generation update/release slice:
   - channel-aware update lifecycle (`update.plan`, `update.status`, `update.run`)
   - npm client package and release pipeline (`@adybag14-cyber/openclaw-zig-rpc-client`)
+  - Python client package + PyPI/uvx release pipeline (`openclaw-zig-rpc-client`)
 
 ## Scope and Policy
 
@@ -313,6 +314,12 @@ Validate npm package publishability:
 ./scripts/npm-pack-check.ps1
 ```
 
+Validate python package publishability:
+
+```powershell
+./scripts/python-pack-check.ps1
+```
+
 ## CI and Release
 
 `zig-ci` workflow (`.github/workflows/zig-ci.yml`):
@@ -348,6 +355,14 @@ Validate npm package publishability:
 - falls back to GitHub Packages publish (`npm.pkg.github.com`) when `NPM_TOKEN` is missing
 - always builds and attaches the npm tarball to the matching GitHub release tag when present
 
+`pypi-release` workflow (`.github/workflows/pypi-release.yml`):
+
+- builds and validates `openclaw-zig-rpc-client` (unit tests + wheel/sdist + twine check)
+- supports `workflow_dispatch` with explicit Python version and optional release tag
+- supports `release.published` trigger with release-tag to PEP 440 version normalization
+- publishes to PyPI when `PYPI_API_TOKEN` is configured
+- always uploads python build artifacts and attaches them to matching GitHub release when found
+
 Manual release-preview trigger:
 
 ```powershell
@@ -358,4 +373,10 @@ Manual npm release trigger:
 
 ```powershell
 gh workflow run npm-release.yml -R adybag14-cyber/openclaw-zig-port -f version=v0.2.0-zig-edge -f dist_tag=edge
+```
+
+Manual python release trigger:
+
+```powershell
+gh workflow run pypi-release.yml -R adybag14-cyber/openclaw-zig-port -f version=0.2.0.dev12 -f release_tag=v0.2.0-zig-edge.12
 ```

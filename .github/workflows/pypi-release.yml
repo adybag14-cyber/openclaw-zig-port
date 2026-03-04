@@ -1,0 +1,145 @@
+name: pypi-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Python package version (PEP 440, for example 0.2.0.dev12)
+        required: true
+        type: string
+      release_tag:
+        description: Optional GitHub release tag to attach artifacts to (for example v0.2.0-zig-edge.12)
+        required: false
+        default: ""
+        type: string
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Resolve version and release tag
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            TAG="${{ inputs.release_tag }}"
+          else
+            RAW_TAG="${{ github.event.release.tag_name }}"
+            TAG="${RAW_TAG}"
+            VERSION="$(python - <<'PY'
+import re
+import os
+raw = os.environ["RAW_TAG"].lstrip("v")
+m = re.match(r"^(\d+\.\d+\.\d+)-zig-(?:edge|preview)\.(\d+)$", raw)
+if m:
+    print(f"{m.group(1)}.dev{m.group(2)}")
+else:
+    print(raw.replace("-", "."))
+PY
+)"
+          fi
+
+          if [ -z "${VERSION}" ]; then
+            echo "Resolved Python version is empty."
+            exit 1
+          fi
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version=${VERSION} tag=${TAG}"
+        env:
+          RAW_TAG: ${{ github.event.release.tag_name }}
+
+      - name: Set python package version
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+from pathlib import Path
+import re
+import os
+
+path = Path("python/openclaw-zig-rpc-client/pyproject.toml")
+text = path.read_text(encoding="utf-8")
+version = os.environ["PY_VERSION"]
+updated = re.sub(r'^version = "[^"]+"$', f'version = "{version}"', text, count=1, flags=re.MULTILINE)
+if updated == text:
+    raise SystemExit("Unable to update version in pyproject.toml")
+path.write_text(updated, encoding="utf-8")
+print(f"Updated pyproject version to {version}")
+PY
+        env:
+          PY_VERSION: ${{ steps.meta.outputs.version }}
+
+      - name: Build python distributions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd python/openclaw-zig-rpc-client
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade build twine
+          python -m pip install -e .
+          python -m unittest discover -s tests -p "test_*.py"
+          python -m build --sdist --wheel --outdir dist
+          python -m twine check dist/*
+
+      - name: Upload python dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: python/openclaw-zig-rpc-client/dist/*
+
+      - name: Attach python distributions to release
+        if: ${{ steps.meta.outputs.tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.tag }}"
+          if gh release view "${TAG}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" python/openclaw-zig-rpc-client/dist/* --repo "${{ github.repository }}" --clobber
+            echo "Attached Python distributions to release ${TAG}."
+          else
+            echo "Release ${TAG} not found. Skipping release upload."
+          fi
+
+      - name: Detect PyPI token availability
+        id: auth
+        shell: bash
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${PYPI_API_TOKEN}" ]; then
+            echo "has_pypi_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_pypi_token=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish to PyPI
+        if: ${{ steps.auth.outputs.has_pypi_token == 'true' }}
+        shell: bash
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          python -m twine upload python/openclaw-zig-rpc-client/dist/*

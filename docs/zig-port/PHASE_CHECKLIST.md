@@ -166,6 +166,7 @@ Phase 6 progress notes:
 - [x] `zig build test --summary all` -> `77/77` passing (includes TTS provider-synthesis execution-path coverage + completion outcome semantics)
 - [x] `scripts/generate-rpc-reference.ps1` (regenerates `docs/rpc-reference.md` from `src/gateway/registry.zig`, currently `153` methods)
 - [x] `scripts/npm-pack-check.ps1` (validates npm package dry-run for `npm/openclaw-zig-rpc-client`)
+- [x] `scripts/python-pack-check.ps1` (validates python client package tests + wheel/sdist + twine checks for `python/openclaw-zig-rpc-client`)
 - [x] `zig test src/main.zig`
 - [x] Guest/auth parity tests:
   - `channels.telegram_runtime.test.telegram runtime qwen guest auth lifecycle`
@@ -255,3 +256,7 @@ Phase 6 progress notes:
   - GitHub Pages publish verified successful via Actions run `22653680203` with both build and deploy jobs green.
   - RPC docs drift guard added with generated reference script (`scripts/generate-rpc-reference.ps1`) and workflow enforcement in `zig-ci`, `release-preview`, and `docs-pages`.
   - current workflow head status re-verified: `docs-pages` rerun `22669207780` success; latest `zig-ci`, `release-preview`, and `npm-release` are all success.
+  - python package release lane added:
+    - `python/openclaw-zig-rpc-client` package scaffold + tests + CLI.
+    - `scripts/python-pack-check.ps1` added to local/CI/release validation gates.
+    - `.github/workflows/pypi-release.yml` added for manual/release-triggered publish with artifact attach + optional PyPI push.
