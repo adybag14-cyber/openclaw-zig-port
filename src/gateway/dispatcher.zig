@@ -2075,9 +2075,6 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             });
         };
         const runtime_profile = runtimeFeatureProfileFromEnv();
-        const has_openai_key = hasEnvValue("OPENAI_API_KEY");
-        const has_elevenlabs_key = hasEnvValue("ELEVENLABS_API_KEY");
-        const has_kittentts_bin = hasEnvValue("OPENCLAW_ZIG_KITTENTTS_BIN");
         const compat = try getCompatState();
         var synthesized = try synthesizeTtsAudioBlob(
             allocator,
@@ -2085,9 +2082,6 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             output_spec,
             compat.tts_provider,
             runtime_profile,
-            has_openai_key,
-            has_elevenlabs_key,
-            has_kittentts_bin,
         );
         defer synthesized.deinit(allocator);
 
@@ -7877,45 +7871,29 @@ fn synthesizeTtsAudioBlob(
     output_spec: TtsOutputSpec,
     preferred_provider_raw: []const u8,
     profile: RuntimeFeatureProfile,
-    has_openai_key: bool,
-    has_elevenlabs_key: bool,
-    has_kittentts_bin: bool,
 ) !TtsSynthOutput {
     var provider_order: [4][]const u8 = undefined;
     const provider_count = ttsProviderOrder(profile, preferred_provider_raw, &provider_order);
     for (provider_order[0..provider_count]) |provider| {
-        if (std.ascii.eqlIgnoreCase(provider, "openai") and has_openai_key) {
-            const bytes = try buildSimulatedAudioBytes(allocator, text, output_spec.output_format, provider, true);
-            return .{
-                .bytes = bytes,
-                .duration_ms = estimateTtsDurationMs(text, bytes.len),
-                .sample_rate_hz = 24_000,
-                .provider_used = "openai",
-                .source = "remote",
-                .real_audio = true,
-            };
+        if (std.ascii.eqlIgnoreCase(provider, "kittentts")) {
+            if (try trySynthesizeKittentts(allocator, text, output_spec)) |blob| return blob;
+            continue;
         }
-        if (std.ascii.eqlIgnoreCase(provider, "elevenlabs") and has_elevenlabs_key) {
-            const bytes = try buildSimulatedAudioBytes(allocator, text, output_spec.output_format, provider, true);
-            return .{
-                .bytes = bytes,
-                .duration_ms = estimateTtsDurationMs(text, bytes.len),
-                .sample_rate_hz = 44_100,
-                .provider_used = "elevenlabs",
-                .source = "remote",
-                .real_audio = true,
-            };
+        if (std.ascii.eqlIgnoreCase(provider, "openai")) {
+            const api_key = try ttsProviderApiKeyAlloc(allocator, "openai");
+            defer if (api_key) |key| allocator.free(key);
+            if (api_key) |key| {
+                if (try trySynthesizeOpenAi(allocator, key, text, output_spec)) |blob| return blob;
+            }
+            continue;
         }
-        if (std.ascii.eqlIgnoreCase(provider, "kittentts") and has_kittentts_bin) {
-            const bytes = try buildSimulatedAudioBytes(allocator, text, output_spec.output_format, provider, true);
-            return .{
-                .bytes = bytes,
-                .duration_ms = estimateTtsDurationMs(text, bytes.len),
-                .sample_rate_hz = 24_000,
-                .provider_used = "kittentts",
-                .source = "offline-local",
-                .real_audio = true,
-            };
+        if (std.ascii.eqlIgnoreCase(provider, "elevenlabs")) {
+            const api_key = try ttsProviderApiKeyAlloc(allocator, "elevenlabs");
+            defer if (api_key) |key| allocator.free(key);
+            if (api_key) |key| {
+                if (try trySynthesizeElevenLabs(allocator, key, text, output_spec)) |blob| return blob;
+            }
+            continue;
         }
     }
 
@@ -7929,6 +7907,209 @@ fn synthesizeTtsAudioBlob(
         .provider_used = provider_used,
         .source = "simulated",
         .real_audio = false,
+    };
+}
+
+fn ttsProviderApiKeyAlloc(allocator: std.mem.Allocator, provider_raw: []const u8) !?[]u8 {
+    const provider = normalizeTTSProvider(provider_raw);
+    if (std.ascii.eqlIgnoreCase(provider, "openai")) {
+        if (try envLookupAlloc(allocator, "OPENAI_API_KEY")) |value| return value;
+        return envLookupAlloc(allocator, "OPENCLAW_ZIG_TTS_OPENAI_API_KEY");
+    }
+    if (std.ascii.eqlIgnoreCase(provider, "elevenlabs")) {
+        if (try envLookupAlloc(allocator, "ELEVENLABS_API_KEY")) |value| return value;
+        return envLookupAlloc(allocator, "OPENCLAW_ZIG_TTS_ELEVENLABS_API_KEY");
+    }
+    return null;
+}
+
+fn kittenttsBinaryPathAlloc(allocator: std.mem.Allocator) !?[]u8 {
+    if (try envLookupAlloc(allocator, "OPENCLAW_ZIG_KITTENTTS_BIN")) |value| return value;
+    return envLookupAlloc(allocator, "OPENCLAW_RS_KITTENTTS_BIN");
+}
+
+fn trySynthesizeKittentts(
+    allocator: std.mem.Allocator,
+    text: []const u8,
+    output_spec: TtsOutputSpec,
+) !?TtsSynthOutput {
+    const binary = try kittenttsBinaryPathAlloc(allocator);
+    if (binary == null) return null;
+    defer allocator.free(binary.?);
+
+    const format_arg = if (std.ascii.eqlIgnoreCase(output_spec.output_format, "opus")) "opus" else "mp3";
+    const argv = [_][]const u8{ binary.?, "--format", format_arg, "--text", text };
+    const io = std.Io.Threaded.global_single_threaded.io();
+    const timeout: std.Io.Timeout = switch (builtin.os.tag) {
+        .windows => .none,
+        else => .{
+            .duration = .{
+                .clock = .awake,
+                .raw = std.Io.Duration.fromMilliseconds(20_000),
+            },
+        },
+    };
+    const run_result = std.process.run(allocator, io, .{
+        .argv = argv[0..],
+        .create_no_window = true,
+        .stdout_limit = .limited(8 * 1024 * 1024),
+        .stderr_limit = .limited(64 * 1024),
+        .timeout = timeout,
+    }) catch return null;
+    defer allocator.free(run_result.stdout);
+    defer allocator.free(run_result.stderr);
+
+    switch (run_result.term) {
+        .exited => |code| if (code != 0) return null,
+        else => return null,
+    }
+    if (run_result.stdout.len == 0) return null;
+
+    const bytes = try allocator.dupe(u8, run_result.stdout);
+    return .{
+        .bytes = bytes,
+        .duration_ms = estimateTtsDurationMs(text, bytes.len),
+        .sample_rate_hz = 24_000,
+        .provider_used = "kittentts",
+        .source = "offline-local",
+        .real_audio = true,
+    };
+}
+
+fn trySynthesizeOpenAi(
+    allocator: std.mem.Allocator,
+    api_key: []const u8,
+    text: []const u8,
+    output_spec: TtsOutputSpec,
+) !?TtsSynthOutput {
+    const format_value = if (std.ascii.eqlIgnoreCase(output_spec.output_format, "wav")) "wav" else if (std.ascii.eqlIgnoreCase(output_spec.output_format, "opus")) "opus" else "mp3";
+    const Payload = struct {
+        model: []const u8,
+        voice: []const u8,
+        input: []const u8,
+        format: []const u8,
+    };
+    const payload = Payload{
+        .model = "gpt-4o-mini-tts",
+        .voice = "alloy",
+        .input = text,
+        .format = format_value,
+    };
+
+    var request_body: std.Io.Writer.Allocating = .init(allocator);
+    defer request_body.deinit();
+    try std.json.Stringify.value(payload, .{ .emit_null_optional_fields = false }, &request_body.writer);
+    const request_payload = try request_body.toOwnedSlice();
+    defer allocator.free(request_payload);
+
+    var client: std.http.Client = .{
+        .allocator = allocator,
+        .io = std.Io.Threaded.global_single_threaded.io(),
+    };
+    defer client.deinit();
+
+    const auth_header = try std.fmt.allocPrint(allocator, "Bearer {s}", .{api_key});
+    defer allocator.free(auth_header);
+
+    var response_body: std.Io.Writer.Allocating = .init(allocator);
+    defer response_body.deinit();
+    const fetch_result = client.fetch(.{
+        .location = .{ .url = "https://api.openai.com/v1/audio/speech" },
+        .method = .POST,
+        .payload = request_payload,
+        .keep_alive = false,
+        .extra_headers = &.{
+            .{ .name = "content-type", .value = "application/json" },
+            .{ .name = "authorization", .value = auth_header },
+        },
+        .response_writer = &response_body.writer,
+    }) catch return null;
+
+    const status_code: u16 = @intCast(@intFromEnum(fetch_result.status));
+    if (status_code < 200 or status_code >= 300) return null;
+
+    const bytes = try response_body.toOwnedSlice();
+    if (bytes.len == 0) {
+        allocator.free(bytes);
+        return null;
+    }
+    return .{
+        .bytes = bytes,
+        .duration_ms = estimateTtsDurationMs(text, bytes.len),
+        .sample_rate_hz = 24_000,
+        .provider_used = "openai",
+        .source = "remote",
+        .real_audio = true,
+    };
+}
+
+fn trySynthesizeElevenLabs(
+    allocator: std.mem.Allocator,
+    api_key: []const u8,
+    text: []const u8,
+    output_spec: TtsOutputSpec,
+) !?TtsSynthOutput {
+    _ = output_spec;
+    const Payload = struct {
+        text: []const u8,
+        model_id: []const u8,
+        output_format: []const u8,
+    };
+    const payload = Payload{
+        .text = text,
+        .model_id = "eleven_turbo_v2_5",
+        .output_format = "mp3_44100_128",
+    };
+
+    var request_body: std.Io.Writer.Allocating = .init(allocator);
+    defer request_body.deinit();
+    try std.json.Stringify.value(payload, .{ .emit_null_optional_fields = false }, &request_body.writer);
+    const request_payload = try request_body.toOwnedSlice();
+    defer allocator.free(request_payload);
+
+    var client: std.http.Client = .{
+        .allocator = allocator,
+        .io = std.Io.Threaded.global_single_threaded.io(),
+    };
+    defer client.deinit();
+
+    const voice_id = if (try envLookupAlloc(allocator, "ELEVENLABS_VOICE_ID")) |value| blk: {
+        defer allocator.free(value);
+        break :blk try allocator.dupe(u8, value);
+    } else try allocator.dupe(u8, "EXAVITQu4vr4xnSDxMaL");
+    defer allocator.free(voice_id);
+    const endpoint = try std.fmt.allocPrint(allocator, "https://api.elevenlabs.io/v1/text-to-speech/{s}", .{voice_id});
+    defer allocator.free(endpoint);
+
+    var response_body: std.Io.Writer.Allocating = .init(allocator);
+    defer response_body.deinit();
+    const fetch_result = client.fetch(.{
+        .location = .{ .url = endpoint },
+        .method = .POST,
+        .payload = request_payload,
+        .keep_alive = false,
+        .extra_headers = &.{
+            .{ .name = "content-type", .value = "application/json" },
+            .{ .name = "accept", .value = "audio/mpeg" },
+            .{ .name = "xi-api-key", .value = api_key },
+        },
+        .response_writer = &response_body.writer,
+    }) catch return null;
+
+    const status_code: u16 = @intCast(@intFromEnum(fetch_result.status));
+    if (status_code < 200 or status_code >= 300) return null;
+    const bytes = try response_body.toOwnedSlice();
+    if (bytes.len == 0) {
+        allocator.free(bytes);
+        return null;
+    }
+    return .{
+        .bytes = bytes,
+        .duration_ms = estimateTtsDurationMs(text, bytes.len),
+        .sample_rate_hz = 44_100,
+        .provider_used = "elevenlabs",
+        .source = "remote",
+        .real_audio = true,
     };
 }
 

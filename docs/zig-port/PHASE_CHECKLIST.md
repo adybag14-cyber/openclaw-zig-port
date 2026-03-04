@@ -100,6 +100,11 @@ Phase 6 progress notes:
   - TTS methods: `tts.status`, `tts.enable`, `tts.disable`, `tts.providers`, `tts.setProvider`, `tts.convert`
   - model/control methods: `models.list`, `chat.abort`, `chat.inject`, `push.test`, `canvas.present`, `update.run`
   - stateful compat runtime now tracks talk mode/voice, TTS provider/enabled, voicewake phrase, and update jobs.
+  - `tts.convert` now performs best-effort real synthesis before fallback:
+    - local `kittentts` binary execution via `OPENCLAW_ZIG_KITTENTTS_BIN` / `OPENCLAW_RS_KITTENTTS_BIN`
+    - OpenAI TTS HTTP path via `OPENAI_API_KEY` / `OPENCLAW_ZIG_TTS_OPENAI_API_KEY`
+    - ElevenLabs HTTP path via `ELEVENLABS_API_KEY` / `OPENCLAW_ZIG_TTS_ELEVENLABS_API_KEY`
+    - deterministic simulated-audio fallback remains for no-key/no-binary or provider failures.
 - Added compat config/wizard/session-mutation slice:
   - config methods: `config.set`, `config.patch`, `config.apply`, `config.schema`
   - wizard methods: `wizard.start`, `wizard.next`, `wizard.cancel`, `wizard.status`
@@ -147,7 +152,7 @@ Phase 6 progress notes:
 ## Latest Validation Snapshot
 - [x] `zig build`
 - [x] `zig build test`
-- [x] `zig build test --summary all` -> `74/74` passing (includes completion outcome semantics + richer assistant-text extraction coverage)
+- [x] `zig build test --summary all` -> `77/77` passing (includes TTS provider-synthesis execution-path coverage + completion outcome semantics)
 - [x] `scripts/generate-rpc-reference.ps1` (regenerates `docs/rpc-reference.md` from `src/gateway/registry.zig`, currently `153` methods)
 - [x] `scripts/npm-pack-check.ps1` (validates npm package dry-run for `npm/openclaw-zig-rpc-client`)
 - [x] `zig test src/main.zig`
@@ -184,7 +189,7 @@ Phase 6 progress notes:
   - Failure class reproduces in minimal targets and remains toolchain-level on this host (`compiler_rt` + `memory allocation failure`; `aarch64-linux*` additionally show `invalid constraint: 'X'`; `arm-linux-androideabi` minimal repro exits with access-violation code `-1073741819`)
   - Evidence: `release/cross-target-diagnostics/summary.json` and per-target `stdout/stderr` logs in `release/cross-target-diagnostics/`
 - [x] Android ARMv7 link failure (`__tls_get_addr`) was resolved for CI/release builds by forcing single-threaded mode for `arm-linux-androideabi` in `build.zig`.
-- [x] Freshness check: Codeberg Zig `master`=`ce32003625566dcc3687e9e32be411ccb83a4aaa`; local toolchain=`0.16.0-dev.2703+0a412853a` (hash mismatch acknowledged)
+- [x] Freshness check: Codeberg Zig `master`=`0ae1c6b54acf112c7bbcc63a19f7ad8fa9842d2a`; local toolchain=`0.16.0-dev.2703+0a412853a` (hash mismatch acknowledged)
 - [x] Serve smoke: `GET /health` and `POST /rpc` (`shutdown`) both returned HTTP 200
 - [x] Serve smoke: `POST /rpc` `file.write`, `file.read`, and `exec.run` returned HTTP 200 with real payloads
 - [x] Serve smoke: `POST /rpc` `security.audit` and `doctor` return structured diagnostics payloads
