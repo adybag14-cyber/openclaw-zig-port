@@ -61,7 +61,7 @@ while maintaining parity-first validation and release gating.
     - target-path normalization for gateway route matching (`/health|/rpc|/ws` now correctly match query-bearing targets like `/rpc?x=1` and `/ws?mode=compat`)
     - websocket RPC parity expanded to accept binary websocket frames in addition to text frames (aligned with Go transport behavior)
     - `security.audit` + `doctor` gateway auth/rate-limit checks and regression tests
-    - validation: `zig build`, `zig build test` (`90/90`), `scripts/runtime-smoke-check.ps1`, `scripts/gateway-auth-smoke-check.ps1`, `scripts/websocket-smoke-check.ps1`, `scripts/web-login-smoke-check.ps1`
+    - validation: `zig build`, `zig build test` (`91/91`), `scripts/runtime-smoke-check.ps1`, `scripts/gateway-auth-smoke-check.ps1`, `scripts/websocket-smoke-check.ps1`, `scripts/web-login-smoke-check.ps1`
   - README refreshed with current parity/validation state and workflow guidance.
   - Local Zig toolchain reference doc refreshed to current local/remote hashes.
   - MkDocs documentation site scaffolded with full feature/domain documentation and GitHub Pages deployment workflow.
@@ -255,7 +255,7 @@ while maintaining parity-first validation and release gating.
   - bare-metal ABI v2 depth expansion shipped:
     - added shared ABI contracts module (`src/baremetal/abi.zig`) with explicit layout tests
     - added command mailbox + kernel info exports and runtime command-processing loop in `src/baremetal_main.zig`
-    - validated with `zig build test --summary all` (`90/90`) and `scripts/baremetal-smoke-check.ps1`
+    - validated with `zig build test --summary all` (`91/91`) and `scripts/baremetal-smoke-check.ps1`
   - bare-metal x86 bootstrap depth expansion shipped:
     - added descriptor-table + interrupt bootstrap module (`src/baremetal/x86_bootstrap.zig`)
     - runtime now initializes descriptor tables via `x86_bootstrap.init()` on start/tick paths
@@ -281,6 +281,9 @@ while maintaining parity-first validation and release gating.
   - bare-metal exception history ring expansion shipped:
     - new exports: `oc_exception_history_capacity`, `oc_exception_history_len`, `oc_exception_history_head_index`, `oc_exception_history_overflow_count`, `oc_exception_history_event`, `oc_exception_history_clear`.
     - new command opcode wired: `command_clear_exception_history`.
+  - bare-metal interrupt history ring expansion shipped:
+    - new exports: `oc_interrupt_history_capacity`, `oc_interrupt_history_len`, `oc_interrupt_history_head_index`, `oc_interrupt_history_overflow_count`, `oc_interrupt_history_event`, `oc_interrupt_history_clear`.
+    - new command opcode wired: `command_clear_interrupt_history`.
   - CI recovery note (2026-03-04):
     - fixed Zig master API regression in Telegram runtime env lookup (`.block = .global` on `std.process.Environ`), which broke `zig-ci` validate and all cross-target jobs on run `22668754695`.
     - implemented injected environ wiring (`telegram_runtime.setEnviron`) and switched env lookup to `std.process.Environ.getAlloc(process_environ, ...)`.

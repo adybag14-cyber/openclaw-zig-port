@@ -149,6 +149,8 @@ test "baremetal abi module exposes expected v2 contract constants" {
     try std.testing.expect((baremetal_abi.defaultAbiFlags() & baremetal_abi.kernel_abi_exception_payload) != 0);
     try std.testing.expect((baremetal_abi.defaultFeatureFlags() & baremetal_abi.feature_exception_history_export) != 0);
     try std.testing.expect((baremetal_abi.defaultAbiFlags() & baremetal_abi.kernel_abi_exception_history) != 0);
+    try std.testing.expect((baremetal_abi.defaultFeatureFlags() & baremetal_abi.feature_interrupt_history_export) != 0);
+    try std.testing.expect((baremetal_abi.defaultAbiFlags() & baremetal_abi.kernel_abi_interrupt_history) != 0);
 }
 
 test "baremetal x86 bootstrap module exports descriptor table metadata" {
@@ -169,4 +171,8 @@ test "baremetal x86 bootstrap module exports descriptor table metadata" {
     _ = baremetal_x86_bootstrap.oc_exception_history_len();
     _ = baremetal_x86_bootstrap.oc_exception_history_event(0);
     _ = baremetal_x86_bootstrap.oc_exception_history_ptr();
+    _ = baremetal_x86_bootstrap.oc_interrupt_history_capacity();
+    _ = baremetal_x86_bootstrap.oc_interrupt_history_len();
+    _ = baremetal_x86_bootstrap.oc_interrupt_history_event(0);
+    _ = baremetal_x86_bootstrap.oc_interrupt_history_ptr();
 }

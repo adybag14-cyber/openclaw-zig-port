@@ -153,6 +153,7 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
             x86_bootstrap.oc_reset_interrupt_counters();
             x86_bootstrap.oc_reset_exception_counters();
             x86_bootstrap.oc_exception_history_clear();
+            x86_bootstrap.oc_interrupt_history_clear();
             return abi.result_ok;
         },
         abi.command_set_mode => {
@@ -202,6 +203,10 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
         },
         abi.command_clear_exception_history => {
             x86_bootstrap.oc_exception_history_clear();
+            return abi.result_ok;
+        },
+        abi.command_clear_interrupt_history => {
+            x86_bootstrap.oc_interrupt_history_clear();
             return abi.result_ok;
         },
         else => return abi.result_not_supported,

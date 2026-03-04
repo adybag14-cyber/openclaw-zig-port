@@ -42,12 +42,24 @@ pub const InterruptState = extern struct {
     last_exception_code: u64,
     exception_history_len: u32,
     exception_history_overflow: u32,
+    interrupt_history_len: u32,
+    interrupt_history_overflow: u32,
 };
 
 pub const ExceptionEvent = extern struct {
     seq: u32,
     vector: u8,
     reserved0: [3]u8,
+    code: u64,
+    interrupt_count: u64,
+    exception_count: u64,
+};
+
+pub const InterruptEvent = extern struct {
+    seq: u32,
+    vector: u8,
+    is_exception: u8,
+    reserved0: [2]u8,
     code: u64,
     interrupt_count: u64,
     exception_count: u64,
@@ -74,6 +86,12 @@ var exception_history_count: u32 = 0;
 var exception_history_head: u32 = 0;
 var exception_history_seq: u32 = 0;
 var exception_history_overflow: u32 = 0;
+const interrupt_history_capacity: usize = 32;
+var interrupt_history: [interrupt_history_capacity]InterruptEvent = undefined;
+var interrupt_history_count: u32 = 0;
+var interrupt_history_head: u32 = 0;
+var interrupt_history_seq: u32 = 0;
+var interrupt_history_overflow: u32 = 0;
 var interrupt_state: InterruptState = .{
     .descriptor_tables_ready = 0,
     .descriptor_tables_loaded = 0,
@@ -89,6 +107,8 @@ var interrupt_state: InterruptState = .{
     .last_exception_code = 0,
     .exception_history_len = 0,
     .exception_history_overflow = 0,
+    .interrupt_history_len = 0,
+    .interrupt_history_overflow = 0,
 };
 
 const default_selector: u16 = 0x08;
@@ -99,6 +119,7 @@ pub fn init() void {
     @memset(&gdt, std.mem.zeroes(GdtEntry));
     @memset(&idt, std.mem.zeroes(IdtEntry));
     @memset(&exception_history, std.mem.zeroes(ExceptionEvent));
+    @memset(&interrupt_history, std.mem.zeroes(InterruptEvent));
 
     gdt[1] = makeGdtEntry(0, 0xFFFFF, 0x9A, 0xA0);
     gdt[2] = makeGdtEntry(0, 0xFFFFF, 0x92, 0xA0);
@@ -229,6 +250,36 @@ pub export fn oc_exception_history_event(index: u32) ExceptionEvent {
     return exception_history[pos];
 }
 
+pub export fn oc_interrupt_history_capacity() u32 {
+    return @as(u32, interrupt_history_capacity);
+}
+
+pub export fn oc_interrupt_history_len() u32 {
+    return interrupt_history_count;
+}
+
+pub export fn oc_interrupt_history_head_index() u32 {
+    return interrupt_history_head;
+}
+
+pub export fn oc_interrupt_history_overflow_count() u32 {
+    return interrupt_history_overflow;
+}
+
+pub export fn oc_interrupt_history_ptr() *const [interrupt_history_capacity]InterruptEvent {
+    return &interrupt_history;
+}
+
+pub export fn oc_interrupt_history_event(index: u32) InterruptEvent {
+    if (index >= interrupt_history_count) {
+        return std.mem.zeroes(InterruptEvent);
+    }
+    const cap_u32: u32 = @as(u32, interrupt_history_capacity);
+    const oldest = if (interrupt_history_count == cap_u32) interrupt_history_head else 0;
+    const pos = @mod(oldest + index, cap_u32);
+    return interrupt_history[pos];
+}
+
 pub export fn oc_descriptor_init_count() u32 {
     return descriptor_init_counter;
 }
@@ -288,6 +339,15 @@ pub export fn oc_exception_history_clear() void {
     refreshInterruptState();
 }
 
+pub export fn oc_interrupt_history_clear() void {
+    @memset(&interrupt_history, std.mem.zeroes(InterruptEvent));
+    interrupt_history_count = 0;
+    interrupt_history_head = 0;
+    interrupt_history_seq = 0;
+    interrupt_history_overflow = 0;
+    refreshInterruptState();
+}
+
 pub export fn oc_trigger_interrupt(vector: u8) void {
     oc_interrupt_stub(vector);
 }
@@ -306,6 +366,7 @@ pub export fn oc_exception_stub(vector: u8, code: u64) void {
     last_exception_vector = vector;
     last_exception_code = code;
     exception_counter +%= 1;
+    recordInterrupt(vector, true, code);
     recordException(vector, code);
     refreshInterruptState();
 }
@@ -317,9 +378,33 @@ pub export fn oc_interrupt_stub(vector: u8) void {
         last_exception_vector = vector;
         last_exception_code = 0;
         exception_counter +%= 1;
+        recordInterrupt(vector, true, 0);
         recordException(vector, 0);
+    } else {
+        recordInterrupt(vector, false, 0);
     }
     refreshInterruptState();
+}
+
+fn recordInterrupt(vector: u8, is_exception: bool, code: u64) void {
+    const cap_u32: u32 = @as(u32, interrupt_history_capacity);
+    const write_index = interrupt_history_head;
+    interrupt_history_seq +%= 1;
+    interrupt_history[write_index] = .{
+        .seq = interrupt_history_seq,
+        .vector = vector,
+        .is_exception = if (is_exception) 1 else 0,
+        .reserved0 = std.mem.zeroes([2]u8),
+        .code = code,
+        .interrupt_count = interrupt_counter,
+        .exception_count = exception_counter,
+    };
+    interrupt_history_head = @mod(interrupt_history_head + 1, cap_u32);
+    if (interrupt_history_count < cap_u32) {
+        interrupt_history_count += 1;
+    } else {
+        interrupt_history_overflow +%= 1;
+    }
 }
 
 fn recordException(vector: u8, code: u64) void {
@@ -358,6 +443,8 @@ fn refreshInterruptState() void {
         .last_exception_code = last_exception_code,
         .exception_history_len = exception_history_count,
         .exception_history_overflow = exception_history_overflow,
+        .interrupt_history_len = interrupt_history_count,
+        .interrupt_history_overflow = interrupt_history_overflow,
     };
 }
 
@@ -441,4 +528,30 @@ test "x86 bootstrap exception history ring buffer records, overflows, and clears
     try std.testing.expectEqual(@as(u32, 0), oc_exception_history_len());
     try std.testing.expectEqual(@as(u32, 0), oc_exception_history_overflow_count());
     try std.testing.expectEqual(@as(u32, 0), oc_exception_history_head_index());
+}
+
+test "x86 bootstrap interrupt history ring buffer records vectors and exception flag" {
+    init();
+    oc_interrupt_history_clear();
+    oc_exception_history_clear();
+    oc_reset_interrupt_counters();
+    oc_reset_exception_counters();
+
+    oc_trigger_interrupt(200);
+    oc_trigger_exception(13, 0xCAFE);
+
+    try std.testing.expectEqual(@as(u32, 2), oc_interrupt_history_len());
+    const e0 = oc_interrupt_history_event(0);
+    try std.testing.expectEqual(@as(u8, 200), e0.vector);
+    try std.testing.expectEqual(@as(u8, 0), e0.is_exception);
+    try std.testing.expectEqual(@as(u64, 0), e0.code);
+
+    const e1 = oc_interrupt_history_event(1);
+    try std.testing.expectEqual(@as(u8, 13), e1.vector);
+    try std.testing.expectEqual(@as(u8, 1), e1.is_exception);
+    try std.testing.expectEqual(@as(u64, 0xCAFE), e1.code);
+
+    oc_interrupt_history_clear();
+    try std.testing.expectEqual(@as(u32, 0), oc_interrupt_history_len());
+    try std.testing.expectEqual(@as(u32, 0), oc_interrupt_history_overflow_count());
 }
