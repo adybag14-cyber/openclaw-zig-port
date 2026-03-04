@@ -7,6 +7,7 @@ const BaremetalCommand = abi.BaremetalCommand;
 const BaremetalKernelInfo = abi.BaremetalKernelInfo;
 const BaremetalBootDiagnostics = abi.BaremetalBootDiagnostics;
 const BaremetalCommandEvent = abi.BaremetalCommandEvent;
+const BaremetalHealthEvent = abi.BaremetalHealthEvent;
 
 const multiboot2_magic: u32 = 0xE85250D6;
 const multiboot2_architecture_i386: u32 = 0;
@@ -93,6 +94,13 @@ var command_history_count: u32 = 0;
 var command_history_head: u32 = 0;
 var command_history_overflow: u32 = 0;
 
+const health_history_capacity: usize = 64;
+var health_history: [health_history_capacity]BaremetalHealthEvent = std.mem.zeroes([health_history_capacity]BaremetalHealthEvent);
+var health_history_count: u32 = 0;
+var health_history_head: u32 = 0;
+var health_history_overflow: u32 = 0;
+var health_history_seq: u32 = 0;
+
 pub export fn oc_status_ptr() *const abi.BaremetalStatus {
     return &status;
 }
@@ -152,6 +160,44 @@ pub export fn oc_command_history_clear() void {
     command_history_overflow = 0;
 }
 
+pub export fn oc_health_history_capacity() u32 {
+    return @as(u32, health_history_capacity);
+}
+
+pub export fn oc_health_history_len() u32 {
+    return health_history_count;
+}
+
+pub export fn oc_health_history_head_index() u32 {
+    return health_history_head;
+}
+
+pub export fn oc_health_history_overflow_count() u32 {
+    return health_history_overflow;
+}
+
+pub export fn oc_health_history_ptr() *const [health_history_capacity]BaremetalHealthEvent {
+    return &health_history;
+}
+
+pub export fn oc_health_history_event(index: u32) BaremetalHealthEvent {
+    if (index >= health_history_count) {
+        return std.mem.zeroes(BaremetalHealthEvent);
+    }
+    const cap_u32: u32 = @as(u32, health_history_capacity);
+    const oldest = if (health_history_count == cap_u32) health_history_head else 0;
+    const pos = @mod(oldest + index, cap_u32);
+    return health_history[pos];
+}
+
+pub export fn oc_health_history_clear() void {
+    @memset(&health_history, std.mem.zeroes(BaremetalHealthEvent));
+    health_history_count = 0;
+    health_history_head = 0;
+    health_history_overflow = 0;
+    health_history_seq = 0;
+}
+
 pub export fn oc_submit_command(opcode: u16, arg0: u64, arg1: u64) u32 {
     const next_seq = command_mailbox.seq +% 1;
     command_mailbox.opcode = opcode;
@@ -177,6 +223,7 @@ pub export fn oc_tick() void {
     const batch = if (status.tick_batch_hint == 0) @as(u32, 1) else status.tick_batch_hint;
     status.ticks +%= @as(u64, batch);
     boot_diagnostics.last_tick_observed = status.ticks;
+    recordHealth(status.last_health_code, status.mode, status.ticks, status.command_seq_ack);
 }
 
 pub export fn oc_tick_n(iterations: u32) void {
@@ -225,6 +272,7 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
         abi.command_set_health_code => {
             if (arg0 > std.math.maxInt(u16)) return abi.result_invalid_argument;
             status.last_health_code = @as(u16, @truncate(arg0));
+            recordHealth(status.last_health_code, status.mode, status.ticks, status.command_seq_ack);
             return abi.result_ok;
         },
         abi.command_set_feature_flags => {
@@ -240,6 +288,7 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
             x86_bootstrap.oc_exception_history_clear();
             x86_bootstrap.oc_interrupt_history_clear();
             oc_command_history_clear();
+            oc_health_history_clear();
             return abi.result_ok;
         },
         abi.command_set_mode => {
@@ -252,6 +301,8 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
         abi.command_trigger_panic_flag => {
             status.mode = abi.mode_panicked;
             status.panic_count +%= 1;
+            setBootPhase(abi.boot_phase_panicked);
+            recordHealth(status.last_health_code, status.mode, status.ticks, status.command_seq_ack);
             return abi.result_ok;
         },
         abi.command_set_tick_batch_hint => {
@@ -318,6 +369,10 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
             oc_command_history_clear();
             return abi.result_ok;
         },
+        abi.command_clear_health_history => {
+            oc_health_history_clear();
+            return abi.result_ok;
+        },
         else => return abi.result_not_supported,
     }
 }
@@ -338,6 +393,27 @@ fn recordCommand(seq: u32, opcode: u16, arg0: u64, arg1: u64, result: i16, tick:
         command_history_count += 1;
     } else {
         command_history_overflow +%= 1;
+    }
+}
+
+fn recordHealth(health_code: u16, mode: u8, tick: u64, command_seq_ack: u32) void {
+    const cap_u32: u32 = @as(u32, health_history_capacity);
+    const write_index = health_history_head;
+    health_history_seq +%= 1;
+    health_history[write_index] = .{
+        .seq = health_history_seq,
+        .health_code = health_code,
+        .mode = mode,
+        .reserved0 = 0,
+        .tick = tick,
+        .command_seq_ack = command_seq_ack,
+        .reserved1 = 0,
+    };
+    health_history_head = @mod(health_history_head + 1, cap_u32);
+    if (health_history_count < cap_u32) {
+        health_history_count += 1;
+    } else {
+        health_history_overflow +%= 1;
     }
 }
 
@@ -433,6 +509,7 @@ test "baremetal diagnostics command flow updates phase and stack snapshot" {
     };
     resetBootDiagnostics();
     oc_command_history_clear();
+    oc_health_history_clear();
 
     var seq = oc_submit_command(abi.command_capture_stack_pointer, 0, 0);
     oc_tick();
@@ -504,4 +581,42 @@ test "baremetal command history ring keeps newest mailbox entries" {
     const last = oc_command_history_event(cap - 1);
     try std.testing.expectEqual(cap + 3, last.seq);
     try std.testing.expectEqual(@as(u64, 100 + (cap + 2)), last.arg0);
+}
+
+test "baremetal health history captures tick health and clear control" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.last_health_code = 0;
+    status.command_seq_ack = 0;
+    status.tick_batch_hint = 1;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_health_history_clear();
+
+    oc_tick();
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 2), oc_health_history_len());
+    const first = oc_health_history_event(0);
+    try std.testing.expectEqual(@as(u16, 200), first.health_code);
+    try std.testing.expectEqual(@as(u8, abi.mode_running), first.mode);
+
+    _ = oc_submit_command(abi.command_set_health_code, 418, 0);
+    oc_tick();
+    try std.testing.expect(oc_health_history_len() >= 4);
+    const pre_tick = oc_health_history_event(oc_health_history_len() - 2);
+    try std.testing.expectEqual(@as(u16, 418), pre_tick.health_code);
+    const latest = oc_health_history_event(oc_health_history_len() - 1);
+    try std.testing.expectEqual(@as(u16, 200), latest.health_code);
+
+    _ = oc_submit_command(abi.command_clear_health_history, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 1), oc_health_history_len());
+    const clear_latest = oc_health_history_event(0);
+    try std.testing.expectEqual(@as(u16, 200), clear_latest.health_code);
 }

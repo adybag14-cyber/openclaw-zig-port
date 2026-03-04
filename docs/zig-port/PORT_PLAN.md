@@ -103,6 +103,11 @@ while maintaining parity-first validation and release gating.
     - new command event ABI contract (`BaremetalCommandEvent`) and feature flags (`feature_command_history_export`, `kernel_abi_command_history`)
     - exported history-ring telemetry + clear controls (`oc_command_history_capacity`, `oc_command_history_len`, `oc_command_history_event`, `oc_command_history_clear`)
     - new mailbox opcode wired: `command_clear_command_history`
+  - Bare-metal health-history depth expansion shipped:
+    - new health event ABI contract (`BaremetalHealthEvent`) and feature flags (`feature_health_history_export`, `kernel_abi_health_history`)
+    - exported health history ring telemetry + clear controls (`oc_health_history_capacity`, `oc_health_history_len`, `oc_health_history_event`, `oc_health_history_clear`)
+    - new mailbox opcode wired: `command_clear_health_history`
+    - runtime now records health snapshots from both command-path (`command_set_health_code`) and tick-path health enforcement.
 - Phase 4 complete:
   - Guard pipeline with prompt-risk scoring + loop-guard enforcement (`src/security/guard.zig`, `src/security/loop_guard.zig`)
   - RPC diagnostics surfaces: `security.audit` and `doctor`
