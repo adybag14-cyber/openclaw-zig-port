@@ -2,6 +2,8 @@ const std = @import("std");
 
 pub const gdt_entries_count: usize = 8;
 pub const idt_entries_count: usize = 256;
+pub const interrupt_vector_table_size: usize = 256;
+pub const exception_vector_table_size: usize = 32;
 
 pub const GdtEntry = extern struct {
     limit_low: u16,
@@ -74,9 +76,11 @@ var descriptor_tables_ready: bool = false;
 var descriptor_tables_loaded: bool = false;
 var last_interrupt_vector: u8 = 0;
 var interrupt_counter: u64 = 0;
+var interrupt_vector_counts: [interrupt_vector_table_size]u64 = std.mem.zeroes([interrupt_vector_table_size]u64);
 var last_exception_vector: u8 = 0;
 var exception_counter: u64 = 0;
 var last_exception_code: u64 = 0;
+var exception_vector_counts: [exception_vector_table_size]u64 = std.mem.zeroes([exception_vector_table_size]u64);
 var descriptor_init_counter: u32 = 0;
 var descriptor_load_attempts: u32 = 0;
 var descriptor_load_successes: u32 = 0;
@@ -208,12 +212,29 @@ pub export fn oc_interrupt_count() u64 {
     return interrupt_counter;
 }
 
+pub export fn oc_interrupt_vector_counts_ptr() *const [interrupt_vector_table_size]u64 {
+    return &interrupt_vector_counts;
+}
+
+pub export fn oc_interrupt_vector_count(vector: u8) u64 {
+    return interrupt_vector_counts[vector];
+}
+
 pub export fn oc_last_exception_vector() u8 {
     return last_exception_vector;
 }
 
 pub export fn oc_exception_count() u64 {
     return exception_counter;
+}
+
+pub export fn oc_exception_vector_counts_ptr() *const [exception_vector_table_size]u64 {
+    return &exception_vector_counts;
+}
+
+pub export fn oc_exception_vector_count(vector: u8) u64 {
+    if (vector >= exception_vector_table_size) return 0;
+    return exception_vector_counts[vector];
 }
 
 pub export fn oc_last_exception_code() u64 {
@@ -330,6 +351,12 @@ pub export fn oc_reset_exception_counters() void {
     refreshInterruptState();
 }
 
+pub export fn oc_reset_vector_counters() void {
+    @memset(&interrupt_vector_counts, 0);
+    @memset(&exception_vector_counts, 0);
+    refreshInterruptState();
+}
+
 pub export fn oc_exception_history_clear() void {
     @memset(&exception_history, std.mem.zeroes(ExceptionEvent));
     exception_history_count = 0;
@@ -363,9 +390,11 @@ pub export fn oc_exception_stub(vector: u8, code: u64) void {
     }
     last_interrupt_vector = vector;
     interrupt_counter +%= 1;
+    interrupt_vector_counts[vector] +%= 1;
     last_exception_vector = vector;
     last_exception_code = code;
     exception_counter +%= 1;
+    exception_vector_counts[vector] +%= 1;
     recordInterrupt(vector, true, code);
     recordException(vector, code);
     refreshInterruptState();
@@ -374,10 +403,12 @@ pub export fn oc_exception_stub(vector: u8, code: u64) void {
 pub export fn oc_interrupt_stub(vector: u8) void {
     last_interrupt_vector = vector;
     interrupt_counter +%= 1;
+    interrupt_vector_counts[vector] +%= 1;
     if (vector < exception_vector_limit) {
         last_exception_vector = vector;
         last_exception_code = 0;
         exception_counter +%= 1;
+        exception_vector_counts[vector] +%= 1;
         recordInterrupt(vector, true, 0);
         recordException(vector, 0);
     } else {
@@ -554,4 +585,29 @@ test "x86 bootstrap interrupt history ring buffer records vectors and exception 
     oc_interrupt_history_clear();
     try std.testing.expectEqual(@as(u32, 0), oc_interrupt_history_len());
     try std.testing.expectEqual(@as(u32, 0), oc_interrupt_history_overflow_count());
+}
+
+test "x86 bootstrap vector counters track per-vector hits and reset" {
+    init();
+    oc_reset_interrupt_counters();
+    oc_reset_exception_counters();
+    oc_reset_vector_counters();
+
+    oc_trigger_interrupt(10);
+    oc_trigger_interrupt(10);
+    oc_trigger_interrupt(200);
+    oc_trigger_exception(14, 0xABCD);
+
+    try std.testing.expectEqual(@as(u64, 2), oc_interrupt_vector_count(10));
+    try std.testing.expectEqual(@as(u64, 1), oc_interrupt_vector_count(200));
+    try std.testing.expectEqual(@as(u64, 1), oc_interrupt_vector_count(14));
+    try std.testing.expectEqual(@as(u64, 1), oc_exception_vector_count(14));
+    try std.testing.expectEqual(@as(u64, 2), oc_exception_vector_count(10));
+    try std.testing.expectEqual(@as(u64, 0), oc_exception_vector_count(200));
+
+    oc_reset_vector_counters();
+    try std.testing.expectEqual(@as(u64, 0), oc_interrupt_vector_count(10));
+    try std.testing.expectEqual(@as(u64, 0), oc_interrupt_vector_count(14));
+    try std.testing.expectEqual(@as(u64, 0), oc_exception_vector_count(10));
+    try std.testing.expectEqual(@as(u64, 0), oc_exception_vector_count(14));
 }

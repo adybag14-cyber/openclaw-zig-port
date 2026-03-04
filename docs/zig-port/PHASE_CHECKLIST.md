@@ -179,7 +179,7 @@ Phase 6 progress notes:
 ## Latest Validation Snapshot
 - [x] `zig build`
 - [x] `zig build test`
-- [x] `zig build test --summary all` -> `91/91` passing (includes gateway auth/rate-limit hardening tests, TTS/completion execution-path coverage, and bare-metal ABI v2 contract tests)
+- [x] `zig build test --summary all` -> `92/92` passing (includes gateway auth/rate-limit hardening tests, TTS/completion execution-path coverage, and bare-metal ABI v2 contract tests)
 - [x] `scripts/generate-rpc-reference.ps1` (regenerates `docs/rpc-reference.md` from `src/gateway/registry.zig`, currently `153` methods)
 - [x] `scripts/npm-pack-check.ps1` (validates npm package dry-run for `npm/openclaw-zig-rpc-client`)
 - [x] `scripts/python-pack-check.ps1` (validates python client package tests + wheel/sdist + twine checks for `python/openclaw-zig-rpc-client`)
@@ -251,6 +251,9 @@ Phase 6 progress notes:
 - [x] Bare-metal interrupt history ring added:
   - exports: `oc_interrupt_history_capacity`, `oc_interrupt_history_len`, `oc_interrupt_history_head_index`, `oc_interrupt_history_overflow_count`, `oc_interrupt_history_event`, `oc_interrupt_history_clear`
   - opcode: `command_clear_interrupt_history`
+- [x] Bare-metal vector counter telemetry added:
+  - exports: `oc_interrupt_vector_counts_ptr`, `oc_interrupt_vector_count`, `oc_exception_vector_counts_ptr`, `oc_exception_vector_count`, `oc_reset_vector_counters`
+  - opcode: `command_reset_vector_counters`
 - [x] `scripts/baremetal-smoke-check.ps1` now validates Multiboot2 header fields and checksum (`magic`, `arch`, `header_length`, `checksum`, end-tag tuple) in addition to section/symbol invariants.
 - [x] Cross-target diagnostics matrix (`scripts/zig-cross-target-matrix.ps1`) now covers desktop + Android with per-target logs and JSON summary:
   - Local Windows Zig master result: `4/8` pass (`x86_64-windows`, `x86_64-linux`, `x86_64-macos`, `x86_64-linux-android`)

@@ -152,6 +152,7 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
             status.panic_count = 0;
             x86_bootstrap.oc_reset_interrupt_counters();
             x86_bootstrap.oc_reset_exception_counters();
+            x86_bootstrap.oc_reset_vector_counters();
             x86_bootstrap.oc_exception_history_clear();
             x86_bootstrap.oc_interrupt_history_clear();
             return abi.result_ok;
@@ -207,6 +208,10 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
         },
         abi.command_clear_interrupt_history => {
             x86_bootstrap.oc_interrupt_history_clear();
+            return abi.result_ok;
+        },
+        abi.command_reset_vector_counters => {
+            x86_bootstrap.oc_reset_vector_counters();
             return abi.result_ok;
         },
         else => return abi.result_not_supported,
