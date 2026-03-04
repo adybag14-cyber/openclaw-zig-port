@@ -11,11 +11,21 @@ param(
     [string] $ZigRegistryPath = "",
     [string] $OutputJsonPath = "",
     [string] $OutputMarkdownPath = "",
+    [string] $GitHubToken = "",
     [switch] $FailOnExtra
 )
 
 $ErrorActionPreference = "Stop"
-$ApiHeaders = @{ "User-Agent" = "openclaw-zig-port-parity" }
+$ApiHeaders = @{
+    "User-Agent" = "openclaw-zig-port-parity"
+    "Accept" = "application/vnd.github+json"
+}
+if ([string]::IsNullOrWhiteSpace($GitHubToken)) {
+    $GitHubToken = $env:GITHUB_TOKEN
+}
+if (-not [string]::IsNullOrWhiteSpace($GitHubToken)) {
+    $ApiHeaders["Authorization"] = "Bearer $GitHubToken"
+}
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 if ([string]::IsNullOrWhiteSpace($ZigRegistryPath)) {

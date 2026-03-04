@@ -46,7 +46,7 @@ jobs:
 
       - name: Method parity gate (Go latest release + original latest release)
         shell: pwsh
-        run: ./scripts/check-go-method-parity.ps1 -OutputJsonPath parity-go-zig.json -OutputMarkdownPath parity-go-zig.md
+        run: ./scripts/check-go-method-parity.ps1 -GitHubToken "${{ github.token }}" -OutputJsonPath parity-go-zig.json -OutputMarkdownPath parity-go-zig.md
 
       - name: Upload parity report
         uses: actions/upload-artifact@v4

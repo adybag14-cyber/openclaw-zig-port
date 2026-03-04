@@ -64,7 +64,14 @@ if (-not (Test-Path $parityScript)) {
     throw "Parity script not found: $parityScript"
 }
 try {
-    & $parityScript -OutputJsonPath $parityJsonPath -OutputMarkdownPath $parityMdPath
+    $parityArgs = @(
+        "-OutputJsonPath", $parityJsonPath,
+        "-OutputMarkdownPath", $parityMdPath
+    )
+    if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
+        $parityArgs += @("-GitHubToken", $env:GITHUB_TOKEN)
+    }
+    & $parityScript @parityArgs
     if (-not $?) {
         throw "Go->Zig parity gate failed in release-preview flow."
     }
