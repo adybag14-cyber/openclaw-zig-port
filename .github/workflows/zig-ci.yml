@@ -14,10 +14,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Zig (master)
+      - name: Setup Zig (master) primary
+        id: setup_zig_primary
+        continue-on-error: true
         uses: mlugg/setup-zig@v2
         with:
           version: master
+          use-cache: false
+
+      - name: Setup Zig (master) mirror fallback
+        if: steps.setup_zig_primary.outcome == 'failure'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: master
+          mirror: https://pkg.machengine.org/zig
           use-cache: false
 
       - name: Setup Node
@@ -132,10 +142,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Zig (master)
+      - name: Setup Zig (master) primary
+        id: setup_zig_primary
+        continue-on-error: true
         uses: mlugg/setup-zig@v2
         with:
           version: master
+          use-cache: false
+
+      - name: Setup Zig (master) mirror fallback
+        if: steps.setup_zig_primary.outcome == 'failure'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: master
+          mirror: https://pkg.machengine.org/zig
           use-cache: false
 
       - name: Zig version
