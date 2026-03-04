@@ -2,7 +2,11 @@
 
 ## Objective
 
-Port OpenClaw Go runtime behavior from baseline commit `65c974b528e2` into a production Zig runtime with parity-first validation.
+Track and achieve OpenClaw Zig parity against both upstream baselines:
+- latest `adybag14-cyber/openclaw-go-port` release tag
+- latest `openclaw/openclaw` release tag
+
+while maintaining parity-first validation and release gating.
 
 ## Critical Points
 
@@ -108,7 +112,7 @@ Port OpenClaw Go runtime behavior from baseline commit `65c974b528e2` into a pro
   - Added config/wizard/session-mutation compat surfaces:
     - `config.set`, `config.patch`, `config.apply`, `config.schema`
     - `wizard.start`, `wizard.next`, `wizard.cancel`, `wizard.status`
-    - `sessions.patch`, `sessions.resolve`, `secrets.reload`
+    - `sessions.patch`, `sessions.resolve`, `secrets.reload`, `secrets.resolve`
   - Added compat agent/skills surfaces with stateful behavior:
     - `agent`, `agent.identity.get`, `agent.wait`
     - `agents.list`, `agents.create`, `agents.update`, `agents.delete`, `agents.files.list`, `agents.files.get`, `agents.files.set`
@@ -122,9 +126,13 @@ Port OpenClaw Go runtime behavior from baseline commit `65c974b528e2` into a pro
   - Added compat node + exec-approval surfaces with stateful behavior:
     - node: `node.pair.request|list|approve|reject|verify`, `node.rename`, `node.list`, `node.describe`, `node.invoke`, `node.invoke.result`, `node.event`, `node.canvas.capability.refresh`
     - approvals: `exec.approvals.get|set|node.get|node.set`, `exec.approval.request|waitdecision|resolve`
-  - Method surface moved to `145` Zig methods (from `126`) while preserving Lightpanda-only browser policy and green validation gates.
+  - Method surface moved to `146` Zig methods (from `126`) while preserving Lightpanda-only browser policy and green validation gates.
   - Added dispatcher contract tests for new edge methods and memory flows.
-  - Go baseline method-set parity is now complete (`133/133` covered in Zig for commit `65c974b528e2a960b171e3110e8e4e4dbb6fda63`), with `12` intentional Zig-only extras retained for edge/runtime depth.
+  - Method-set parity is now tracked and enforced against both latest upstream release baselines:
+    - Go release baseline (`adybag14-cyber/openclaw-go-port`): `134/134` covered in Zig.
+    - Original OpenClaw release baseline (`openclaw/openclaw`): `94/94` covered in Zig.
+    - Union baseline coverage: `135/135` covered in Zig.
+    - Intentional Zig-only extras retained for edge/runtime depth: `11`.
   - Hardened smoke scripts to avoid flaky `zig build run` startup timing by prebuilding and launching the binary directly (`zig-out/bin/openclaw-zig.exe`) with explicit readiness and exit diagnostics.
 - Toolchain/runtime notes (local Windows Zig master):
   - Codeberg `master` is currently `af1ab5fa08f2c58517f94c253535403e1575c3b6`.
@@ -147,8 +155,10 @@ Port OpenClaw Go runtime behavior from baseline commit `65c974b528e2` into a pro
   - CI run `22645119953` validated that `aarch64-linux` and `aarch64-macos` cross-builds succeed on Ubuntu runners with Zig master, isolating the arm64 issue to the local Windows toolchain path.
   - added release automation workflow `.github/workflows/release-preview.yml` so preview tags can be built + published from Linux runners with full `x86_64` + `aarch64` target coverage.
   - release workflow smoke run `22645353103` succeeded and published `v0.1.0-zig-preview.ci-smoke` with `x86_64-windows`, `x86_64-linux`, `x86_64-macos`, `aarch64-linux`, `aarch64-macos`, and `SHA256SUMS.txt`.
-  - added `scripts/check-go-method-parity.ps1` and wired it into both CI workflows, enforcing that every Go registry method is present in Zig before merge/release.
-  - parity gate now uses pinned Go baseline commit `65c974b528e2a960b171e3110e8e4e4dbb6fda63` by default, avoiding nondeterministic drift from moving `main`.
+  - upgraded `scripts/check-go-method-parity.ps1` into a dual-baseline parity gate and wired it into both CI workflows, enforcing that every method in:
+    - latest Go release baseline, and
+    - latest original OpenClaw release baseline
+    is present in Zig before merge/release.
   - release workflow now runs an explicit `validate` job (parity + `zig build` + `zig build test`) before matrix artifact builds, and fails early if the requested release tag already exists.
   - parity gate now writes a JSON audit payload (`parity-go-zig.json`) and CI/release flows publish it as traceable parity evidence.
   - release workflow smoke run `22646343174` validated parity evidence publication in release assets (`parity-go-zig.json`) for tag `v0.1.0-zig-preview.ci-parityjson`.

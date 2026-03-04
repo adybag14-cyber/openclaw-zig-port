@@ -70,6 +70,7 @@ pub const supported_methods = [_][]const u8{
     "exec.approval.waitdecision",
     "exec.approval.resolve",
     "secrets.reload",
+    "secrets.resolve",
     "config.get",
     "config.set",
     "config.patch",

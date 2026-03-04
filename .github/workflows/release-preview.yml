@@ -30,14 +30,14 @@ jobs:
       - name: Zig version
         run: zig version
 
-      - name: Go-to-Zig method parity gate
+      - name: Method parity gate (Go latest release + original latest release)
         shell: pwsh
         run: ./scripts/check-go-method-parity.ps1 -OutputJsonPath parity-go-zig.json -OutputMarkdownPath parity-go-zig.md
 
       - name: Upload parity report
         uses: actions/upload-artifact@v4
         with:
-          name: parity-go-zig
+          name: parity-methods
           path: |
             parity-go-zig.json
             parity-go-zig.md
@@ -123,7 +123,7 @@ jobs:
       - name: Download parity report
         uses: actions/download-artifact@v4
         with:
-          name: parity-go-zig
+          name: parity-methods
           path: dist
 
       - name: Build checksum manifest

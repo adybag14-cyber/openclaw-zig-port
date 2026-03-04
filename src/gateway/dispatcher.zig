@@ -2931,6 +2931,88 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         });
     }
 
+    if (std.ascii.eqlIgnoreCase(req.method, "secrets.resolve")) {
+        const SecretAssignment = struct {
+            path: []const u8,
+            pathSegments: []const []const u8,
+            value: ?[]const u8,
+        };
+
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const command_name = firstParamString(params, "commandName", "");
+        if (command_name.len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "invalid secrets.resolve params: commandName",
+            });
+        }
+        const target_ids_value = if (params) |obj| obj.get("targetIds") else null;
+        if (target_ids_value == null or target_ids_value.? != .array) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "invalid secrets.resolve params: targetIds",
+            });
+        }
+
+        var assignments: std.ArrayList(SecretAssignment) = .empty;
+        defer {
+            for (assignments.items) |entry| {
+                allocator.free(entry.pathSegments);
+            }
+            assignments.deinit(allocator);
+        }
+
+        var diagnostics: std.ArrayList([]const u8) = .empty;
+        defer diagnostics.deinit(allocator);
+
+        var inactive_ref_paths: std.ArrayList([]const u8) = .empty;
+        defer inactive_ref_paths.deinit(allocator);
+
+        for (target_ids_value.?.array.items) |entry| {
+            if (entry != .string) {
+                return protocol.encodeError(allocator, req.id, .{
+                    .code = -32602,
+                    .message = "invalid secrets.resolve params: targetIds",
+                });
+            }
+            const target_id = std.mem.trim(u8, entry.string, " \t\r\n");
+            if (target_id.len == 0) {
+                continue;
+            }
+            if (!isKnownSecretTargetId(target_id)) {
+                const message = try std.fmt.allocPrint(allocator, "invalid secrets.resolve params: unknown target id \"{s}\"", .{target_id});
+                defer allocator.free(message);
+                return protocol.encodeError(allocator, req.id, .{
+                    .code = -32602,
+                    .message = message,
+                });
+            }
+
+            const path_segments = try splitPathSegments(allocator, target_id);
+            try assignments.append(allocator, .{
+                .path = target_id,
+                .pathSegments = path_segments,
+                .value = null,
+            });
+            try inactive_ref_paths.append(allocator, target_id);
+        }
+
+        if (assignments.items.len == 0) {
+            try diagnostics.append(allocator, "secrets.resolve received no matching target ids.");
+        } else {
+            try diagnostics.append(allocator, "secrets.resolve completed with inactive refs only in zig parity mode.");
+        }
+
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = true,
+            .assignments = assignments.items,
+            .diagnostics = diagnostics.items,
+            .inactiveRefPaths = inactive_ref_paths.items,
+        });
+    }
+
     if (std.ascii.eqlIgnoreCase(req.method, "config.set") or std.ascii.eqlIgnoreCase(req.method, "config.patch")) {
         var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
         defer parsed.deinit();
@@ -5072,6 +5154,7 @@ fn shouldEnforceGuard(method: []const u8) bool {
     if (std.ascii.eqlIgnoreCase(method, "exec.approval.waitdecision")) return false;
     if (std.ascii.eqlIgnoreCase(method, "exec.approval.resolve")) return false;
     if (std.ascii.eqlIgnoreCase(method, "secrets.reload")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "secrets.resolve")) return false;
     if (std.ascii.eqlIgnoreCase(method, "config.get")) return false;
     if (std.ascii.eqlIgnoreCase(method, "config.set")) return false;
     if (std.ascii.eqlIgnoreCase(method, "config.patch")) return false;
@@ -5642,6 +5725,92 @@ fn firstParamBool(params: ?std.json.ObjectMap, key: []const u8, fallback: bool) 
         }
     }
     return fallback;
+}
+
+fn splitPathSegments(allocator: std.mem.Allocator, path: []const u8) ![]const []const u8 {
+    var segments: std.ArrayList([]const u8) = .empty;
+    errdefer segments.deinit(allocator);
+
+    var it = std.mem.splitScalar(u8, path, '.');
+    while (it.next()) |part| {
+        const trimmed = std.mem.trim(u8, part, " \t\r\n");
+        if (trimmed.len == 0) continue;
+        try segments.append(allocator, trimmed);
+    }
+    return segments.toOwnedSlice(allocator);
+}
+
+fn isKnownSecretTargetId(target_id: []const u8) bool {
+    const known_target_ids = [_][]const u8{
+        "agents.defaults.memorySearch.remote.apiKey",
+        "agents.list[].memorySearch.remote.apiKey",
+        "auth-profiles.api_key.key",
+        "auth-profiles.token.token",
+        "channels.bluebubbles.accounts.*.password",
+        "channels.bluebubbles.password",
+        "channels.discord.accounts.*.pluralkit.token",
+        "channels.discord.accounts.*.token",
+        "channels.discord.accounts.*.voice.tts.elevenlabs.apiKey",
+        "channels.discord.accounts.*.voice.tts.openai.apiKey",
+        "channels.discord.pluralkit.token",
+        "channels.discord.token",
+        "channels.discord.voice.tts.elevenlabs.apiKey",
+        "channels.discord.voice.tts.openai.apiKey",
+        "channels.feishu.accounts.*.appSecret",
+        "channels.feishu.accounts.*.verificationToken",
+        "channels.feishu.appSecret",
+        "channels.feishu.verificationToken",
+        "channels.googlechat.accounts.*.serviceAccount",
+        "channels.googlechat.serviceAccount",
+        "channels.irc.accounts.*.nickserv.password",
+        "channels.irc.accounts.*.password",
+        "channels.irc.nickserv.password",
+        "channels.irc.password",
+        "channels.matrix.accounts.*.password",
+        "channels.matrix.password",
+        "channels.mattermost.accounts.*.botToken",
+        "channels.mattermost.botToken",
+        "channels.msteams.appPassword",
+        "channels.nextcloud-talk.accounts.*.apiPassword",
+        "channels.nextcloud-talk.accounts.*.botSecret",
+        "channels.nextcloud-talk.apiPassword",
+        "channels.nextcloud-talk.botSecret",
+        "channels.slack.accounts.*.appToken",
+        "channels.slack.accounts.*.botToken",
+        "channels.slack.accounts.*.signingSecret",
+        "channels.slack.accounts.*.userToken",
+        "channels.slack.appToken",
+        "channels.slack.botToken",
+        "channels.slack.signingSecret",
+        "channels.slack.userToken",
+        "channels.telegram.accounts.*.botToken",
+        "channels.telegram.accounts.*.webhookSecret",
+        "channels.telegram.botToken",
+        "channels.telegram.webhookSecret",
+        "channels.zalo.accounts.*.botToken",
+        "channels.zalo.accounts.*.webhookSecret",
+        "channels.zalo.botToken",
+        "channels.zalo.webhookSecret",
+        "cron.webhookToken",
+        "gateway.auth.password",
+        "gateway.remote.password",
+        "gateway.remote.token",
+        "messages.tts.elevenlabs.apiKey",
+        "messages.tts.openai.apiKey",
+        "models.providers.*.apiKey",
+        "skills.entries.*.apiKey",
+        "talk.apiKey",
+        "talk.providers.*.apiKey",
+        "tools.web.search.apiKey",
+        "tools.web.search.gemini.apiKey",
+        "tools.web.search.grok.apiKey",
+        "tools.web.search.kimi.apiKey",
+        "tools.web.search.perplexity.apiKey",
+    };
+    for (known_target_ids) |entry| {
+        if (std.mem.eql(u8, entry, target_id)) return true;
+    }
+    return false;
 }
 
 fn envTruthy(name: []const u8) bool {
@@ -6499,6 +6668,17 @@ test "dispatch compat config wizard and sessions patch resolve methods return co
     const secrets_reload = try dispatch(allocator, "{\"id\":\"compat-secrets\",\"method\":\"secrets.reload\",\"params\":{\"keys\":[\"A\",\"B\"]}}");
     defer allocator.free(secrets_reload);
     try std.testing.expect(std.mem.indexOf(u8, secrets_reload, "\"count\":2") != null);
+
+    const secrets_resolve = try dispatch(allocator, "{\"id\":\"compat-secrets-resolve\",\"method\":\"secrets.resolve\",\"params\":{\"commandName\":\"memory status\",\"targetIds\":[\"talk.apiKey\"]}}");
+    defer allocator.free(secrets_resolve);
+    try std.testing.expect(std.mem.indexOf(u8, secrets_resolve, "\"ok\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, secrets_resolve, "\"assignments\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, secrets_resolve, "\"inactiveRefPaths\"") != null);
+
+    const secrets_resolve_unknown = try dispatch(allocator, "{\"id\":\"compat-secrets-resolve-unknown\",\"method\":\"secrets.resolve\",\"params\":{\"commandName\":\"memory status\",\"targetIds\":[\"unknown.target\"]}}");
+    defer allocator.free(secrets_resolve_unknown);
+    try std.testing.expect(std.mem.indexOf(u8, secrets_resolve_unknown, "\"code\":-32602") != null);
+    try std.testing.expect(std.mem.indexOf(u8, secrets_resolve_unknown, "unknown target id") != null);
 
     const wizard_status_initial = try dispatch(allocator, "{\"id\":\"compat-wizard-status0\",\"method\":\"wizard.status\",\"params\":{}}");
     defer allocator.free(wizard_status_initial);

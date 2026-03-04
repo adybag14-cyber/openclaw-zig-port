@@ -71,7 +71,7 @@ Phase 6 progress notes:
   - config methods: `config.set`, `config.patch`, `config.apply`, `config.schema`
   - wizard methods: `wizard.start`, `wizard.next`, `wizard.cancel`, `wizard.status`
   - session mutation methods: `sessions.patch`, `sessions.resolve`
-  - `secrets.reload` contract method added for key reload reporting.
+  - `secrets.reload` and `secrets.resolve` contract methods added for key reload + secret reference resolution parity.
 - Added compat agent/skills slice:
   - agent methods: `agent`, `agent.identity.get`, `agent.wait`
   - agents methods: `agents.list`, `agents.create`, `agents.update`, `agents.delete`, `agents.files.list`, `agents.files.get`, `agents.files.set`
@@ -87,7 +87,11 @@ Phase 6 progress notes:
   - node methods: `node.pair.request`, `node.pair.list`, `node.pair.approve`, `node.pair.reject`, `node.pair.verify`, `node.rename`, `node.list`, `node.describe`, `node.invoke`, `node.invoke.result`, `node.event`, `node.canvas.capability.refresh`
   - exec approval methods: `exec.approvals.get`, `exec.approvals.set`, `exec.approvals.node.get`, `exec.approvals.node.set`, `exec.approval.request`, `exec.approval.waitdecision`, `exec.approval.resolve`
   - stateful backing added for node pairs/nodes/events and approval policies/pending approval lifecycle.
-- Method surface now at `145` Zig methods; Go baseline method-set parity is complete at `133/133` (baseline commit `65c974b528e2a960b171e3110e8e4e4dbb6fda63`) with `12` Zig-only extras retained (`shutdown`, `doctor`, `security.audit`, `exec.run`, `file.read`, `file.write`, `web.login.complete`, `web.login.status`, `edge.wasm.install`, `edge.wasm.execute`, `edge.wasm.remove`, `node.canvas.capability.refresh`).
+- Method surface now at `146` Zig methods; dual-baseline method-set parity is complete:
+  - Go latest release baseline: `134/134` covered in Zig.
+  - Original OpenClaw latest release baseline: `94/94` covered in Zig.
+  - Union baseline: `135/135` covered in Zig.
+  - Zig-only extras vs union baseline: `11` (`shutdown`, `doctor`, `security.audit`, `exec.run`, `file.read`, `file.write`, `web.login.complete`, `web.login.status`, `edge.wasm.install`, `edge.wasm.execute`, `edge.wasm.remove`).
 
 ## Phase 7 - Validation + Release
 - [x] Run full parity diff against Go baseline
@@ -110,7 +114,7 @@ Phase 6 progress notes:
   - `channels.telegram_runtime.test.telegram runtime wait supports positional timeout with account`
 - [x] `scripts/zig-syntax-check.ps1`
 - [x] `scripts/zig-codeberg-master-check.ps1` (reports local vs remote master hash)
-- [x] Go-vs-Zig method diff check (pinned baseline): `Go=133`, `Zig=145`, `missing_in_zig=0`, `zig_extras=12`
+- [x] Multi-baseline method diff check: `Go(latest)=134`, `Original(latest)=94`, `Union=135`, `Zig=146`, `missing_in_zig=0`, `union_extras=11`
 - [x] Smoke scripts now run against built binary (`zig-out/bin/openclaw-zig.exe`) with readiness loops + early-exit diagnostics:
   - `scripts/docker-smoke-check.ps1` -> host+docker HTTP 200
   - `scripts/web-login-smoke-check.ps1` -> start/wait/complete/status HTTP 200
@@ -140,7 +144,9 @@ Phase 6 progress notes:
 - [x] Added CI release workflow (`.github/workflows/release-preview.yml`) to publish full preview artifact matrix from Linux runners, including arm64 targets.
 - [x] Release workflow smoke validated: Actions run `22645353103` published `v0.1.0-zig-preview.ci-smoke` with full 5-target artifact set + `SHA256SUMS.txt`.
 - [x] Added cross-repo method parity gate script (`scripts/check-go-method-parity.ps1`) and wired it into CI + release workflows as a blocking check.
-- [x] Parity gate baseline pinned to Go commit `65c974b528e2a960b171e3110e8e4e4dbb6fda63` for deterministic CI behavior.
+- [x] Parity gate now resolves and checks both latest release baselines on each run:
+  - `adybag14-cyber/openclaw-go-port` latest release tag
+  - `openclaw/openclaw` latest release tag
 - [x] Release workflow hardened with upfront validate job (`build` + `test` + parity gate) and duplicate-tag guard before publish.
 - [x] Parity gate now emits machine-readable report (`parity-go-zig.json`) and CI/release workflows publish it as audit evidence.
 - [x] Release workflow evidence update: run `22646343174` published `v0.1.0-zig-preview.ci-parityjson` including `parity-go-zig.json` alongside all target zips + `SHA256SUMS.txt`.
