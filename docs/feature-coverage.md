@@ -53,6 +53,13 @@ This page summarizes functional coverage across all major OpenClaw Zig runtime d
 - browser request/open:
   - `browser.request`
   - `browser.open`
+- browser completion execution:
+  - completion mode is triggered by `messages` or prompt fallbacks (`prompt|message|text`)
+  - endpoint aliases supported: `endpoint|bridgeEndpoint|lightpandaEndpoint`
+  - timeout aliases supported: `requestTimeoutMs|timeoutMs`
+  - completion payload aliases supported: `max_tokens|maxTokens`, `loginSessionId|login_session_id`, `apiKey|api_key`
+  - response includes structured `bridgeCompletion` telemetry (`requested`, `ok`, `requestUrl`, `statusCode`, `assistantText`, `latencyMs`, `error`)
+  - top-level `ok/status` follows completion execution outcome (`completed` or `failed`)
 - provider breadth includes chatgpt/codex/claude/gemini/openrouter/opencode and guest-capable qwen/zai/inception flows
 
 ## Channels and Telegram

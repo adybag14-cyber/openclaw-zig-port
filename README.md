@@ -9,7 +9,8 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - Go baseline (`v2.14.0-go`): `134/134` covered
   - Original OpenClaw baseline (`v2026.3.2`): `94/94` covered
   - Union baseline: `135/135` covered (`MISSING_IN_ZIG=0`)
-- Latest local validation: `zig build test --summary all` -> `66/66` passing
+- Latest local validation: `zig build test --summary all` -> `74/74` passing
+- Latest edge release tag: `v0.2.0-zig-edge.11`
 - Dual runtime profiles available:
   - OS-hosted profile: `openclaw-zig` (`--serve`, doctor, security audit, full RPC stack)
 - Bare-metal profile: `openclaw-zig-baremetal.elf` (`zig build baremetal`, freestanding runtime loop + Multiboot2 header)
@@ -20,6 +21,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - diagnostics docker probe caching
   - registry lookup hot-path optimization
   - dispatcher bounded-history one-pass compaction
+  - browser completion execution telemetry hardening (`bridgeCompletion` failure/success semantics)
 - Next-generation update/release slice:
   - channel-aware update lifecycle (`update.plan`, `update.status`, `update.run`)
   - npm client package and release pipeline (`@adybag14-cyber/openclaw-zig-rpc-client`)

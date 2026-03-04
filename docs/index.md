@@ -4,12 +4,13 @@ Full documentation for the OpenClaw Zig runtime port.
 
 ## Status Snapshot
 
-- RPC surface in Zig: `151` methods
+- RPC surface in Zig: `153` methods
 - Dual-baseline parity gate:
   - Go baseline (`v2.14.0-go`): `134/134`
   - Original OpenClaw baseline (`v2026.3.2`): `94/94`
   - Union baseline: `135/135` (`MISSING_IN_ZIG=0`)
-- Latest local validation: `66/66` tests passing
+- Latest local validation: `74/74` tests passing
+- Latest edge release tag: `v0.2.0-zig-edge.11`
 
 ## Documentation Map
 
