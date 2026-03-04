@@ -1,4 +1,5 @@
 const std = @import("std");
+const time_util = @import("../util/time.zig");
 
 pub const BridgeError = error{
     UnsupportedEngine,
@@ -15,6 +16,21 @@ pub const BrowserCompletion = struct {
     guestBypassSupported: bool,
     popupBypassAction: []const u8,
     message: []const u8,
+};
+
+pub const BridgeProbe = struct {
+    ok: bool,
+    endpoint: []u8,
+    probeUrl: []u8,
+    statusCode: u16,
+    latencyMs: i64,
+    errorText: []u8,
+
+    pub fn deinit(self: BridgeProbe, allocator: std.mem.Allocator) void {
+        allocator.free(self.endpoint);
+        allocator.free(self.probeUrl);
+        allocator.free(self.errorText);
+    }
 };
 
 pub fn normalizeEngine(raw: []const u8) BridgeError![]const u8 {
@@ -117,6 +133,74 @@ pub fn complete(engine_raw: []const u8, provider_raw: []const u8, model_raw: []c
     };
 }
 
+pub fn probeEndpoint(allocator: std.mem.Allocator, endpoint_raw: []const u8) !BridgeProbe {
+    const endpoint = try normalizeEndpointForProbe(allocator, endpoint_raw);
+    errdefer allocator.free(endpoint);
+
+    const probe_url = try std.fmt.allocPrint(allocator, "{s}/json/version", .{endpoint});
+    errdefer allocator.free(probe_url);
+
+    var client: std.http.Client = .{
+        .allocator = allocator,
+        .io = std.Io.Threaded.global_single_threaded.io(),
+    };
+    defer client.deinit();
+
+    const started_ms = time_util.nowMs();
+    const fetch_result = client.fetch(.{
+        .location = .{ .url = probe_url },
+        .method = .GET,
+        .keep_alive = false,
+    }) catch |err| {
+        return .{
+            .ok = false,
+            .endpoint = endpoint,
+            .probeUrl = probe_url,
+            .statusCode = 0,
+            .latencyMs = time_util.nowMs() - started_ms,
+            .errorText = try std.fmt.allocPrint(allocator, "probe failed: {s}", .{@errorName(err)}),
+        };
+    };
+
+    const status_code: u16 = @intCast(@intFromEnum(fetch_result.status));
+    const ok = status_code >= 200 and status_code < 400;
+
+    return .{
+        .ok = ok,
+        .endpoint = endpoint,
+        .probeUrl = probe_url,
+        .statusCode = status_code,
+        .latencyMs = time_util.nowMs() - started_ms,
+        .errorText = if (ok) try allocator.dupe(u8, "") else try std.fmt.allocPrint(allocator, "unexpected status {d}", .{status_code}),
+    };
+}
+
+fn normalizeEndpointForProbe(allocator: std.mem.Allocator, endpoint_raw: []const u8) ![]u8 {
+    const trimmed = std.mem.trim(u8, endpoint_raw, " \t\r\n");
+    const endpoint = if (trimmed.len == 0) "http://127.0.0.1:9222" else trimmed;
+
+    const scheme_normalized = blk: {
+        if (startsWithIgnoreCase(endpoint, "ws://")) {
+            break :blk try std.fmt.allocPrint(allocator, "http://{s}", .{endpoint[5..]});
+        }
+        if (startsWithIgnoreCase(endpoint, "wss://")) {
+            break :blk try std.fmt.allocPrint(allocator, "https://{s}", .{endpoint[6..]});
+        }
+        if (std.mem.indexOf(u8, endpoint, "://") == null) {
+            break :blk try std.fmt.allocPrint(allocator, "http://{s}", .{endpoint});
+        }
+        break :blk try allocator.dupe(u8, endpoint);
+    };
+    defer allocator.free(scheme_normalized);
+
+    return allocator.dupe(u8, std.mem.trimEnd(u8, scheme_normalized, "/"));
+}
+
+fn startsWithIgnoreCase(haystack: []const u8, prefix: []const u8) bool {
+    if (haystack.len < prefix.len) return false;
+    return std.ascii.eqlIgnoreCase(haystack[0..prefix.len], prefix);
+}
+
 test "lightpanda is the only browser provider" {
     try std.testing.expectError(error.UnsupportedEngine, normalizeEngine("playwright"));
     try std.testing.expectError(error.UnsupportedEngine, normalizeEngine("puppeteer"));
@@ -145,4 +229,20 @@ test "chatgpt profile keeps code auth mode by default" {
     try std.testing.expect(std.mem.eql(u8, completion.model, "gpt-5.2"));
     try std.testing.expect(std.mem.eql(u8, completion.authMode, "device_code"));
     try std.testing.expect(!completion.guestBypassSupported);
+}
+
+test "normalize endpoint for probe rewrites ws scheme and strips trailing slash" {
+    const allocator = std.testing.allocator;
+    const endpoint = try normalizeEndpointForProbe(allocator, "ws://127.0.0.1:9222/");
+    defer allocator.free(endpoint);
+    try std.testing.expect(std.mem.eql(u8, endpoint, "http://127.0.0.1:9222"));
+}
+
+test "probe endpoint returns structured failure for unreachable bridge" {
+    const allocator = std.testing.allocator;
+    var probe = try probeEndpoint(allocator, "http://127.0.0.1:1");
+    defer probe.deinit(allocator);
+    try std.testing.expect(!probe.ok);
+    try std.testing.expect(probe.statusCode == 0 or probe.statusCode >= 400);
+    try std.testing.expect(probe.errorText.len > 0);
 }

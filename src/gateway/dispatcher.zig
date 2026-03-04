@@ -5767,7 +5767,13 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
     }
 
     if (std.ascii.eqlIgnoreCase(req.method, "browser.request") or std.ascii.eqlIgnoreCase(req.method, "browser.open")) {
-        const browser_params = try parseBrowserRequestFromFrame(allocator, frame_json);
+        const cfg = currentConfig();
+        const browser_params = try parseBrowserRequestFromFrame(
+            allocator,
+            frame_json,
+            cfg.lightpanda_endpoint,
+            cfg.lightpanda_timeout_ms,
+        );
         defer browser_params.deinit(allocator);
 
         const completion = lightpanda.complete(browser_params.engine, browser_params.provider, browser_params.model, browser_params.auth_mode) catch |err| {
@@ -5780,7 +5786,30 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                 .message = message,
             });
         };
-        return protocol.encodeResult(allocator, req.id, completion);
+
+        var probe = try lightpanda.probeEndpoint(allocator, browser_params.endpoint);
+        defer probe.deinit(allocator);
+
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = completion.ok,
+            .engine = completion.engine,
+            .provider = completion.provider,
+            .model = completion.model,
+            .status = completion.status,
+            .authMode = completion.authMode,
+            .guestBypassSupported = completion.guestBypassSupported,
+            .popupBypassAction = completion.popupBypassAction,
+            .message = completion.message,
+            .endpoint = probe.endpoint,
+            .requestTimeoutMs = browser_params.request_timeout_ms,
+            .probe = .{
+                .ok = probe.ok,
+                .url = probe.probeUrl,
+                .statusCode = probe.statusCode,
+                .latencyMs = probe.latencyMs,
+                .@"error" = probe.errorText,
+            },
+        });
     }
 
     if (std.ascii.eqlIgnoreCase(req.method, "exec.run")) {
@@ -5822,12 +5851,15 @@ const BrowserRequestParams = struct {
     provider: []u8,
     model: []u8,
     auth_mode: []u8,
+    endpoint: []u8,
+    request_timeout_ms: u32,
 
     fn deinit(self: BrowserRequestParams, allocator: std.mem.Allocator) void {
         allocator.free(self.engine);
         allocator.free(self.provider);
         allocator.free(self.model);
         allocator.free(self.auth_mode);
+        allocator.free(self.endpoint);
     }
 };
 
@@ -7396,13 +7428,20 @@ fn renderWasmExecutionOutput(
     return std.fmt.allocPrint(allocator, "custom-module:{s} executed", .{module_id});
 }
 
-fn parseBrowserRequestFromFrame(allocator: std.mem.Allocator, frame_json: []const u8) !BrowserRequestParams {
+fn parseBrowserRequestFromFrame(
+    allocator: std.mem.Allocator,
+    frame_json: []const u8,
+    default_endpoint: []const u8,
+    default_timeout_ms: u32,
+) !BrowserRequestParams {
     var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
     defer parsed.deinit();
     var engine: []const u8 = "lightpanda";
     var provider: []const u8 = "chatgpt";
     var model: []const u8 = "";
     var auth_mode: []const u8 = "";
+    var endpoint: []const u8 = default_endpoint;
+    var request_timeout_ms: u32 = default_timeout_ms;
     var engine_explicit = false;
     if (parsed.value == .object) {
         if (parsed.value.object.get("params")) |params_value| {
@@ -7429,6 +7468,24 @@ fn parseBrowserRequestFromFrame(allocator: std.mem.Allocator, frame_json: []cons
                         if (candidate.len > 0) provider = candidate;
                     }
                 }
+                if (params_value.object.get("endpoint")) |value| {
+                    if (value == .string) {
+                        const candidate = std.mem.trim(u8, value.string, " \t\r\n");
+                        if (candidate.len > 0) endpoint = candidate;
+                    }
+                }
+                if (params_value.object.get("bridgeEndpoint")) |value| {
+                    if (value == .string) {
+                        const candidate = std.mem.trim(u8, value.string, " \t\r\n");
+                        if (candidate.len > 0) endpoint = candidate;
+                    }
+                }
+                if (params_value.object.get("lightpandaEndpoint")) |value| {
+                    if (value == .string) {
+                        const candidate = std.mem.trim(u8, value.string, " \t\r\n");
+                        if (candidate.len > 0) endpoint = candidate;
+                    }
+                }
                 if (params_value.object.get("model")) |value| {
                     if (value == .string) model = value.string;
                 }
@@ -7441,6 +7498,12 @@ fn parseBrowserRequestFromFrame(allocator: std.mem.Allocator, frame_json: []cons
                 if (params_value.object.get("mode")) |value| {
                     if (value == .string and std.mem.trim(u8, auth_mode, " \t\r\n").len == 0) auth_mode = value.string;
                 }
+                if (params_value.object.get("requestTimeoutMs")) |value| {
+                    request_timeout_ms = parseTimeout(value, request_timeout_ms);
+                }
+                if (params_value.object.get("timeoutMs")) |value| {
+                    request_timeout_ms = parseTimeout(value, request_timeout_ms);
+                }
             }
         }
     }
@@ -7450,6 +7513,8 @@ fn parseBrowserRequestFromFrame(allocator: std.mem.Allocator, frame_json: []cons
         .provider = try allocator.dupe(u8, std.mem.trim(u8, provider, " \t\r\n")),
         .model = try allocator.dupe(u8, std.mem.trim(u8, model, " \t\r\n")),
         .auth_mode = try allocator.dupe(u8, std.mem.trim(u8, auth_mode, " \t\r\n")),
+        .endpoint = try allocator.dupe(u8, std.mem.trim(u8, endpoint, " \t\r\n")),
+        .request_timeout_ms = request_timeout_ms,
     };
 }
 
@@ -7497,6 +7562,8 @@ test "dispatch accepts lightpanda provider" {
     const out = try dispatch(allocator, "{\"id\":\"3\",\"method\":\"browser.request\",\"params\":{\"provider\":\"lightpanda\"}}");
     defer allocator.free(out);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"engine\":\"lightpanda\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"probe\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"requestTimeoutMs\":15000") != null);
 }
 
 test "dispatch browser.request accepts qwen target provider with guest metadata" {
@@ -7507,6 +7574,18 @@ test "dispatch browser.request accepts qwen target provider with guest metadata"
     try std.testing.expect(std.mem.indexOf(u8, out, "\"provider\":\"qwen\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"guestBypassSupported\":true") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"popupBypassAction\":\"stay_logged_out\"") != null);
+}
+
+test "dispatch browser.request supports endpoint override telemetry" {
+    const allocator = std.testing.allocator;
+    const out = try dispatch(
+        allocator,
+        "{\"id\":\"3c\",\"method\":\"browser.request\",\"params\":{\"provider\":\"chatgpt\",\"endpoint\":\"http://127.0.0.1:1\",\"requestTimeoutMs\":3210}}",
+    );
+    defer allocator.free(out);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"endpoint\":\"http://127.0.0.1:1\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"url\":\"http://127.0.0.1:1/json/version\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"requestTimeoutMs\":3210") != null);
 }
 
 test "dispatch config.get and tools.catalog expose runtime + wasm contracts" {

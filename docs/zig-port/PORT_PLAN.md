@@ -103,6 +103,10 @@ while maintaining parity-first validation and release gating.
     - `/auth bridge <provider>` returns provider-specific lightpanda guest/auth guidance.
     - `/auth wait` now accepts positional timeout syntax in addition to `--timeout`.
     - `/auth link|open` now re-surfaces pending auth URL/code/session details with provider/account aware completion commands.
+  - Added live Lightpanda bridge probe telemetry in dispatcher:
+    - `browser.request` and `browser.open` now run a real endpoint probe against `<endpoint>/json/version`.
+    - Probe telemetry is returned in the RPC payload (`probe.ok/url/statusCode/latencyMs/error`) alongside completion metadata.
+    - Request params now accept bridge overrides (`endpoint|bridgeEndpoint|lightpandaEndpoint`, `requestTimeoutMs|timeoutMs`) for parity-safe smoke and deployment checks.
   - Dispatcher `channels.status` now includes telegram queue/target/auth telemetry
   - Added auth + reply-loop smokes (`scripts/web-login-smoke-check.ps1`, `scripts/telegram-reply-loop-smoke-check.ps1`)
   - Telegram reply-loop smoke now asserts `/auth link` parity guidance includes active code/session identifiers and completion command hints.

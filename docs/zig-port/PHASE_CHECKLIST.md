@@ -45,6 +45,9 @@ Phase 5 enhancement notes:
   - `/auth bridge <provider>` now returns provider-specific lightpanda guidance.
   - `/auth wait` supports backward-compatible positional timeout (`/auth wait <provider> [account] <seconds>`) in addition to `--timeout`.
   - `/auth link|open` now re-surfaces active login URL + code + exact completion commands for phone-only flows.
+- Added live Lightpanda probe telemetry for `browser.request` and `browser.open`:
+  - Dispatcher now probes `<endpoint>/json/version` per request and returns structured probe status (`ok/url/statusCode/latencyMs/error`).
+  - Browser params now support endpoint/timeout overrides (`endpoint|bridgeEndpoint|lightpandaEndpoint`, `requestTimeoutMs|timeoutMs`) while preserving existing completion payload fields.
 
 ## Phase 6 - Memory + Edge
 - [x] Port memory persistence primitives
@@ -137,7 +140,7 @@ Phase 6 progress notes:
 ## Latest Validation Snapshot
 - [x] `zig build`
 - [x] `zig build test`
-- [x] `zig build test --summary all` -> `66/66` passing (latest post-optimization run)
+- [x] `zig build test --summary all` -> `71/71` passing (includes lightpanda endpoint probe telemetry coverage)
 - [x] `scripts/generate-rpc-reference.ps1` (regenerates `docs/rpc-reference.md` from `src/gateway/registry.zig`, currently `153` methods)
 - [x] `scripts/npm-pack-check.ps1` (validates npm package dry-run for `npm/openclaw-zig-rpc-client`)
 - [x] `zig test src/main.zig`
@@ -162,6 +165,7 @@ Phase 6 progress notes:
 - [x] `scripts/web-login-smoke-check.ps1` (`web.login.start -> wait -> complete -> status` all HTTP 200 with authorized completion)
 - [x] `scripts/telegram-reply-loop-smoke-check.ps1` (`send /auth start -> send /auth complete -> send chat -> poll` all HTTP 200 with non-empty queued replies)
 - [x] `scripts/telegram-reply-loop-smoke-check.ps1` now also validates `/auth link` guidance payload includes active code/session + completion command hints.
+- [x] `scripts/web-login-smoke-check.ps1` re-run after browser-probe changes (`start/wait/complete/status` still HTTP 200 with authorized completion).
 - [x] `scripts/system-maintenance-smoke-check.ps1` (`system.maintenance.plan -> run(dry-run+apply) -> status` all HTTP 200 with lifecycle contract checks)
 - [x] `scripts/baremetal-smoke-check.ps1` (`zig build baremetal` + artifact presence/size checks for freestanding image)
 - [x] `scripts/baremetal-smoke-check.ps1` now validates ELF + Multiboot2 magic in the freestanding image.
