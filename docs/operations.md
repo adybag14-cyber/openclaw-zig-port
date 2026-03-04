@@ -31,6 +31,7 @@ Recommended sequence:
 - parity gate enforcement
 - runtime + gateway-auth + websocket smoke checks
 - parity evidence artifacts
+  - websocket smoke validates `/ws` and root compatibility route `/`, including binary-frame RPC dispatch
 
 ### `release-preview.yml`
 

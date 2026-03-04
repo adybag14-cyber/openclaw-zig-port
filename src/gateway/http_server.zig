@@ -339,7 +339,7 @@ fn serveWebSocket(
                 ws.writeMessage(message.data, .pong) catch break;
                 continue;
             },
-            .text => {},
+            .text, .binary => {},
             else => continue,
         }
 

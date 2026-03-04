@@ -57,6 +57,7 @@ while maintaining parity-first validation and release gating.
     - in-process gateway rate limiting (`OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_ENABLED`, `OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_WINDOW_MS`, `OPENCLAW_ZIG_GATEWAY_RATE_LIMIT_MAX_REQUESTS`)
     - native WebSocket gateway routes (`GET /ws` + root compatibility `GET /`) with upgrade handling + text-frame RPC dispatch
     - target-path normalization for gateway route matching (`/health|/rpc|/ws` now correctly match query-bearing targets like `/rpc?x=1` and `/ws?mode=compat`)
+    - websocket RPC parity expanded to accept binary websocket frames in addition to text frames (aligned with Go transport behavior)
     - `security.audit` + `doctor` gateway auth/rate-limit checks and regression tests
     - validation: `zig build`, `zig build test` (`79/79`), `scripts/runtime-smoke-check.ps1`, `scripts/gateway-auth-smoke-check.ps1`, `scripts/websocket-smoke-check.ps1`, `scripts/web-login-smoke-check.ps1`
   - README refreshed with current parity/validation state and workflow guidance.

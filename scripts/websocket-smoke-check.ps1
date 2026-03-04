@@ -50,6 +50,28 @@ function Resolve-AgentExecutable {
     throw "openclaw-zig executable not found under zig-out/bin."
 }
 
+function Read-WebSocketTextMessage {
+    param(
+        [System.Net.WebSockets.ClientWebSocket] $Socket,
+        [int] $TimeoutSeconds = 20
+    )
+
+    $buffer = New-Object byte[] 16384
+    $builder = [System.Text.StringBuilder]::new()
+    do {
+        $segment = [ArraySegment[byte]]::new($buffer)
+        $recvCts = [System.Threading.CancellationTokenSource]::new([TimeSpan]::FromSeconds($TimeoutSeconds))
+        $receive = $Socket.ReceiveAsync($segment, $recvCts.Token).GetAwaiter().GetResult()
+        if ($receive.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) {
+            throw "websocket closed before response frame was fully received"
+        }
+        $chunk = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $receive.Count)
+        [void]$builder.Append($chunk)
+    } while (-not $receive.EndOfMessage)
+
+    return $builder.ToString()
+}
+
 $zig = Resolve-ZigExecutable
 if (-not $SkipBuild) {
     & $zig build --summary all
@@ -101,19 +123,7 @@ try {
     $requestSegment = [ArraySegment[byte]]::new($requestBytes)
     $null = $ws.SendAsync($requestSegment, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, [System.Threading.CancellationToken]::None).GetAwaiter().GetResult()
 
-    $buffer = New-Object byte[] 16384
-    $builder = [System.Text.StringBuilder]::new()
-    do {
-        $segment = [ArraySegment[byte]]::new($buffer)
-        $receive = $ws.ReceiveAsync($segment, [System.Threading.CancellationToken]::None).GetAwaiter().GetResult()
-        if ($receive.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) {
-            throw "websocket closed before response frame was received"
-        }
-        $chunk = [System.Text.Encoding]::UTF8.GetString($buffer, 0, $receive.Count)
-        [void]$builder.Append($chunk)
-    } while (-not $receive.EndOfMessage)
-
-    $responseText = $builder.ToString()
+    $responseText = Read-WebSocketTextMessage -Socket $ws
     $responseJson = $responseText | ConvertFrom-Json
     if ($null -eq $responseJson.result) {
         throw "websocket response missing result payload: $responseText"
@@ -127,6 +137,23 @@ try {
     Write-Output "WS_SMOKE_CONNECT=ok"
     Write-Output "WS_SMOKE_REPLY_HAS_RESULT=True"
     Write-Output "WS_SMOKE_SERVICE=$serviceValue"
+
+    # Binary websocket RPC frame parity check.
+    $binaryRequestPayload = '{"id":"ws-smoke-bin-1","method":"health","params":{}}'
+    $binaryBytes = [System.Text.Encoding]::UTF8.GetBytes($binaryRequestPayload)
+    $binarySegment = [ArraySegment[byte]]::new($binaryBytes)
+    $null = $ws.SendAsync($binarySegment, [System.Net.WebSockets.WebSocketMessageType]::Binary, $true, [System.Threading.CancellationToken]::None).GetAwaiter().GetResult()
+
+    $binaryResponseText = Read-WebSocketTextMessage -Socket $ws
+    $binaryResponseJson = $binaryResponseText | ConvertFrom-Json
+    if ($null -eq $binaryResponseJson.result) {
+        throw "binary websocket frame response missing result payload: $binaryResponseText"
+    }
+    $binaryStatus = "$($binaryResponseJson.result.status)"
+    if ([string]::IsNullOrWhiteSpace($binaryStatus) -or $binaryStatus -ne "ok") {
+        throw "binary websocket frame response unexpected status payload: $binaryResponseText"
+    }
+    Write-Output "WS_SMOKE_BINARY_FRAME=ok"
 
     try {
         $null = $ws.CloseAsync([System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure, "smoke-complete", [System.Threading.CancellationToken]::None).GetAwaiter().GetResult()
@@ -144,19 +171,7 @@ try {
     $rootRequestSegment = [ArraySegment[byte]]::new($rootRequestBytes)
     $null = $wsRoot.SendAsync($rootRequestSegment, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, [System.Threading.CancellationToken]::None).GetAwaiter().GetResult()
 
-    $rootBuffer = New-Object byte[] 16384
-    $rootBuilder = [System.Text.StringBuilder]::new()
-    do {
-        $rootSegment = [ArraySegment[byte]]::new($rootBuffer)
-        $rootReceive = $wsRoot.ReceiveAsync($rootSegment, [System.Threading.CancellationToken]::None).GetAwaiter().GetResult()
-        if ($rootReceive.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) {
-            throw "root websocket compatibility route closed before response frame was received"
-        }
-        $rootChunk = [System.Text.Encoding]::UTF8.GetString($rootBuffer, 0, $rootReceive.Count)
-        [void]$rootBuilder.Append($rootChunk)
-    } while (-not $rootReceive.EndOfMessage)
-
-    $rootResponseText = $rootBuilder.ToString()
+    $rootResponseText = Read-WebSocketTextMessage -Socket $wsRoot
     $rootResponseJson = $rootResponseText | ConvertFrom-Json
     if ($null -eq $rootResponseJson.result) {
         throw "root websocket response missing result payload: $rootResponseText"

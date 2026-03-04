@@ -76,7 +76,7 @@ All major runtime feature domains are implemented and dispatchable. Representati
 - Gateway routes:
   - `GET /health`
   - `POST /rpc`
-  - `GET /ws` websocket upgrade route
+  - `GET /ws` websocket upgrade route (JSON-RPC over text and binary websocket frames)
   - `GET /` websocket compatibility route for legacy bridge clients
 - Contract coverage guard:
   - test asserts every registered method resolves in dispatcher (no registry/dispatcher drift).

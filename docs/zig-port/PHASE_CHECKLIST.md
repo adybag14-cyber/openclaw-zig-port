@@ -15,6 +15,7 @@ Release lock: no release tag is allowed until all phases are complete and parity
 - [x] Add contract tests for error codes and method routing
 - [x] Implement WebSocket routes (`GET /ws` + root compatibility `GET /`) with upgrade handling and RPC frame dispatch
 - [x] Normalize gateway route matching for query-bearing targets (`/health?`, `/rpc?`, `/ws?`) to preserve transport compatibility
+- [x] Accept websocket RPC frames over both text and binary message types for transport parity with Go
 
 ## Phase 3 - Runtime + Tooling
 - [x] Add runtime state/session primitives
@@ -197,12 +198,12 @@ Phase 6 progress notes:
 - [x] Smoke scripts now run against built binary (`zig-out/bin/openclaw-zig.exe`) with readiness loops + early-exit diagnostics:
   - `scripts/docker-smoke-check.ps1` -> host+docker HTTP 200
   - `scripts/gateway-auth-smoke-check.ps1` -> token-gated `/rpc` + websocket unauthorized/authorized contract checks
-  - `scripts/websocket-smoke-check.ps1` -> websocket connect + RPC text-frame response on `/ws` and root compatibility route `/`
+  - `scripts/websocket-smoke-check.ps1` -> websocket connect + RPC text/binary-frame response on `/ws` and root compatibility route `/`
   - `scripts/web-login-smoke-check.ps1` -> start/wait/complete/status HTTP 200
   - `scripts/telegram-reply-loop-smoke-check.ps1` -> send/poll/auth lifecycle HTTP 200
 - [x] `scripts/docker-smoke-check.ps1` (host + Docker HTTP 200 checks on `/health` and `/rpc`)
 - [x] `scripts/gateway-auth-smoke-check.ps1` (`OPENCLAW_ZIG_GATEWAY_REQUIRE_TOKEN=true` with verified 401/200 for `/rpc` and unauthorized/authorized websocket upgrade behavior)
-- [x] `scripts/websocket-smoke-check.ps1` (`GET /ws` websocket upgrade + root websocket compatibility route + status/health RPC text-frame dispatch)
+- [x] `scripts/websocket-smoke-check.ps1` (`GET /ws` websocket upgrade + root websocket compatibility route + status/health RPC text and binary-frame dispatch)
 - [x] `scripts/web-login-smoke-check.ps1` (`web.login.start -> wait -> complete -> status` all HTTP 200 with authorized completion)
 - [x] `scripts/telegram-reply-loop-smoke-check.ps1` (`send /auth start -> send /auth complete -> send chat -> poll` all HTTP 200 with non-empty queued replies)
 - [x] `scripts/telegram-reply-loop-smoke-check.ps1` now also validates `/auth link` guidance payload includes active code/session + completion command hints.
