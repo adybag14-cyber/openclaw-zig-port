@@ -249,6 +249,10 @@ Phase 6 progress notes:
   - new mailbox opcode: `command_wake_queue_pop_reason` (`arg0=reason`, `arg1=count`, `count=0` defaults to one)
   - new export telemetry: `oc_wake_queue_reason_count(reason)` for timer/interrupt/manual wake distribution checks
   - regression coverage added for reason-filtered pop ordering, invalid-reason rejection, and not-found behavior
+- [x] Bare-metal wake queue vector-selective drain slice shipped:
+  - new mailbox opcode: `command_wake_queue_pop_vector` (`arg0=vector`, `arg1=count`, `count=0` defaults to one)
+  - new export telemetry: `oc_wake_queue_vector_count(vector)` for per-vector wake distribution checks
+  - regression coverage added for vector-filtered pop ordering and not-found behavior while preserving FIFO order for non-matching events
 - [x] `scripts/zig-codeberg-master-check.ps1` (reports local vs remote master hash)
 - [x] Multi-baseline method diff check: `Go(latest)=134`, `Original(latest)=94`, `OriginalBeta(latest)=94`, `Union=135`, `Zig=160`, `missing_in_zig=0`, `union_extras=25`
 - [x] Multi-baseline gateway event diff check: `OriginalEvents(latest)=19`, `OriginalBetaEvents(latest)=19`, `UnionEvents=19`, `ZigEvents=19`, `union_events_missing_in_zig=0`

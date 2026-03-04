@@ -133,6 +133,7 @@ pub const command_task_set_priority: u16 = 56;
 pub const command_task_wait_interrupt: u16 = 57;
 pub const command_task_wait_interrupt_for: u16 = 58;
 pub const command_wake_queue_pop_reason: u16 = 59;
+pub const command_wake_queue_pop_vector: u16 = 60;
 
 pub const mode_change_reason_boot: u8 = 0;
 pub const mode_change_reason_command: u8 = 1;
