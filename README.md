@@ -254,6 +254,13 @@ Run full local syntax/build checks:
 ./scripts/zig-syntax-check.ps1
 ```
 
+Install docs dependencies and build docs locally:
+
+```powershell
+python -m pip install -r requirements-docs.txt
+mkdocs build --strict
+```
+
 Run doctor/security audit from CLI:
 
 ```powershell
