@@ -440,6 +440,10 @@ while maintaining parity-first validation and release gating.
     - new export: `oc_wake_queue_summary()` for compact diagnostics snapshots (`len`, `overflow_count`, reason mix, `nonzero_vector_count`, `stale_count`, `oldest_tick`, `newest_tick`).
     - ABI contract extended with `BaremetalWakeQueueSummary` size/layout checks.
     - validated with `zig build test --summary all` (`118/118`) and `scripts/baremetal-smoke-check.ps1`.
+  - bare-metal wake queue age-bucket snapshot slice shipped:
+    - new export: `oc_wake_queue_age_buckets(quantum_ticks)` for compact age diagnostics (`current_tick`, `quantum_ticks`, `stale_count`, `stale_older_than_quantum_count`, `future_count`).
+    - ABI contract extended with `BaremetalWakeQueueAgeBuckets` size/layout checks.
+    - validated with `zig build test --summary all` (`118/118`) and `scripts/baremetal-smoke-check.ps1`.
   - Week-3 control-plane completion slice shipped:
     - gateway now exposes `GET /ui` for minimal bootstrap control operations (`status`, `doctor`, `logs.tail`, `node.pair.list`) through a token-aware browser panel.
     - node-pair protocol handling consolidated across payload variants: request aliases (`node_id/deviceId`) and action aliases (`pair_id/nodePairId/id` + optional `status|decision`) now normalize into the same state transitions and response schema.

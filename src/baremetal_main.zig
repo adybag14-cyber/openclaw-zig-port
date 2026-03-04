@@ -21,6 +21,7 @@ const BaremetalTimerState = abi.BaremetalTimerState;
 const BaremetalTimerEntry = abi.BaremetalTimerEntry;
 const BaremetalWakeEvent = abi.BaremetalWakeEvent;
 const BaremetalWakeQueueSummary = abi.BaremetalWakeQueueSummary;
+const BaremetalWakeQueueAgeBuckets = abi.BaremetalWakeQueueAgeBuckets;
 
 const multiboot2_magic: u32 = 0xE85250D6;
 const multiboot2_architecture_i386: u32 = 0;
@@ -749,6 +750,30 @@ pub export fn oc_wake_queue_summary() BaremetalWakeQueueSummary {
         if (event.tick > summary.newest_tick) summary.newest_tick = event.tick;
     }
     return summary;
+}
+
+pub export fn oc_wake_queue_age_buckets(quantum_ticks: u64) BaremetalWakeQueueAgeBuckets {
+    const current_tick = status.ticks;
+    const threshold_tick = if (quantum_ticks > current_tick) @as(u64, 0) else current_tick - quantum_ticks;
+    var buckets: BaremetalWakeQueueAgeBuckets = .{
+        .current_tick = current_tick,
+        .quantum_ticks = quantum_ticks,
+        .stale_count = 0,
+        .stale_older_than_quantum_count = 0,
+        .future_count = 0,
+        .reserved0 = 0,
+    };
+    var idx: u32 = 0;
+    while (idx < wake_queue_count) : (idx += 1) {
+        const event = oc_wake_queue_event(idx);
+        if (event.tick <= current_tick) {
+            buckets.stale_count +%= 1;
+            if (event.tick <= threshold_tick) buckets.stale_older_than_quantum_count +%= 1;
+        } else {
+            buckets.future_count +%= 1;
+        }
+    }
+    return buckets;
 }
 
 pub export fn oc_wake_queue_pop() BaremetalWakeEvent {
@@ -3247,6 +3272,12 @@ test "baremetal wake queue reason-vector pop command removes only exact pairs" {
     try std.testing.expectEqual(@as(u32, 3), summary_before.stale_count);
     try std.testing.expectEqual(@as(u64, 10), summary_before.oldest_tick);
     try std.testing.expectEqual(@as(u64, 13), summary_before.newest_tick);
+    const buckets_before = oc_wake_queue_age_buckets(2);
+    try std.testing.expectEqual(@as(u64, 12), buckets_before.current_tick);
+    try std.testing.expectEqual(@as(u64, 2), buckets_before.quantum_ticks);
+    try std.testing.expectEqual(@as(u32, 3), buckets_before.stale_count);
+    try std.testing.expectEqual(@as(u32, 1), buckets_before.stale_older_than_quantum_count);
+    try std.testing.expectEqual(@as(u32, 1), buckets_before.future_count);
 
     const pair_interrupt_13: u64 = @as(u64, abi.wake_reason_interrupt) | (@as(u64, 13) << 8);
     _ = oc_submit_command(abi.command_wake_queue_pop_reason_vector, pair_interrupt_13, 0);

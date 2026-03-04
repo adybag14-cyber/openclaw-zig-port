@@ -265,6 +265,10 @@ Phase 6 progress notes:
   - new export telemetry: `oc_wake_queue_summary()` (len/overflow, reason mix, nonzero-vector count, stale count, oldest/newest tick)
   - ABI contract extended with `BaremetalWakeQueueSummary`
   - regression coverage added for summary field correctness before/after selective drains
+- [x] Bare-metal wake queue age-bucket snapshot slice shipped:
+  - new export telemetry: `oc_wake_queue_age_buckets(quantum_ticks)` (`current_tick`, `quantum_ticks`, `stale_count`, `stale_older_than_quantum_count`, `future_count`)
+  - ABI contract extended with `BaremetalWakeQueueAgeBuckets`
+  - regression coverage added for age-bucket field correctness under mixed stale/future wake entries
 - [x] `scripts/zig-codeberg-master-check.ps1` (reports local vs remote master hash)
 - [x] Multi-baseline method diff check: `Go(latest)=134`, `Original(latest)=94`, `OriginalBeta(latest)=94`, `Union=135`, `Zig=160`, `missing_in_zig=0`, `union_extras=25`
 - [x] Multi-baseline gateway event diff check: `OriginalEvents(latest)=19`, `OriginalBetaEvents(latest)=19`, `UnionEvents=19`, `ZigEvents=19`, `union_events_missing_in_zig=0`

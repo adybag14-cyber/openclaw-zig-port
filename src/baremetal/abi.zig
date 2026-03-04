@@ -422,6 +422,15 @@ pub const BaremetalWakeQueueSummary = extern struct {
     newest_tick: u64,
 };
 
+pub const BaremetalWakeQueueAgeBuckets = extern struct {
+    current_tick: u64,
+    quantum_ticks: u64,
+    stale_count: u32,
+    stale_older_than_quantum_count: u32,
+    future_count: u32,
+    reserved0: u32,
+};
+
 pub fn defaultFeatureFlags() u32 {
     return feature_os_hosted_runtime |
         feature_baremetal_runtime |
@@ -535,6 +544,7 @@ test "baremetal kernel info size contract stays stable" {
     try std.testing.expectEqual(@as(usize, 40), @sizeOf(BaremetalTimerEntry));
     try std.testing.expectEqual(@as(usize, 32), @sizeOf(BaremetalWakeEvent));
     try std.testing.expectEqual(@as(usize, 48), @sizeOf(BaremetalWakeQueueSummary));
+    try std.testing.expectEqual(@as(usize, 32), @sizeOf(BaremetalWakeQueueAgeBuckets));
 }
 
 test "baremetal mode helper validates supported modes" {
