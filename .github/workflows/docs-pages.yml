@@ -8,6 +8,9 @@ on:
       - "docs/**"
       - ".github/workflows/docs-pages.yml"
       - "README.md"
+      - "src/gateway/registry.zig"
+      - "scripts/generate-rpc-reference.ps1"
+      - "requirements-docs.txt"
   workflow_dispatch:
 
 permissions:
@@ -40,6 +43,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-docs.txt
+
+      - name: Regenerate RPC reference
+        shell: pwsh
+        run: ./scripts/generate-rpc-reference.ps1
+
+      - name: Verify RPC reference is up to date
+        run: git diff --exit-code -- docs/rpc-reference.md
 
       - name: Build docs
         run: mkdocs build --strict

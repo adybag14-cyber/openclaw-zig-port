@@ -133,6 +133,7 @@ Phase 6 progress notes:
 - [x] `zig build`
 - [x] `zig build test`
 - [x] `zig build test --summary all` -> `66/66` passing (latest post-optimization run)
+- [x] `scripts/generate-rpc-reference.ps1` (regenerates `docs/rpc-reference.md` from `src/gateway/registry.zig`, currently `151` methods)
 - [x] `zig test src/main.zig`
 - [x] Guest/auth parity tests:
   - `channels.telegram_runtime.test.telegram runtime qwen guest auth lifecycle`
@@ -203,3 +204,4 @@ Phase 6 progress notes:
   - GitHub tracking comments updated with recent optimization evidence.
   - full MkDocs docs site added (`mkdocs.yml` + `docs/*.md`) and GitHub Pages deployment workflow added (`.github/workflows/docs-pages.yml`), with local `mkdocs build --strict` validation.
   - GitHub Pages publish verified successful via Actions run `22653680203` with both build and deploy jobs green.
+  - RPC docs drift guard added with generated reference script (`scripts/generate-rpc-reference.ps1`) and workflow enforcement in `zig-ci`, `release-preview`, and `docs-pages`.

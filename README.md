@@ -258,6 +258,7 @@ Install docs dependencies and build docs locally:
 
 ```powershell
 python -m pip install -r requirements-docs.txt
+./scripts/generate-rpc-reference.ps1
 mkdocs build --strict
 ```
 
@@ -302,6 +303,7 @@ Run smoke checks:
 
 `docs-pages` workflow (`.github/workflows/docs-pages.yml`):
 
+- regenerates and verifies `docs/rpc-reference.md` from `src/gateway/registry.zig`
 - builds MkDocs docs (`mkdocs build --strict`)
 - publishes docs to GitHub Pages from `site/`
 - triggers on `docs/**`, `mkdocs.yml`, and docs workflow changes

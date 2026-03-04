@@ -58,6 +58,9 @@ while maintaining parity-first validation and release gating.
   - GitHub Pages enabled and verified with workflow deployment:
     - site: https://adybag14-cyber.github.io/openclaw-zig-port/
     - workflow run: https://github.com/adybag14-cyber/openclaw-zig-port/actions/runs/22653680203
+  - RPC reference automation and drift guard added:
+    - `scripts/generate-rpc-reference.ps1` generates `docs/rpc-reference.md` from `src/gateway/registry.zig`.
+    - `zig-ci`, `release-preview`, and `docs-pages` now regenerate and enforce `git diff --exit-code` on `docs/rpc-reference.md`.
   - GitHub tracking issue updated with optimization-slice evidence:
     - https://github.com/adybag14-cyber/openclaw-zig-port/issues/1#issuecomment-3994942224
     - https://github.com/adybag14-cyber/openclaw-zig-port/issues/1#issuecomment-3994964162

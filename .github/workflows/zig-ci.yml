@@ -22,6 +22,13 @@ jobs:
       - name: Zig version
         run: zig version
 
+      - name: Regenerate RPC reference
+        shell: pwsh
+        run: ./scripts/generate-rpc-reference.ps1
+
+      - name: Verify RPC reference is up to date
+        run: git diff --exit-code -- docs/rpc-reference.md
+
       - name: Build (Debug)
         run: zig build --summary all
 
