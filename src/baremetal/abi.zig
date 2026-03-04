@@ -119,6 +119,10 @@ pub const command_timer_schedule: u16 = 42;
 pub const command_timer_cancel: u16 = 43;
 pub const command_wake_queue_clear: u16 = 44;
 pub const command_scheduler_wake_task: u16 = 45;
+pub const command_timer_enable: u16 = 46;
+pub const command_timer_disable: u16 = 47;
+pub const command_timer_set_quantum: u16 = 48;
+pub const command_timer_schedule_periodic: u16 = 49;
 
 pub const mode_change_reason_boot: u8 = 0;
 pub const mode_change_reason_command: u8 = 1;
@@ -167,6 +171,7 @@ pub const timer_entry_state_unused: u8 = 0;
 pub const timer_entry_state_armed: u8 = 1;
 pub const timer_entry_state_fired: u8 = 2;
 pub const timer_entry_state_canceled: u8 = 3;
+pub const timer_entry_flag_periodic: u16 = 1 << 0;
 
 pub const wake_reason_timer: u8 = 1;
 pub const wake_reason_interrupt: u8 = 2;

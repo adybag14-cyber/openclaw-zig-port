@@ -563,6 +563,14 @@ pub export fn oc_timer_state_ptr() *const BaremetalTimerState {
     return &timer_state;
 }
 
+pub export fn oc_timer_enabled() bool {
+    return timer_state.enabled == abi.timer_state_enabled;
+}
+
+pub export fn oc_timer_quantum() u32 {
+    return timer_state.tick_quantum;
+}
+
 pub export fn oc_timer_entry_capacity() u32 {
     return @as(u32, timer_capacity);
 }
@@ -948,11 +956,31 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
             if (arg0 == 0 or arg0 > std.math.maxInt(u32) or arg1 == 0 or arg1 > std.math.maxInt(u32)) {
                 return abi.result_invalid_argument;
             }
-            return timerScheduleTask(@as(u32, @truncate(arg0)), @as(u32, @truncate(arg1)), status.ticks);
+            return timerScheduleTask(@as(u32, @truncate(arg0)), @as(u32, @truncate(arg1)), 0, status.ticks);
+        },
+        abi.command_timer_schedule_periodic => {
+            if (arg0 == 0 or arg0 > std.math.maxInt(u32) or arg1 == 0 or arg1 > std.math.maxInt(u32)) {
+                return abi.result_invalid_argument;
+            }
+            return timerScheduleTask(@as(u32, @truncate(arg0)), @as(u32, @truncate(arg1)), @as(u32, @truncate(arg1)), status.ticks);
         },
         abi.command_timer_cancel => {
             if (arg0 == 0 or arg0 > std.math.maxInt(u32)) return abi.result_invalid_argument;
             return timerCancel(@as(u32, @truncate(arg0)));
+        },
+        abi.command_timer_enable => {
+            timer_state.enabled = abi.timer_state_enabled;
+            timer_state.last_interrupt_count = x86_bootstrap.oc_interrupt_count();
+            return abi.result_ok;
+        },
+        abi.command_timer_disable => {
+            timer_state.enabled = abi.timer_state_disabled;
+            return abi.result_ok;
+        },
+        abi.command_timer_set_quantum => {
+            if (arg0 == 0 or arg0 > std.math.maxInt(u32)) return abi.result_invalid_argument;
+            timer_state.tick_quantum = @as(u32, @truncate(arg0));
+            return abi.result_ok;
         },
         abi.command_wake_queue_clear => {
             oc_wake_queue_clear();
@@ -1079,15 +1107,37 @@ fn timerTick(current_tick: u64) void {
     }
     timer_state.last_interrupt_count = interrupt_count;
 
+    const quantum = if (timer_state.tick_quantum == 0) @as(u32, 1) else timer_state.tick_quantum;
+    if (@mod(current_tick, @as(u64, quantum)) != 0) {
+        timerRecountEntries();
+        return;
+    }
+
     for (&timer_entries) |*entry| {
         if (entry.state != abi.timer_entry_state_armed) continue;
         if (entry.next_fire_tick > current_tick) continue;
-        entry.state = abi.timer_entry_state_fired;
+        const periodic = entry.period_ticks > 0;
+        if (periodic) {
+            entry.flags |= abi.timer_entry_flag_periodic;
+        } else {
+            entry.flags &= ~abi.timer_entry_flag_periodic;
+        }
         entry.fire_count +%= 1;
         entry.last_fire_tick = current_tick;
         timer_state.dispatch_count +%= 1;
         timer_state.last_dispatch_tick = current_tick;
-        _ = schedulerWakeTask(entry.task_id, abi.wake_reason_timer, entry.timer_id, 0, current_tick);
+        const woke = schedulerWakeTask(entry.task_id, abi.wake_reason_timer, entry.timer_id, 0, current_tick);
+        if (periodic and woke) {
+            const period64: u64 = @as(u64, entry.period_ticks);
+            var next_tick = entry.next_fire_tick;
+            while (next_tick <= current_tick) : (next_tick +%= period64) {}
+            entry.next_fire_tick = next_tick;
+            entry.state = abi.timer_entry_state_armed;
+        } else if (periodic and !woke) {
+            entry.state = abi.timer_entry_state_canceled;
+        } else {
+            entry.state = abi.timer_entry_state_fired;
+        }
     }
     timerRecountEntries();
 }
@@ -1101,17 +1151,23 @@ fn timerRecountEntries() void {
     timer_state.pending_wake_count = @as(u16, @intCast(wake_queue_count));
 }
 
-fn timerScheduleTask(task_id: u32, delay_ticks: u32, current_tick: u64) i16 {
+fn timerScheduleTask(task_id: u32, delay_ticks: u32, period_ticks: u32, current_tick: u64) i16 {
     if (timer_state.enabled != abi.timer_state_enabled) return abi.result_not_supported;
     const slot = schedulerFindTaskSlot(task_id) orelse return abi.result_not_found;
     if (scheduler_tasks[slot].state == abi.task_state_terminated or scheduler_tasks[slot].state == abi.task_state_completed) {
         return abi.result_invalid_argument;
     }
+    if (period_ticks > 0 and period_ticks < delay_ticks) return abi.result_invalid_argument;
 
     for (&timer_entries) |*entry| {
         if (entry.state == abi.timer_entry_state_armed and entry.task_id == task_id) {
             entry.next_fire_tick = current_tick + delay_ticks;
-            entry.period_ticks = 0;
+            entry.period_ticks = period_ticks;
+            if (period_ticks > 0) {
+                entry.flags |= abi.timer_entry_flag_periodic;
+            } else {
+                entry.flags &= ~abi.timer_entry_flag_periodic;
+            }
             scheduler_tasks[slot].state = abi.task_state_waiting;
             schedulerRecountTasks();
             return abi.result_ok;
@@ -1127,8 +1183,8 @@ fn timerScheduleTask(task_id: u32, delay_ticks: u32, current_tick: u64) i16 {
             .task_id = task_id,
             .state = abi.timer_entry_state_armed,
             .reason = abi.wake_reason_timer,
-            .flags = 0,
-            .period_ticks = 0,
+            .flags = if (period_ticks > 0) abi.timer_entry_flag_periodic else 0,
+            .period_ticks = period_ticks,
             .next_fire_tick = current_tick + delay_ticks,
             .fire_count = 0,
             .last_fire_tick = 0,
@@ -2156,4 +2212,105 @@ test "baremetal syscall abi v2 supports enable disable and entry flags" {
     _ = oc_submit_command(abi.command_syscall_invoke, 9, 0x1234);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+}
+
+test "baremetal timer periodic flow rearms and honors enable disable controls" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    status.tick_batch_hint = 1;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_scheduler_reset();
+    oc_allocator_reset();
+    oc_syscall_reset();
+    oc_timer_reset();
+    oc_wake_queue_clear();
+
+    _ = oc_submit_command(abi.command_scheduler_disable, 0, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_task_create, 8, 1);
+    oc_tick();
+    const task_id = oc_scheduler_task(0).task_id;
+    try std.testing.expect(task_id != 0);
+
+    _ = oc_submit_command(abi.command_timer_schedule_periodic, task_id, 2);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    var entry = oc_timer_entry(0);
+    try std.testing.expectEqual(@as(u16, abi.timer_entry_flag_periodic), entry.flags & abi.timer_entry_flag_periodic);
+    try std.testing.expectEqual(@as(u32, 2), entry.period_ticks);
+
+    oc_tick(); // current_tick=3 (no fire yet)
+    oc_tick(); // current_tick=4 (first periodic fire)
+    entry = oc_timer_entry(0);
+    try std.testing.expectEqual(@as(u8, abi.timer_entry_state_armed), entry.state);
+    try std.testing.expectEqual(@as(u64, 1), entry.fire_count);
+    try std.testing.expect(oc_wake_queue_len() >= 1);
+
+    _ = oc_submit_command(abi.command_timer_disable, 0, 0);
+    oc_tick();
+    const wakes_before_pause = oc_wake_queue_len();
+    oc_tick();
+    oc_tick();
+    try std.testing.expectEqual(wakes_before_pause, oc_wake_queue_len());
+    try std.testing.expect(!oc_timer_enabled());
+
+    _ = oc_submit_command(abi.command_timer_enable, 0, 0);
+    oc_tick();
+    try std.testing.expect(oc_timer_enabled());
+    oc_tick();
+    entry = oc_timer_entry(0);
+    try std.testing.expect(entry.fire_count >= 2);
+}
+
+test "baremetal timer quantum delays one shot dispatch until quantum boundary" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    status.tick_batch_hint = 1;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_scheduler_reset();
+    oc_timer_reset();
+    oc_wake_queue_clear();
+
+    _ = oc_submit_command(abi.command_scheduler_disable, 0, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_task_create, 5, 0);
+    oc_tick();
+    const task_id = oc_scheduler_task(0).task_id;
+    try std.testing.expect(task_id != 0);
+
+    _ = oc_submit_command(abi.command_timer_set_quantum, 3, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 3), oc_timer_quantum());
+
+    _ = oc_submit_command(abi.command_timer_schedule, task_id, 1);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+
+    // current tick has advanced to 4 here; next timer scan boundary is 6
+    oc_tick(); // current_tick=4
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
+    oc_tick(); // current_tick=5
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
+    oc_tick(); // current_tick=6
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
 }

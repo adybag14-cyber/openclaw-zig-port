@@ -385,6 +385,8 @@ $requiredSymbols = @(
     "oc_syscall_enabled",
     "oc_syscall_reset",
     "oc_timer_state_ptr",
+    "oc_timer_enabled",
+    "oc_timer_quantum",
     "oc_timer_entry_capacity",
     "oc_timer_entry_count",
     "oc_timer_entry",

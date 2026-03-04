@@ -194,7 +194,7 @@ Phase 6 progress notes:
 - [x] `scripts/npm-pack-check.ps1` (validates npm package dry-run for `npm/openclaw-zig-rpc-client`)
 - [x] `scripts/python-pack-check.ps1` (validates python client package tests + wheel/sdist + twine checks for `python/openclaw-zig-rpc-client`)
 - [x] `zig test src/main.zig`
-- [x] `zig test src/baremetal_main.zig` (`22/22` passing; includes mode-history + boot-phase-history + command-result counter + scheduler + allocator/syscall + timer/wake queue telemetry coverage)
+- [x] `zig test src/baremetal_main.zig` (`24/24` passing; includes mode-history + boot-phase-history + command-result counter + scheduler + allocator/syscall + timer/wake queue telemetry coverage)
 - [x] Guest/auth parity tests:
   - `channels.telegram_runtime.test.telegram runtime qwen guest auth lifecycle`
   - `channels.telegram_runtime.test.telegram runtime auth complete infers provider from callback URL`
@@ -304,6 +304,10 @@ Phase 6 progress notes:
   - ABI additions: `BaremetalTimerState`, `BaremetalTimerEntry`, `BaremetalWakeEvent`, `feature_timer_export`, `feature_wake_queue_export`, `feature_syscall_abi_v2`, `kernel_abi_timer`, `kernel_abi_wake_queue`, `kernel_abi_syscall_abi_v2`
   - opcodes: `command_syscall_enable`, `command_syscall_disable`, `command_syscall_set_flags`, `command_timer_reset`, `command_timer_schedule`, `command_timer_cancel`, `command_wake_queue_clear`, `command_scheduler_wake_task`
   - runtime behavior: timer one-shot scheduling transitions tasks to `waiting`, timer/interrupt/manual wake paths re-arm tasks and enqueue wake telemetry, syscall invoke now enforces entry-level blocked flags and global enable/disable state.
+- [x] Bare-metal timer control depth added:
+  - timer control exports: `oc_timer_enabled`, `oc_timer_quantum`
+  - ABI additions/opcodes: `command_timer_enable`, `command_timer_disable`, `command_timer_set_quantum`, `command_timer_schedule_periodic`, `timer_entry_flag_periodic`
+  - runtime behavior: periodic timers now auto re-arm after dispatch, timer scanning honors configurable `tick_quantum`, and disabled timer state pauses timer dispatch while preserving queued telemetry.
 - [x] `scripts/baremetal-smoke-check.ps1` now validates Multiboot2 header fields and checksum (`magic`, `arch`, `header_length`, `checksum`, end-tag tuple) in addition to section/symbol invariants.
 - [x] Cross-target diagnostics matrix (`scripts/zig-cross-target-matrix.ps1`) now covers desktop + Android with per-target logs and JSON summary:
   - Local Windows Zig master result: `4/8` pass (`x86_64-windows`, `x86_64-linux`, `x86_64-macos`, `x86_64-linux-android`)
