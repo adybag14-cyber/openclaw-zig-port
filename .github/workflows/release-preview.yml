@@ -75,11 +75,11 @@ jobs:
           - target: aarch64-linux-android
             label: aarch64-android
             binary: openclaw-zig
-            optional: true
+            optional: false
           - target: arm-linux-androideabi
             label: armv7-android
             binary: openclaw-zig
-            optional: true
+            optional: false
           - target: aarch64-linux
             label: aarch64-linux
             binary: openclaw-zig

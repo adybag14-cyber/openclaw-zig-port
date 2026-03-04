@@ -64,11 +64,11 @@ jobs:
           - target: aarch64-linux-android
             artifact_name: openclaw-zig-aarch64-android
             binary_name: openclaw-zig
-            optional: true
+            optional: false
           - target: arm-linux-androideabi
             artifact_name: openclaw-zig-armv7-android
             binary_name: openclaw-zig
-            optional: true
+            optional: false
           - target: aarch64-linux
             artifact_name: openclaw-zig-aarch64-linux
             binary_name: openclaw-zig
