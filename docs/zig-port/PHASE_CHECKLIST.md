@@ -202,3 +202,4 @@ Phase 6 progress notes:
   - `docs/zig-port/ZIG_TOOLCHAIN_LOCAL.md` updated to current local/remote Zig hash state.
   - GitHub tracking comments updated with recent optimization evidence.
   - full MkDocs docs site added (`mkdocs.yml` + `docs/*.md`) and GitHub Pages deployment workflow added (`.github/workflows/docs-pages.yml`), with local `mkdocs build --strict` validation.
+  - GitHub Pages publish verified successful via Actions run `22653680203` with both build and deploy jobs green.
