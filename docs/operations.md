@@ -11,6 +11,7 @@ Recommended sequence:
 ./scripts/runtime-smoke-check.ps1
 ./scripts/web-login-smoke-check.ps1
 ./scripts/telegram-reply-loop-smoke-check.ps1
+./scripts/npm-pack-check.ps1
 ```
 
 ## CI Workflows
@@ -27,6 +28,13 @@ Recommended sequence:
 - validate stage before artifact matrix
 - duplicate release-tag protection
 - preview artifact publishing with parity evidence
+- npm package dry-run validation in release validate stage
+
+### `npm-release.yml`
+
+- publishes `@adybag14-cyber/openclaw-zig-rpc-client` to npm
+- supports manual version/dist-tag dispatch and release-triggered publish
+- requires `NPM_TOKEN` repository secret
 
 ## Release Notes
 

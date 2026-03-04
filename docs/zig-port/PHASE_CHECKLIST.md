@@ -117,11 +117,15 @@ Phase 6 progress notes:
 - Self-maintenance/update slice:
   - methods: `system.maintenance.plan`, `system.maintenance.run`, `system.maintenance.status`.
   - integrates doctor/security/memory/heartbeat signals into health scoring and actionable remediation workflows.
-- Method surface now at `151` Zig methods; dual-baseline method-set parity is complete:
+- Next-generation update/release slice:
+  - added `update.plan` (channel-aware update planning) and `update.status` (job/queue observability).
+  - `update.run` now resolves channel aliases (`stable/latest/lts`, `edge/nightly/preview`) and surfaces npm release metadata.
+  - added npm client package at `npm/openclaw-zig-rpc-client` and release workflow `.github/workflows/npm-release.yml`.
+- Method surface now at `153` Zig methods; dual-baseline method-set parity is complete:
   - Go latest release baseline: `134/134` covered in Zig.
   - Original OpenClaw latest release baseline: `94/94` covered in Zig.
   - Union baseline: `135/135` covered in Zig.
-  - Zig-only extras vs union baseline: `16` (`shutdown`, `doctor`, `security.audit`, `exec.run`, `file.read`, `file.write`, `web.login.complete`, `web.login.status`, `edge.wasm.install`, `edge.wasm.execute`, `edge.wasm.remove`, `edge.finetune.job.get`, `edge.finetune.cancel`, `system.maintenance.plan`, `system.maintenance.run`, `system.maintenance.status`).
+  - Zig-only extras vs union baseline: `18` (`shutdown`, `doctor`, `security.audit`, `exec.run`, `file.read`, `file.write`, `web.login.complete`, `web.login.status`, `edge.wasm.install`, `edge.wasm.execute`, `edge.wasm.remove`, `edge.finetune.job.get`, `edge.finetune.cancel`, `system.maintenance.plan`, `system.maintenance.run`, `system.maintenance.status`, `update.plan`, `update.status`).
 
 ## Phase 7 - Validation + Release
 - [x] Run full parity diff against Go baseline
@@ -133,7 +137,8 @@ Phase 6 progress notes:
 - [x] `zig build`
 - [x] `zig build test`
 - [x] `zig build test --summary all` -> `66/66` passing (latest post-optimization run)
-- [x] `scripts/generate-rpc-reference.ps1` (regenerates `docs/rpc-reference.md` from `src/gateway/registry.zig`, currently `151` methods)
+- [x] `scripts/generate-rpc-reference.ps1` (regenerates `docs/rpc-reference.md` from `src/gateway/registry.zig`, currently `153` methods)
+- [x] `scripts/npm-pack-check.ps1` (validates npm package dry-run for `npm/openclaw-zig-rpc-client`)
 - [x] `zig test src/main.zig`
 - [x] Guest/auth parity tests:
   - `channels.telegram_runtime.test.telegram runtime qwen guest auth lifecycle`
@@ -146,7 +151,7 @@ Phase 6 progress notes:
   - `channels.telegram_runtime.test.telegram runtime wait supports positional timeout with account`
 - [x] `scripts/zig-syntax-check.ps1`
 - [x] `scripts/zig-codeberg-master-check.ps1` (reports local vs remote master hash)
-- [x] Multi-baseline method diff check: `Go(latest)=134`, `Original(latest)=94`, `Union=135`, `Zig=151`, `missing_in_zig=0`, `union_extras=16`
+- [x] Multi-baseline method diff check: `Go(latest)=134`, `Original(latest)=94`, `Union=135`, `Zig=153`, `missing_in_zig=0`, `union_extras=18`
 - [x] Smoke scripts now run against built binary (`zig-out/bin/openclaw-zig.exe`) with readiness loops + early-exit diagnostics:
   - `scripts/docker-smoke-check.ps1` -> host+docker HTTP 200
   - `scripts/web-login-smoke-check.ps1` -> start/wait/complete/status HTTP 200

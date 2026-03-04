@@ -1,0 +1,81 @@
+name: npm-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version or tag to publish (for example v0.2.0-zig-edge or 0.2.0-zig-edge)
+        required: true
+        type: string
+      dist_tag:
+        description: npm dist-tag (for example latest or edge)
+        required: false
+        default: latest
+        type: string
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Resolve version and dist-tag
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            DIST_TAG="${{ inputs.dist_tag }}"
+          else
+            VERSION="${{ github.event.release.tag_name }}"
+            if [ "${{ github.event.release.prerelease }}" = "true" ]; then
+              DIST_TAG="edge"
+            else
+              DIST_TAG="latest"
+            fi
+          fi
+          VERSION="${VERSION#v}"
+          if [ -z "${VERSION}" ]; then
+            echo "Resolved npm version is empty."
+            exit 1
+          fi
+          if [ -z "${DIST_TAG}" ]; then
+            DIST_TAG="latest"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=${DIST_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version=${VERSION}, dist_tag=${DIST_TAG}"
+
+      - name: Set package version
+        working-directory: npm/openclaw-zig-rpc-client
+        run: npm version "${{ steps.meta.outputs.version }}" --no-git-tag-version
+
+      - name: Validate npm package (dry-run)
+        working-directory: npm/openclaw-zig-rpc-client
+        run: npm pack --dry-run
+
+      - name: Publish npm package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        working-directory: npm/openclaw-zig-rpc-client
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "NPM_TOKEN secret is required for npm publish."
+            exit 1
+          fi
+          npm publish --access public --tag "${{ steps.meta.outputs.dist_tag }}" --provenance

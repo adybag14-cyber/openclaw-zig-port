@@ -4,7 +4,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 
 ## Current Status
 
-- RPC method surface in Zig: `151`
+- RPC method surface in Zig: `153`
 - Latest parity gate (dual-baseline):
   - Go baseline (`v2.14.0-go`): `134/134` covered
   - Original OpenClaw baseline (`v2026.3.2`): `94/94` covered
@@ -15,6 +15,9 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - diagnostics docker probe caching
   - registry lookup hot-path optimization
   - dispatcher bounded-history one-pass compaction
+- Next-generation update/release slice:
+  - channel-aware update lifecycle (`update.plan`, `update.status`, `update.run`)
+  - npm client package and release pipeline (`@adybag14-cyber/openclaw-zig-rpc-client`)
 
 ## Scope and Policy
 
@@ -207,7 +210,7 @@ All major runtime feature domains are implemented and dispatchable. Representati
   - `tts.status`, `tts.enable`, `tts.disable`, `tts.providers`, `tts.setProvider`, `tts.convert`
   - `models.list`, `chat.abort`, `chat.inject`
   - `usage.status`, `usage.cost`, `last-heartbeat`, `set-heartbeats`, `system-presence`, `system-event`, `wake`
-  - `push.test`, `logs.tail`, `canvas.present`, `update.run`, `wizard.start/next/cancel/status`
+  - `push.test`, `logs.tail`, `canvas.present`, `update.plan`, `update.status`, `update.run`, `wizard.start/next/cancel/status`
 
 ## Performance and Reliability Improvements
 
@@ -292,6 +295,12 @@ Run smoke checks:
 ./scripts/telegram-reply-loop-smoke-check.ps1
 ```
 
+Validate npm package publishability:
+
+```powershell
+./scripts/npm-pack-check.ps1
+```
+
 ## CI and Release
 
 `zig-ci` workflow (`.github/workflows/zig-ci.yml`):
@@ -314,9 +323,22 @@ Run smoke checks:
 - full preview artifact matrix build and publish
 - duplicate release tag guard
 - release asset parity evidence attachment
+- npm package dry-run validation gate in validate stage
+
+`npm-release` workflow (`.github/workflows/npm-release.yml`):
+
+- publishes `@adybag14-cyber/openclaw-zig-rpc-client` to npm
+- supports `workflow_dispatch` (manual version + dist-tag) and `release.published`
+- uses `NPM_TOKEN` secret and npm provenance publishing
 
 Manual release-preview trigger:
 
 ```powershell
 gh workflow run release-preview.yml -R adybag14-cyber/openclaw-zig-port -f version=v0.1.1-zig-preview.2
+```
+
+Manual npm release trigger:
+
+```powershell
+gh workflow run npm-release.yml -R adybag14-cyber/openclaw-zig-port -f version=v0.2.0-zig-edge -f dist_tag=edge
 ```

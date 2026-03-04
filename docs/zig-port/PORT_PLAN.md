@@ -61,6 +61,10 @@ while maintaining parity-first validation and release gating.
   - RPC reference automation and drift guard added:
     - `scripts/generate-rpc-reference.ps1` generates `docs/rpc-reference.md` from `src/gateway/registry.zig`.
     - `zig-ci`, `release-preview`, and `docs-pages` now regenerate and enforce `git diff --exit-code` on `docs/rpc-reference.md`.
+  - Next-generation update/release expansion added:
+    - new channel-aware update methods: `update.plan` and `update.status` (alongside enriched `update.run`).
+    - npm client package scaffolded at `npm/openclaw-zig-rpc-client` with publish workflow `.github/workflows/npm-release.yml`.
+    - npm package dry-run checks now enforced in `zig-ci`, `release-preview` validate stage, and local `scripts/npm-pack-check.ps1`.
   - GitHub tracking issue updated with optimization-slice evidence:
     - https://github.com/adybag14-cyber/openclaw-zig-port/issues/1#issuecomment-3994942224
     - https://github.com/adybag14-cyber/openclaw-zig-port/issues/1#issuecomment-3994964162
@@ -165,13 +169,13 @@ while maintaining parity-first validation and release gating.
   - Added compat node + exec-approval surfaces with stateful behavior:
     - node: `node.pair.request|list|approve|reject|verify`, `node.rename`, `node.list`, `node.describe`, `node.invoke`, `node.invoke.result`, `node.event`, `node.canvas.capability.refresh`
     - approvals: `exec.approvals.get|set|node.get|node.set`, `exec.approval.request|waitdecision|resolve`
-  - Method surface moved to `151` Zig methods (from `126`) while preserving Lightpanda-only browser policy and green validation gates.
+  - Method surface moved to `153` Zig methods (from `126`) while preserving Lightpanda-only browser policy and green validation gates.
   - Added dispatcher contract tests for new edge methods and memory flows.
   - Method-set parity is now tracked and enforced against both latest upstream release baselines:
     - Go release baseline (`adybag14-cyber/openclaw-go-port`): `134/134` covered in Zig.
     - Original OpenClaw release baseline (`openclaw/openclaw`): `94/94` covered in Zig.
     - Union baseline coverage: `135/135` covered in Zig.
-    - Intentional Zig-only extras retained for edge/runtime depth: `16`.
+    - Intentional Zig-only extras retained for edge/runtime depth: `18`.
   - Hardened smoke scripts to avoid flaky `zig build run` startup timing by prebuilding and launching the binary directly (`zig-out/bin/openclaw-zig.exe`) with explicit readiness and exit diagnostics.
 - Toolchain/runtime notes (local Windows Zig master):
   - Codeberg `master` is currently `ce32003625566dcc3687e9e32be411ccb83a4aaa`.

@@ -88,5 +88,12 @@ This page summarizes functional coverage across all major OpenClaw Zig runtime d
 - device pairing and token rotation/revoke
 - node flows and execution approval workflows
 - tts/voicewake/talk and heartbeat/presence control surfaces
+- update lifecycle:
+  - `update.plan`
+  - `update.status`
+  - `update.run`
+- npm ecosystem surface:
+  - publishable JS client package `@adybag14-cyber/openclaw-zig-rpc-client`
+  - npm release pipeline via GitHub Actions
 
 For the complete method set, see [`src/gateway/registry.zig`](https://github.com/adybag14-cyber/openclaw-zig-port/blob/main/src/gateway/registry.zig).

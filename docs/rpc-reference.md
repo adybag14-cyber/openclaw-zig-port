@@ -21,7 +21,7 @@ Source of truth: [`src/gateway/registry.zig`](https://github.com/adybag14-cyber/
 
 ## Summary
 
-- Total methods: **151**
+- Total methods: **153**
 - Prefix groups: **33**
 
 ## Prefix Overview
@@ -56,7 +56,7 @@ Source of truth: [`src/gateway/registry.zig`](https://github.com/adybag14-cyber/
 | talk | 2 |
 | tools | 1 |
 | tts | 6 |
-| update | 1 |
+| update | 3 |
 | usage | 2 |
 | voicewake | 2 |
 | web | 4 |
@@ -288,7 +288,9 @@ Source of truth: [`src/gateway/registry.zig`](https://github.com/adybag14-cyber/
 
 ### update
 
+- update.plan
 - update.run
+- update.status
 
 ### usage
 

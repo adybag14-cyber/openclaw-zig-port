@@ -17,6 +17,14 @@ if (-not (Test-Path $zigExe)) {
 
 Set-Location $repoRoot
 
+$npmPackCheck = Join-Path $repoRoot "scripts\npm-pack-check.ps1"
+if (Test-Path $npmPackCheck) {
+    & $npmPackCheck
+    if (-not $?) {
+        throw "npm package dry-run validation failed."
+    }
+}
+
 function Invoke-ZigChecked {
     param(
         [Parameter(Mandatory = $true)]

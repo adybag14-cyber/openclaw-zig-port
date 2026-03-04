@@ -125,6 +125,8 @@ pub const supported_methods = [_][]const u8{
     "system.maintenance.plan",
     "system.maintenance.run",
     "system.maintenance.status",
+    "update.plan",
+    "update.status",
     "update.run",
     "wizard.start",
     "wizard.next",

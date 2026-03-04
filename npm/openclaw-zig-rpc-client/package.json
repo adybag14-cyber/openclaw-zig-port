@@ -1,0 +1,38 @@
+{
+  "name": "@adybag14-cyber/openclaw-zig-rpc-client",
+  "version": "0.2.0-edge.0",
+  "description": "Node.js RPC client for OpenClaw Zig gateway endpoints.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "type": "commonjs",
+  "license": "MIT",
+  "author": "Ady",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adybag14-cyber/openclaw-zig-port.git",
+    "directory": "npm/openclaw-zig-rpc-client"
+  },
+  "bugs": {
+    "url": "https://github.com/adybag14-cyber/openclaw-zig-port/issues"
+  },
+  "homepage": "https://github.com/adybag14-cyber/openclaw-zig-port#readme",
+  "keywords": [
+    "openclaw",
+    "zig",
+    "rpc",
+    "json-rpc",
+    "lightpanda",
+    "agent"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "scripts": {
+    "pack:check": "npm pack --dry-run"
+  }
+}

@@ -71,6 +71,28 @@ const CompatUpdateJob = struct {
     }
 };
 
+const UpdateChannelSpec = struct {
+    id: []const u8,
+    label: []const u8,
+    target_version: []const u8,
+    npm_dist_tag: []const u8,
+};
+
+const update_channels = [_]UpdateChannelSpec{
+    .{
+        .id = "stable",
+        .label = "Stable release channel",
+        .target_version = "v0.2.0-zig-stable",
+        .npm_dist_tag = "latest",
+    },
+    .{
+        .id = "edge",
+        .label = "Edge preview channel",
+        .target_version = "v0.2.0-zig-edge",
+        .npm_dist_tag = "edge",
+    },
+};
+
 const MaintenanceAction = struct {
     id: []const u8,
     title: []const u8,
@@ -387,6 +409,10 @@ const CompatState = struct {
     pending_approvals: std.ArrayList(CompatPendingApproval),
     events: std.ArrayList(CompatEvent),
     update_jobs: std.ArrayList(CompatUpdateJob),
+    update_current_version: []u8,
+    update_channel: []u8,
+    update_npm_package: []u8,
+    update_npm_dist_tag: []u8,
     config_overlay: std.StringHashMap([]u8),
     next_event_id: u64,
     next_update_id: u64,
@@ -437,6 +463,10 @@ const CompatState = struct {
             .pending_approvals = .empty,
             .events = .empty,
             .update_jobs = .empty,
+            .update_current_version = try allocator.dupe(u8, "dev"),
+            .update_channel = try allocator.dupe(u8, "edge"),
+            .update_npm_package = try allocator.dupe(u8, "@openclaw/zig-rpc-client"),
+            .update_npm_dist_tag = try allocator.dupe(u8, "edge"),
             .config_overlay = std.StringHashMap([]u8).init(allocator),
             .next_event_id = 1,
             .next_update_id = 1,
@@ -483,6 +513,10 @@ const CompatState = struct {
         self.events.deinit(self.allocator);
         for (self.update_jobs.items) |*job| job.deinit(self.allocator);
         self.update_jobs.deinit(self.allocator);
+        self.allocator.free(self.update_current_version);
+        self.allocator.free(self.update_channel);
+        self.allocator.free(self.update_npm_package);
+        self.allocator.free(self.update_npm_dist_tag);
         var overlay_it = self.config_overlay.iterator();
         while (overlay_it.next()) |entry| {
             self.allocator.free(entry.key_ptr.*);
@@ -707,6 +741,26 @@ const CompatState = struct {
         entry.progress = progress;
         entry.updated_at_ms = time_util.nowMs();
         return true;
+    }
+
+    fn setUpdateHead(self: *CompatState, version: []const u8, channel: []const u8, npm_dist_tag: []const u8) !void {
+        const normalized_version = std.mem.trim(u8, version, " \t\r\n");
+        const normalized_channel = std.mem.trim(u8, channel, " \t\r\n");
+        const normalized_dist_tag = std.mem.trim(u8, npm_dist_tag, " \t\r\n");
+
+        self.allocator.free(self.update_current_version);
+        self.update_current_version = try self.allocator.dupe(u8, if (normalized_version.len > 0) normalized_version else "dev");
+
+        self.allocator.free(self.update_channel);
+        self.update_channel = try self.allocator.dupe(u8, if (normalized_channel.len > 0) normalized_channel else "edge");
+
+        self.allocator.free(self.update_npm_dist_tag);
+        self.update_npm_dist_tag = try self.allocator.dupe(u8, if (normalized_dist_tag.len > 0) normalized_dist_tag else "edge");
+    }
+
+    fn latestUpdateJob(self: *const CompatState) ?CompatUpdateJob {
+        if (self.update_jobs.items.len == 0) return null;
+        return self.update_jobs.items[self.update_jobs.items.len - 1];
     }
 
     fn findAgentIndex(self: *const CompatState, agent_id: []const u8) ?usize {
@@ -3177,25 +3231,195 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         });
     }
 
+    if (std.ascii.eqlIgnoreCase(req.method, "update.plan")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const compat = try getCompatState();
+        const resolved = resolveUpdateTarget(params, compat.update_channel);
+        const update_required = !std.ascii.eqlIgnoreCase(resolved.target_version, compat.update_current_version);
+        const channels = [_]struct {
+            id: []const u8,
+            label: []const u8,
+            targetVersion: []const u8,
+            npmDistTag: []const u8,
+        }{
+            .{
+                .id = update_channels[0].id,
+                .label = update_channels[0].label,
+                .targetVersion = update_channels[0].target_version,
+                .npmDistTag = update_channels[0].npm_dist_tag,
+            },
+            .{
+                .id = update_channels[1].id,
+                .label = update_channels[1].label,
+                .targetVersion = update_channels[1].target_version,
+                .npmDistTag = update_channels[1].npm_dist_tag,
+            },
+        };
+        return protocol.encodeResult(allocator, req.id, .{
+            .currentVersion = compat.update_current_version,
+            .currentChannel = compat.update_channel,
+            .npm = .{
+                .package = compat.update_npm_package,
+                .distTag = compat.update_npm_dist_tag,
+            },
+            .selection = .{
+                .requestedChannel = resolved.requested_channel,
+                .requestedTargetVersion = resolved.requested_target,
+                .channel = resolved.channel,
+                .targetVersion = resolved.target_version,
+                .npmDistTag = resolved.npm_dist_tag,
+                .source = resolved.source,
+                .updateRequired = update_required,
+            },
+            .steps = [_]struct {
+                id: []const u8,
+                title: []const u8,
+            }{
+                .{ .id = "resolve", .title = "Resolve target channel/version" },
+                .{ .id = "download", .title = "Download release artifacts" },
+                .{ .id = "apply", .title = "Apply runtime and config updates" },
+                .{ .id = "verify", .title = "Run health and parity validation" },
+            },
+            .channels = channels,
+            .generatedAtMs = time_util.nowMs(),
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "update.status")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const compat = try getCompatState();
+
+        var limit_i64 = firstParamInt(params, "limit", 20);
+        limit_i64 = std.math.clamp(limit_i64, 1, 200);
+        const limit: usize = @intCast(limit_i64);
+
+        const JobView = struct {
+            jobId: []const u8,
+            status: []const u8,
+            phase: []const u8,
+            progress: u8,
+            targetVersion: []const u8,
+            dryRun: bool,
+            force: bool,
+            createdAtMs: i64,
+            updatedAtMs: i64,
+        };
+
+        var pending: usize = 0;
+        var running: usize = 0;
+        var completed: usize = 0;
+        var failed: usize = 0;
+        for (compat.update_jobs.items) |entry| {
+            if (std.ascii.eqlIgnoreCase(entry.status, "queued")) {
+                pending += 1;
+            } else if (std.ascii.eqlIgnoreCase(entry.status, "running")) {
+                running += 1;
+            } else if (std.ascii.eqlIgnoreCase(entry.status, "completed")) {
+                completed += 1;
+            } else {
+                failed += 1;
+            }
+        }
+
+        var items: std.ArrayList(JobView) = .empty;
+        defer items.deinit(allocator);
+        const total = compat.update_jobs.items.len;
+        const start = if (total > limit) total - limit else 0;
+        var idx = total;
+        while (idx > start) {
+            idx -= 1;
+            const entry = compat.update_jobs.items[idx];
+            try items.append(allocator, .{
+                .jobId = entry.id,
+                .status = entry.status,
+                .phase = entry.phase,
+                .progress = entry.progress,
+                .targetVersion = entry.target_version,
+                .dryRun = entry.dry_run,
+                .force = entry.force,
+                .createdAtMs = entry.created_at_ms,
+                .updatedAtMs = entry.updated_at_ms,
+            });
+        }
+
+        const latest = compat.latestUpdateJob();
+        return protocol.encodeResult(allocator, req.id, .{
+            .currentVersion = compat.update_current_version,
+            .currentChannel = compat.update_channel,
+            .npm = .{
+                .package = compat.update_npm_package,
+                .distTag = compat.update_npm_dist_tag,
+            },
+            .counts = .{
+                .total = total,
+                .pending = pending,
+                .running = running,
+                .completed = completed,
+                .failed = failed,
+            },
+            .latestRun = if (latest != null) .{
+                .jobId = latest.?.id,
+                .status = latest.?.status,
+                .phase = latest.?.phase,
+                .progress = latest.?.progress,
+                .targetVersion = latest.?.target_version,
+                .updatedAtMs = latest.?.updated_at_ms,
+            } else null,
+            .items = items.items,
+        });
+    }
+
     if (std.ascii.eqlIgnoreCase(req.method, "update.run")) {
         var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
         defer parsed.deinit();
         const params = getParamsObjectOrNull(parsed.value);
-        const target_version = firstParamString(params, "targetVersion", "edge");
+        const compat = try getCompatState();
+        const resolved = resolveUpdateTarget(params, compat.update_channel);
         const dry_run = firstParamBool(params, "dryRun", false);
         const force = firstParamBool(params, "force", false);
-        const compat = try getCompatState();
-        const job = try compat.createUpdateJob(target_version, dry_run, force);
+        const already_current = std.ascii.eqlIgnoreCase(resolved.target_version, compat.update_current_version);
+        const job = try compat.createUpdateJob(resolved.target_version, dry_run, force);
+
+        var note: []const u8 = "queued";
+        if (dry_run) {
+            note = "dry-run completed";
+        } else if (already_current and !force) {
+            _ = compat.setUpdateJobState(job.id, "completed", "up-to-date", 100);
+            note = "already up to date";
+        } else {
+            _ = compat.setUpdateJobState(job.id, "running", "download", 35);
+            _ = compat.setUpdateJobState(job.id, "running", "apply", 78);
+            _ = compat.setUpdateJobState(job.id, "completed", "applied", 100);
+            try compat.setUpdateHead(resolved.target_version, resolved.channel, resolved.npm_dist_tag);
+            note = "update applied";
+        }
+
+        const job_idx = compat.findUpdateJobIndex(job.id) orelse return protocol.encodeError(allocator, req.id, .{
+            .code = -32603,
+            .message = "internal update state error",
+        });
+        const final_job = compat.update_jobs.items[job_idx];
         return protocol.encodeResult(allocator, req.id, .{
-            .jobId = job.id,
-            .status = job.status,
-            .phase = job.phase,
-            .progress = job.progress,
-            .targetVersion = job.target_version,
-            .dryRun = job.dry_run,
-            .force = job.force,
-            .startedAtMs = job.created_at_ms,
-            .updatedAtMs = job.updated_at_ms,
+            .jobId = final_job.id,
+            .status = final_job.status,
+            .phase = final_job.phase,
+            .progress = final_job.progress,
+            .targetVersion = final_job.target_version,
+            .dryRun = final_job.dry_run,
+            .force = final_job.force,
+            .channel = resolved.channel,
+            .npmPackage = compat.update_npm_package,
+            .npmDistTag = resolved.npm_dist_tag,
+            .source = resolved.source,
+            .updateRequired = !already_current or force,
+            .note = note,
+            .currentVersion = compat.update_current_version,
+            .startedAtMs = final_job.created_at_ms,
+            .updatedAtMs = final_job.updated_at_ms,
         });
     }
 
@@ -5748,6 +5972,8 @@ fn shouldEnforceGuard(method: []const u8) bool {
     if (std.ascii.eqlIgnoreCase(method, "tools.catalog")) return false;
     if (std.ascii.eqlIgnoreCase(method, "channels.status")) return false;
     if (std.ascii.eqlIgnoreCase(method, "channels.logout")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "update.plan")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "update.status")) return false;
     if (std.ascii.eqlIgnoreCase(method, "update.run")) return false;
     if (std.ascii.eqlIgnoreCase(method, "wizard.start")) return false;
     if (std.ascii.eqlIgnoreCase(method, "wizard.next")) return false;
@@ -6479,6 +6705,98 @@ fn firstParamBool(params: ?std.json.ObjectMap, key: []const u8, fallback: bool) 
         }
     }
     return fallback;
+}
+
+const ResolvedUpdateTarget = struct {
+    requested_channel: []const u8,
+    requested_target: []const u8,
+    channel: []const u8,
+    target_version: []const u8,
+    npm_dist_tag: []const u8,
+    source: []const u8,
+};
+
+fn normalizeUpdateChannel(raw: []const u8) []const u8 {
+    const trimmed = std.mem.trim(u8, raw, " \t\r\n");
+    if (trimmed.len == 0) return "edge";
+    if (std.ascii.eqlIgnoreCase(trimmed, "stable") or
+        std.ascii.eqlIgnoreCase(trimmed, "latest") or
+        std.ascii.eqlIgnoreCase(trimmed, "lts"))
+    {
+        return "stable";
+    }
+    if (std.ascii.eqlIgnoreCase(trimmed, "edge") or
+        std.ascii.eqlIgnoreCase(trimmed, "nightly") or
+        std.ascii.eqlIgnoreCase(trimmed, "preview") or
+        std.ascii.eqlIgnoreCase(trimmed, "canary"))
+    {
+        return "edge";
+    }
+    return trimmed;
+}
+
+fn lookupUpdateChannel(channel: []const u8) ?UpdateChannelSpec {
+    for (update_channels) |entry| {
+        if (std.ascii.eqlIgnoreCase(entry.id, channel)) return entry;
+    }
+    return null;
+}
+
+fn resolveUpdateTarget(params: ?std.json.ObjectMap, fallback_channel: []const u8) ResolvedUpdateTarget {
+    const requested_channel = normalizeUpdateChannel(firstParamString(params, "channel", fallback_channel));
+    const requested_target = std.mem.trim(u8, firstParamString(params, "targetVersion", ""), " \t\r\n");
+    const default_spec = lookupUpdateChannel(requested_channel) orelse update_channels[1];
+
+    if (requested_target.len == 0) {
+        return .{
+            .requested_channel = requested_channel,
+            .requested_target = requested_target,
+            .channel = default_spec.id,
+            .target_version = default_spec.target_version,
+            .npm_dist_tag = default_spec.npm_dist_tag,
+            .source = "channel-default",
+        };
+    }
+
+    if (std.ascii.eqlIgnoreCase(requested_target, "stable") or
+        std.ascii.eqlIgnoreCase(requested_target, "latest") or
+        std.ascii.eqlIgnoreCase(requested_target, "lts"))
+    {
+        const stable = lookupUpdateChannel("stable") orelse update_channels[0];
+        return .{
+            .requested_channel = requested_channel,
+            .requested_target = requested_target,
+            .channel = stable.id,
+            .target_version = stable.target_version,
+            .npm_dist_tag = stable.npm_dist_tag,
+            .source = "target-alias",
+        };
+    }
+
+    if (std.ascii.eqlIgnoreCase(requested_target, "edge") or
+        std.ascii.eqlIgnoreCase(requested_target, "nightly") or
+        std.ascii.eqlIgnoreCase(requested_target, "preview") or
+        std.ascii.eqlIgnoreCase(requested_target, "canary"))
+    {
+        const edge = lookupUpdateChannel("edge") orelse update_channels[1];
+        return .{
+            .requested_channel = requested_channel,
+            .requested_target = requested_target,
+            .channel = edge.id,
+            .target_version = edge.target_version,
+            .npm_dist_tag = edge.npm_dist_tag,
+            .source = "target-alias",
+        };
+    }
+
+    return .{
+        .requested_channel = requested_channel,
+        .requested_target = requested_target,
+        .channel = default_spec.id,
+        .target_version = requested_target,
+        .npm_dist_tag = default_spec.npm_dist_tag,
+        .source = "explicit-target",
+    };
 }
 
 fn splitPathSegments(allocator: std.mem.Allocator, path: []const u8) ![]const []const u8 {
@@ -7570,9 +7888,21 @@ test "dispatch compat talk tts models and control methods return contracts" {
     defer allocator.free(models_qwen);
     try std.testing.expect(std.mem.indexOf(u8, models_qwen, "\"qwen-max\"") != null);
 
+    const update_plan = try dispatch(allocator, "{\"id\":\"compat-update-plan\",\"method\":\"update.plan\",\"params\":{\"channel\":\"stable\"}}");
+    defer allocator.free(update_plan);
+    try std.testing.expect(std.mem.indexOf(u8, update_plan, "\"selection\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, update_plan, "\"targetVersion\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, update_plan, "\"channels\"") != null);
+
     const update_run = try dispatch(allocator, "{\"id\":\"compat-update-run\",\"method\":\"update.run\",\"params\":{\"targetVersion\":\"edge-next\",\"dryRun\":true}}");
     defer allocator.free(update_run);
     try std.testing.expect(std.mem.indexOf(u8, update_run, "\"status\":\"completed\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, update_run, "\"channel\"") != null);
+
+    const update_status = try dispatch(allocator, "{\"id\":\"compat-update-status\",\"method\":\"update.status\",\"params\":{\"limit\":5}}");
+    defer allocator.free(update_status);
+    try std.testing.expect(std.mem.indexOf(u8, update_status, "\"counts\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, update_status, "\"items\"") != null);
 
     const maintenance_plan = try dispatch(allocator, "{\"id\":\"compat-maint-plan\",\"method\":\"system.maintenance.plan\",\"params\":{\"deep\":false}}");
     defer allocator.free(maintenance_plan);
