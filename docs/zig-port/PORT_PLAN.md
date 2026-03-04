@@ -51,6 +51,12 @@ while maintaining parity-first validation and release gating.
 
 ## Current Progress Snapshot
 
+- Tracking and documentation refresh (2026-03-04):
+  - README refreshed with current parity/validation state and workflow guidance.
+  - Local Zig toolchain reference doc refreshed to current local/remote hashes.
+  - GitHub tracking issue updated with optimization-slice evidence:
+    - https://github.com/adybag14-cyber/openclaw-zig-port/issues/1#issuecomment-3994942224
+    - https://github.com/adybag14-cyber/openclaw-zig-port/issues/1#issuecomment-3994964162
 - Phase 2 complete:
   - JSON-RPC envelope parser/encoder
   - Registry + dispatcher

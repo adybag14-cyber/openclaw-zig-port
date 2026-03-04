@@ -132,6 +132,7 @@ Phase 6 progress notes:
 ## Latest Validation Snapshot
 - [x] `zig build`
 - [x] `zig build test`
+- [x] `zig build test --summary all` -> `66/66` passing (latest post-optimization run)
 - [x] `zig test src/main.zig`
 - [x] Guest/auth parity tests:
   - `channels.telegram_runtime.test.telegram runtime qwen guest auth lifecycle`
@@ -196,3 +197,7 @@ Phase 6 progress notes:
 - [x] Parity reporting now includes reviewer-friendly markdown (`parity-go-zig.md`) in CI artifacts and release assets.
 - [x] Release workflow evidence update: run `22646648616` published `v0.1.0-zig-preview.ci-paritymd` including both `parity-go-zig.json` and `parity-go-zig.md`.
 - [x] Added cross-platform runtime smoke gate (`scripts/runtime-smoke-check.ps1`) and wired it into `zig-ci` validate job.
+- [x] Tracking/docs refresh:
+  - README updated with current parity + validation + workflow status.
+  - `docs/zig-port/ZIG_TOOLCHAIN_LOCAL.md` updated to current local/remote Zig hash state.
+  - GitHub tracking comments updated with recent optimization evidence.

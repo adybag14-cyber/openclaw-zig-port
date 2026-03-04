@@ -1,35 +1,43 @@
 # OpenClaw Zig Port
 
-Bootstrap repository for the next OpenClaw runtime port in Zig.
+Zig runtime port of OpenClaw with parity-first delivery, deterministic validation gates, and Lightpanda-only browser bridge policy.
 
-## Baseline
+## Current Status
 
-- Source baseline repo: `adybag14-cyber/openclaw-go-port`
-- Baseline branch: `main`
-- Baseline commit: `65c974b528e2` (`v2.10.2-go` line)
+- RPC method surface in Zig: `151`
+- Latest parity gate (dual-baseline):
+  - Go baseline (`v2.14.0-go`): `134/134` covered
+  - Original OpenClaw baseline (`v2026.3.2`): `94/94` covered
+  - Union baseline: `135/135` covered (`MISSING_IN_ZIG=0`)
+- Latest local validation: `zig build test --summary all` -> `66/66` passing
+- Recent optimization slices (2026-03-04):
+  - memory/runtime/channel queue compaction and retention hardening
+  - diagnostics docker probe caching
+  - registry lookup hot-path optimization
+  - dispatcher bounded-history one-pass compaction
 
-## Scope
+## Scope and Policy
 
-- Rebuild OpenClaw runtime surfaces in Zig with end-to-end parity against the Go runtime baseline.
-- Keep RPC contract compatibility, channel behavior, auth/browser bridge semantics, and release packaging parity.
-- Treat this repo as the Zig-only source of truth for the new runtime.
-- Browser bridge policy for Zig is Lightpanda-only; Playwright and Puppeteer are intentionally rejected in dispatcher contracts.
-- Release policy: push each completed parity slice, but do not cut a release tag until parity is explicitly 100% and Phase 7 gates are green.
+- Preserve JSON-RPC contract compatibility while porting runtime behavior to Zig.
+- Keep security, browser/auth, Telegram, memory, and edge flows fully stateful (no placeholder stubs for advertised methods).
+- Browser bridge policy in Zig is **Lightpanda-only**; Playwright/Puppeteer are rejected in runtime dispatch contracts.
+- Push each completed parity slice to `main`; release tags only after parity + validation gates are green for the release cut.
+
+## Baselines
+
+- Historical bootstrap commit: Go baseline `65c974b528e2` (`v2.10.2-go` line)
+- Active parity baselines are resolved to latest releases by gate script:
+  - `adybag14-cyber/openclaw-go-port`
+  - `openclaw/openclaw`
 
 ## Tracking
 
 - Plan: [`docs/zig-port/PORT_PLAN.md`](docs/zig-port/PORT_PLAN.md)
 - Checklist: [`docs/zig-port/PHASE_CHECKLIST.md`](docs/zig-port/PHASE_CHECKLIST.md)
-- Local Zig setup: [`docs/zig-port/ZIG_TOOLCHAIN_LOCAL.md`](docs/zig-port/ZIG_TOOLCHAIN_LOCAL.md)
+- Local Zig toolchain notes: [`docs/zig-port/ZIG_TOOLCHAIN_LOCAL.md`](docs/zig-port/ZIG_TOOLCHAIN_LOCAL.md)
+- GitHub master tracking issue: <https://github.com/adybag14-cyber/openclaw-zig-port/issues/1>
 
-## Initial Milestone
-
-1. Establish build/test scaffolding and protocol contracts in Zig.
-2. Land gateway + RPC dispatcher parity core.
-3. Port security/runtime/tooling surfaces in vertical slices with tests.
-4. Reach release gate and ship `v0.1.0-zig` preview when parity gates pass.
-
-## Zig Bootstrap Commands
+## Quick Start
 
 ```bash
 zig build
@@ -37,31 +45,27 @@ zig build run
 zig build test
 ```
 
-Run HTTP serve mode:
+Run gateway serve mode:
 
 ```bash
 zig build run -- --serve
 ```
 
-Current route surface:
-- `GET /health` -> JSON-RPC health payload
-- `POST /rpc` -> JSON-RPC dispatcher route
-- graceful shutdown via RPC method `shutdown`
-- runtime tool actions via RPC:
-  - `exec.run`
-  - `file.read`
-  - `file.write`
-  - `web.login.start`
-  - `web.login.wait`
-  - `web.login.complete`
-  - `web.login.status`
-  - `channels.status`
-  - `send`
-  - `poll`
-  - `security.audit`
-  - `doctor`
+Core routes:
 
-Run diagnostics directly from CLI:
+- `GET /health`
+- `POST /rpc`
+- graceful shutdown via RPC method `shutdown`
+
+## Validation and Diagnostics
+
+Run full local syntax/build checks:
+
+```powershell
+./scripts/zig-syntax-check.ps1
+```
+
+Run doctor/security audit from CLI:
 
 ```powershell
 zig build run -- --doctor
@@ -69,89 +73,45 @@ zig build run -- --security-audit --deep
 zig build run -- --security-audit --deep --fix
 ```
 
-Or run the workspace checker with local Zig master:
-
-```powershell
-./scripts/zig-syntax-check.ps1
-```
-
-Check Codeberg `master` freshness against local toolchain:
+Check Zig Codeberg freshness against local toolchain:
 
 ```powershell
 ./scripts/zig-codeberg-master-check.ps1
 ```
 
-Diagnose arm64 cross-build failures (logs written under `release/arm64-diagnostics`):
-
-```powershell
-./scripts/zig-arm64-diagnose.ps1
-```
-
-Run Go-to-Zig method parity gate locally:
+Run parity gate and emit evidence artifacts:
 
 ```powershell
 ./scripts/check-go-method-parity.ps1
-./scripts/check-go-method-parity.ps1 -OutputJsonPath .\release\parity-go-zig.json
 ./scripts/check-go-method-parity.ps1 -OutputJsonPath .\release\parity-go-zig.json -OutputMarkdownPath .\release\parity-go-zig.md
 ```
 
-Default parity baseline source:
-- `openclaw-go-port` pinned baseline commit `65c974b528e2a960b171e3110e8e4e4dbb6fda63`
-- Override with `-GoRegistryPath` (local file) or `-GoRegistryUrl` (alternate ref) when needed.
-- Optional strict mode: add `-FailOnExtra` to fail if Zig has methods beyond Go baseline.
-
-Run host + Docker smoke/system checks:
+Run smoke checks:
 
 ```powershell
 ./scripts/docker-smoke-check.ps1
-```
-
-Run cross-platform runtime smoke (serve + RPC + auth + telegram loop simulation):
-
-```powershell
 ./scripts/runtime-smoke-check.ps1
-```
-
-Run web login lifecycle smoke check:
-
-```powershell
 ./scripts/web-login-smoke-check.ps1
-```
-
-Run Telegram command/reply loop smoke check:
-
-```powershell
 ./scripts/telegram-reply-loop-smoke-check.ps1
 ```
 
-Build preview release bundles (and optionally publish to GitHub Releases):
+## CI and Release
 
-```powershell
-./scripts/release-preview.ps1 -Version v0.1.1-zig-preview.2
-./scripts/release-preview.ps1 -Version v0.1.1-zig-preview.2 -IncludeArm64
-./scripts/release-preview.ps1 -Version v0.1.1-zig-preview.2 -Publish
-```
+`zig-ci` workflow (`.github/workflows/zig-ci.yml`):
 
-CI workflow:
-- `.github/workflows/zig-ci.yml` runs on push/PR with Zig `master`
-- validates build/test gates
-- enforces Go->Zig method-set parity (`scripts/check-go-method-parity.ps1`)
-- publishes parity report artifacts (`parity-go-zig.json`, `parity-go-zig.md`)
-- runs runtime smoke gate (`scripts/runtime-smoke-check.ps1 -SkipBuild`)
-- attempts cross-target release builds (x86_64-macos required, aarch64-linux/aarch64-macos optional)
-- supports manual dispatch (`workflow_dispatch`) for on-demand verification
+- Zig master build/test gates
+- dual-baseline parity enforcement
+- runtime smoke gate
+- parity evidence artifact publication (`parity-go-zig.json`, `parity-go-zig.md`)
 
-Automated preview release workflow:
-- `.github/workflows/release-preview.yml` builds and publishes full preview artifacts on Linux runners for:
-  - `x86_64-windows`
-  - `x86_64-linux`
-  - `x86_64-macos`
-  - `aarch64-linux`
-  - `aarch64-macos`
-- validates parity + full Zig build/test once up front before matrix builds
-- rejects duplicate release tags early with a clear error
-- includes parity evidence files (`parity-go-zig.json`, `parity-go-zig.md`) in release assets
-- Trigger with GitHub CLI:
+`release-preview` workflow (`.github/workflows/release-preview.yml`):
+
+- upfront validate job (build + test + parity)
+- full preview artifact matrix build and publish
+- duplicate release tag guard
+- release asset parity evidence attachment
+
+Manual release-preview trigger:
 
 ```powershell
 gh workflow run release-preview.yml -R adybag14-cyber/openclaw-zig-port -f version=v0.1.1-zig-preview.2
