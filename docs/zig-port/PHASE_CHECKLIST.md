@@ -195,10 +195,12 @@ Phase 6 progress notes:
 - [x] Rust-vs-Zig method diff check: `Rust=124`, `Zig=143`, `missing_in_zig=0`, `zig_extras=19`
 - [x] Smoke scripts now run against built binary (`zig-out/bin/openclaw-zig.exe`) with readiness loops + early-exit diagnostics:
   - `scripts/docker-smoke-check.ps1` -> host+docker HTTP 200
+  - `scripts/gateway-auth-smoke-check.ps1` -> token-gated `/rpc` + websocket unauthorized/authorized contract checks
   - `scripts/websocket-smoke-check.ps1` -> websocket connect + RPC text-frame response on `/ws` and root compatibility route `/`
   - `scripts/web-login-smoke-check.ps1` -> start/wait/complete/status HTTP 200
   - `scripts/telegram-reply-loop-smoke-check.ps1` -> send/poll/auth lifecycle HTTP 200
 - [x] `scripts/docker-smoke-check.ps1` (host + Docker HTTP 200 checks on `/health` and `/rpc`)
+- [x] `scripts/gateway-auth-smoke-check.ps1` (`OPENCLAW_ZIG_GATEWAY_REQUIRE_TOKEN=true` with verified 401/200 for `/rpc` and unauthorized/authorized websocket upgrade behavior)
 - [x] `scripts/websocket-smoke-check.ps1` (`GET /ws` websocket upgrade + root websocket compatibility route + status/health RPC text-frame dispatch)
 - [x] `scripts/web-login-smoke-check.ps1` (`web.login.start -> wait -> complete -> status` all HTTP 200 with authorized completion)
 - [x] `scripts/telegram-reply-loop-smoke-check.ps1` (`send /auth start -> send /auth complete -> send chat -> poll` all HTTP 200 with non-empty queued replies)

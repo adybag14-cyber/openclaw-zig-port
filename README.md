@@ -308,6 +308,7 @@ Run smoke checks:
 ./scripts/docker-smoke-check.ps1
 ./scripts/baremetal-smoke-check.ps1
 ./scripts/runtime-smoke-check.ps1
+./scripts/gateway-auth-smoke-check.ps1
 ./scripts/websocket-smoke-check.ps1
 ./scripts/web-login-smoke-check.ps1
 ./scripts/telegram-reply-loop-smoke-check.ps1

@@ -80,6 +80,10 @@ jobs:
         shell: pwsh
         run: ./scripts/runtime-smoke-check.ps1 -SkipBuild
 
+      - name: Gateway auth smoke check (token gate for rpc + websocket)
+        shell: pwsh
+        run: ./scripts/gateway-auth-smoke-check.ps1 -SkipBuild
+
       - name: WebSocket smoke check (/ws rpc frames)
         shell: pwsh
         run: ./scripts/websocket-smoke-check.ps1 -SkipBuild
