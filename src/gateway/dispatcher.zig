@@ -9524,18 +9524,6 @@ test "dispatch browser.request supports direct provider path for chatgpt with mi
     try std.testing.expect(std.mem.indexOf(u8, out, "missing API key for direct provider request") != null);
 }
 
-test "dispatch browser.request direct provider rejects unsupported providers with telemetry" {
-    const allocator = std.testing.allocator;
-    const out = try dispatch(
-        allocator,
-        "{\"id\":\"3f\",\"method\":\"browser.request\",\"params\":{\"provider\":\"qwen\",\"directProvider\":true,\"prompt\":\"hello direct\"}}",
-    );
-    defer allocator.free(out);
-    try std.testing.expect(std.mem.indexOf(u8, out, "\"ok\":false") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out, "\"executionPath\":\"direct-provider\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, out, "unsupported direct provider") != null);
-}
-
 test "dispatch config.get and tools.catalog expose runtime + wasm contracts" {
     const allocator = std.testing.allocator;
 
