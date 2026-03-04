@@ -45,6 +45,8 @@ Phase 5 enhancement notes:
   - `/auth bridge <provider>` now returns provider-specific lightpanda guidance.
   - `/auth wait` supports backward-compatible positional timeout (`/auth wait <provider> [account] <seconds>`) in addition to `--timeout`.
   - `/auth link|open` now re-surfaces active login URL + code + exact completion commands for phone-only flows.
+  - `/tts speak` now emits clip payload metadata in `send` responses (`audioAvailable`, `audioFormat`, `audioBase64`, `audioBytes`, `audioProviderUsed`, `audioSource`) and queues a dedicated `audio_clip` update for downstream transport adapters.
+  - Telegram TTS key/bin status checks now use alias-aware env resolution for Zig/Go/Rust migration paths (matching dispatcher fallback chains).
 - Added live Lightpanda probe telemetry for `browser.request` and `browser.open`:
   - Dispatcher now probes `<endpoint>/json/version` per request and returns structured probe status (`ok/url/statusCode/latencyMs/error`).
   - Browser params now support endpoint/timeout overrides (`endpoint|bridgeEndpoint|lightpandaEndpoint`, `requestTimeoutMs|timeoutMs`) while preserving existing completion payload fields.
@@ -177,6 +179,7 @@ Phase 6 progress notes:
 - [x] `zig build baremetal` (freestanding image build: `openclaw-zig-baremetal.elf`)
 - [x] `scripts/zig-codeberg-master-check.ps1` (reports local vs remote master hash)
 - [x] Multi-baseline method diff check: `Go(latest)=134`, `Original(latest)=94`, `Union=135`, `Zig=153`, `missing_in_zig=0`, `union_extras=18`
+- [x] Rust-vs-Zig method diff check: `Rust=124`, `Zig=143`, `missing_in_zig=0`, `zig_extras=19`
 - [x] Smoke scripts now run against built binary (`zig-out/bin/openclaw-zig.exe`) with readiness loops + early-exit diagnostics:
   - `scripts/docker-smoke-check.ps1` -> host+docker HTTP 200
   - `scripts/web-login-smoke-check.ps1` -> start/wait/complete/status HTTP 200

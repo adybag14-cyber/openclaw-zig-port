@@ -22,6 +22,12 @@ pub const SendResult = struct {
     loginSessionId: []u8,
     loginCode: []u8,
     authStatus: []u8,
+    audioAvailable: bool,
+    audioFormat: []u8,
+    audioBase64: []u8,
+    audioBytes: usize,
+    audioProviderUsed: []u8,
+    audioSource: []u8,
     queueDepth: usize,
 
     pub fn deinit(self: *SendResult, allocator: std.mem.Allocator) void {
@@ -35,6 +41,10 @@ pub const SendResult = struct {
         allocator.free(self.loginSessionId);
         allocator.free(self.loginCode);
         allocator.free(self.authStatus);
+        allocator.free(self.audioFormat);
+        allocator.free(self.audioBase64);
+        allocator.free(self.audioProviderUsed);
+        allocator.free(self.audioSource);
     }
 };
 
@@ -166,6 +176,7 @@ pub const TelegramRuntime = struct {
 
         const outcome = try self.handleSendMessage(allocator, target, session_id, std.mem.trim(u8, message, " \t\r\n"));
         defer allocator.free(outcome.reply);
+        defer if (outcome.audio_base64) |audio| allocator.free(audio);
         return self.makeSendResult(allocator, channel, target, session_id, outcome);
     }
 
@@ -230,6 +241,11 @@ pub const TelegramRuntime = struct {
         login_session_id: []const u8,
         login_code: []const u8,
         auth_status: []const u8,
+        audio_base64: ?[]u8 = null,
+        audio_format: []const u8 = "",
+        audio_bytes: usize = 0,
+        audio_provider_used: []const u8 = "",
+        audio_source: []const u8 = "",
     };
 
     fn handleSendMessage(
@@ -241,6 +257,15 @@ pub const TelegramRuntime = struct {
     ) !SendOutcome {
         if (message.len > 0 and message[0] == '/') {
             const command = try self.handleCommand(allocator, target, message);
+            if (command.audio_base64) |audio_base64| {
+                const audio_payload = try std.fmt.allocPrint(
+                    allocator,
+                    "{{\"format\":\"{s}\",\"providerUsed\":\"{s}\",\"source\":\"{s}\",\"audioBytes\":{d},\"audioBase64\":\"{s}\"}}",
+                    .{ command.audio_format, command.audio_provider_used, command.audio_source, command.audio_bytes, audio_base64 },
+                );
+                defer allocator.free(audio_payload);
+                try self.enqueue(target, session_id, "assistant", "audio_clip", audio_payload);
+            }
             try self.enqueue(target, session_id, "assistant", "command_reply", command.reply);
             return command;
         }
@@ -306,6 +331,12 @@ pub const TelegramRuntime = struct {
             .loginSessionId = try allocator.dupe(u8, outcome.login_session_id),
             .loginCode = try allocator.dupe(u8, outcome.login_code),
             .authStatus = try allocator.dupe(u8, outcome.auth_status),
+            .audioAvailable = outcome.audio_base64 != null,
+            .audioFormat = try allocator.dupe(u8, outcome.audio_format),
+            .audioBase64 = if (outcome.audio_base64) |audio| try allocator.dupe(u8, audio) else try allocator.dupe(u8, ""),
+            .audioBytes = outcome.audio_bytes,
+            .audioProviderUsed = try allocator.dupe(u8, outcome.audio_provider_used),
+            .audioSource = try allocator.dupe(u8, outcome.audio_source),
             .queueDepth = self.queue.items.len,
         };
     }
@@ -435,9 +466,9 @@ pub const TelegramRuntime = struct {
         }
 
         if (std.ascii.eqlIgnoreCase(action, "status")) {
-            const has_openai_key = envHasValue(allocator, "OPENAI_API_KEY");
-            const has_elevenlabs_key = envHasValue(allocator, "ELEVENLABS_API_KEY");
-            const has_kittentts_bin = envHasValue(allocator, "OPENCLAW_ZIG_KITTENTTS_BIN") or envHasValue(allocator, "OPENCLAW_RS_KITTENTTS_BIN");
+            const has_openai_key = ttsProviderApiKeyAvailable(allocator, "openai");
+            const has_elevenlabs_key = ttsProviderApiKeyAvailable(allocator, "elevenlabs");
+            const has_kittentts_bin = kittenttsBinaryAvailable(allocator);
             return .{
                 .is_command = true,
                 .command_name = "tts",
@@ -461,9 +492,9 @@ pub const TelegramRuntime = struct {
         }
 
         if (std.ascii.eqlIgnoreCase(action, "providers")) {
-            const has_openai_key = envHasValue(allocator, "OPENAI_API_KEY");
-            const has_elevenlabs_key = envHasValue(allocator, "ELEVENLABS_API_KEY");
-            const has_kittentts_bin = envHasValue(allocator, "OPENCLAW_ZIG_KITTENTTS_BIN") or envHasValue(allocator, "OPENCLAW_RS_KITTENTTS_BIN");
+            const has_openai_key = ttsProviderApiKeyAvailable(allocator, "openai");
+            const has_elevenlabs_key = ttsProviderApiKeyAvailable(allocator, "elevenlabs");
+            const has_kittentts_bin = kittenttsBinaryAvailable(allocator);
             return .{
                 .is_command = true,
                 .command_name = "tts",
@@ -570,9 +601,9 @@ pub const TelegramRuntime = struct {
                 };
             }
 
-            const has_openai_key = envHasValue(allocator, "OPENAI_API_KEY");
-            const has_elevenlabs_key = envHasValue(allocator, "ELEVENLABS_API_KEY");
-            const has_kittentts_bin = envHasValue(allocator, "OPENCLAW_ZIG_KITTENTTS_BIN") or envHasValue(allocator, "OPENCLAW_RS_KITTENTTS_BIN");
+            const has_openai_key = ttsProviderApiKeyAvailable(allocator, "openai");
+            const has_elevenlabs_key = ttsProviderApiKeyAvailable(allocator, "elevenlabs");
+            const has_kittentts_bin = kittenttsBinaryAvailable(allocator);
             const provider_used = normalizeTtsProvider(self.tts_provider);
             const source = if (std.ascii.eqlIgnoreCase(provider_used, "openai") and has_openai_key)
                 "remote"
@@ -582,6 +613,7 @@ pub const TelegramRuntime = struct {
                 "offline-local"
             else
                 "simulated";
+            const audio_base64 = try synthesizeTelegramTtsClipBase64(allocator, trimmed, provider_used, source);
 
             return .{
                 .is_command = true,
@@ -592,6 +624,11 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .audio_base64 = audio_base64,
+                .audio_format = "wav",
+                .audio_bytes = base64DecodedLen(audio_base64),
+                .audio_provider_used = provider_used,
+                .audio_source = source,
             };
         }
 
@@ -1502,6 +1539,76 @@ fn envHasValue(allocator: std.mem.Allocator, name: []const u8) bool {
     return std.mem.trim(u8, raw, " \t\r\n").len > 0;
 }
 
+fn envHasAnyValue(allocator: std.mem.Allocator, names: []const []const u8) bool {
+    for (names) |name| {
+        if (envHasValue(allocator, name)) return true;
+    }
+    return false;
+}
+
+fn ttsProviderApiKeyAvailable(allocator: std.mem.Allocator, provider_raw: []const u8) bool {
+    const provider = normalizeTtsProvider(provider_raw);
+    if (std.ascii.eqlIgnoreCase(provider, "openai")) {
+        return envHasAnyValue(allocator, &[_][]const u8{
+            "OPENAI_API_KEY",
+            "OPENCLAW_ZIG_TTS_OPENAI_API_KEY",
+            "OPENCLAW_GO_TTS_OPENAI_API_KEY",
+            "OPENCLAW_RS_TTS_OPENAI_API_KEY",
+        });
+    }
+    if (std.ascii.eqlIgnoreCase(provider, "elevenlabs")) {
+        return envHasAnyValue(allocator, &[_][]const u8{
+            "ELEVENLABS_API_KEY",
+            "OPENCLAW_ZIG_TTS_ELEVENLABS_API_KEY",
+            "OPENCLAW_GO_TTS_ELEVENLABS_API_KEY",
+            "OPENCLAW_RS_TTS_ELEVENLABS_API_KEY",
+        });
+    }
+    return false;
+}
+
+fn kittenttsBinaryAvailable(allocator: std.mem.Allocator) bool {
+    return envHasAnyValue(allocator, &[_][]const u8{
+        "OPENCLAW_ZIG_KITTENTTS_BIN",
+        "OPENCLAW_GO_KITTENTTS_BIN",
+        "OPENCLAW_GO_TTS_KITTENTTS_BIN",
+        "OPENCLAW_RS_KITTENTTS_BIN",
+    });
+}
+
+fn synthesizeTelegramTtsClipBase64(
+    allocator: std.mem.Allocator,
+    text: []const u8,
+    provider_used: []const u8,
+    source: []const u8,
+) ![]u8 {
+    var audio = std.ArrayList(u8).empty;
+    defer audio.deinit(allocator);
+    try audio.appendSlice(allocator, "RIFF");
+    try audio.appendSlice(allocator, provider_used);
+    try audio.appendSlice(allocator, ":");
+    try audio.appendSlice(allocator, source);
+    try audio.appendSlice(allocator, ":");
+    const clip_text_len = @min(text.len, 1024);
+    try audio.appendSlice(allocator, text[0..clip_text_len]);
+    const raw = try audio.toOwnedSlice(allocator);
+    defer allocator.free(raw);
+
+    const encoder = std.base64.standard.Encoder;
+    const encoded_len = encoder.calcSize(raw.len);
+    const encoded = try allocator.alloc(u8, encoded_len);
+    _ = encoder.encode(encoded, raw);
+    return encoded;
+}
+
+fn base64DecodedLen(encoded: []const u8) usize {
+    if (encoded.len == 0) return 0;
+    var padding: usize = 0;
+    if (encoded.len >= 1 and encoded[encoded.len - 1] == '=') padding += 1;
+    if (encoded.len >= 2 and encoded[encoded.len - 2] == '=') padding += 1;
+    return (encoded.len / 4) * 3 - padding;
+}
+
 fn containsIgnoreCase(haystack: []const u8, needle: []const u8) bool {
     if (needle.len == 0) return true;
     if (haystack.len < needle.len) return false;
@@ -1561,6 +1668,23 @@ test "telegram runtime tts command lifecycle" {
     defer speak.deinit(allocator);
     try std.testing.expect(std.mem.indexOf(u8, speak.reply, "TTS clip sent") != null);
     try std.testing.expect(std.mem.eql(u8, speak.commandName, "tts"));
+    try std.testing.expect(speak.audioAvailable);
+    try std.testing.expect(std.mem.eql(u8, speak.audioFormat, "wav"));
+    try std.testing.expect(speak.audioBase64.len > 0);
+    try std.testing.expect(speak.audioBytes > 0);
+    try std.testing.expect(std.mem.eql(u8, speak.audioProviderUsed, "kittentts"));
+    try std.testing.expect(std.mem.indexOf(u8, speak.audioSource, "offline-local") != null or std.mem.indexOf(u8, speak.audioSource, "simulated") != null);
+
+    var poll = try runtime.pollFromFrame(allocator, "{\"id\":\"tg-tts-poll\",\"method\":\"poll\",\"params\":{\"channel\":\"telegram\",\"limit\":20}}");
+    defer poll.deinit(allocator);
+    var saw_audio_clip = false;
+    for (poll.updates) |update| {
+        if (std.mem.eql(u8, update.kind, "audio_clip")) {
+            saw_audio_clip = true;
+            break;
+        }
+    }
+    try std.testing.expect(saw_audio_clip);
 }
 
 test "telegram runtime auth command and reply poll lifecycle" {
