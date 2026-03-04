@@ -51,6 +51,14 @@ const RateLimiter = struct {
 };
 
 const max_rpc_body_bytes: usize = 1024 * 1024;
+const ws_stream_chunk_min_bytes: usize = 256;
+const ws_stream_chunk_default_bytes: usize = 4096;
+const ws_stream_chunk_max_bytes: usize = 64 * 1024;
+
+const WebSocketStreamOptions = struct {
+    enabled: bool = false,
+    chunk_bytes: usize = ws_stream_chunk_default_bytes,
+};
 
 pub fn serve(allocator: std.mem.Allocator, cfg: config.Config, options: ServeOptions) !void {
     const io = std.Io.Threaded.global_single_threaded.io();
@@ -382,6 +390,7 @@ fn serveWebSocket(
             continue;
         }
 
+        const stream_options = parseWebSocketStreamOptions(allocator, frame);
         var parsed = protocol.parseRequest(allocator, frame) catch null;
         defer if (parsed) |*req| req.deinit(allocator);
         if (parsed) |req| {
@@ -397,6 +406,11 @@ fn serveWebSocket(
             });
         };
         defer allocator.free(response);
+        if (shouldStreamPayload(stream_options, response.len)) {
+            const rpc_id = if (parsed) |req| req.id else "unknown";
+            writeWebSocketStreamChunks(allocator, &ws, rpc_id, response, stream_options.chunk_bytes) catch break;
+            continue;
+        }
         ws.writeMessage(response, .text) catch break;
     }
     return true;
@@ -449,6 +463,107 @@ fn headerTokenMatches(raw_value: []const u8, expected_token: []const u8) bool {
         return std.mem.eql(u8, bearer_value, expected);
     }
     return std.mem.eql(u8, trimmed, expected);
+}
+
+fn parseWebSocketStreamOptions(allocator: std.mem.Allocator, frame: []const u8) WebSocketStreamOptions {
+    var parsed = std.json.parseFromSlice(std.json.Value, allocator, frame, .{}) catch return .{};
+    defer parsed.deinit();
+
+    if (parsed.value != .object) return .{};
+    const params = parsed.value.object.get("params") orelse return .{};
+    if (params != .object) return .{};
+
+    var out: WebSocketStreamOptions = .{};
+    if (params.object.get("stream")) |value| {
+        out.enabled = boolFromJson(value, false);
+    }
+    if (params.object.get("streamChunkBytes")) |value| {
+        const requested = parsePositiveU64FromJson(value) orelse return out;
+        out.chunk_bytes = normalizeWebSocketStreamChunkBytes(requested);
+    }
+    return out;
+}
+
+fn shouldStreamPayload(options: WebSocketStreamOptions, payload_len: usize) bool {
+    return options.enabled and payload_len > options.chunk_bytes;
+}
+
+fn normalizeWebSocketStreamChunkBytes(requested: u64) usize {
+    const clamped = std.math.clamp(
+        requested,
+        @as(u64, ws_stream_chunk_min_bytes),
+        @as(u64, ws_stream_chunk_max_bytes),
+    );
+    return @as(usize, @intCast(clamped));
+}
+
+fn streamChunkCount(payload_len: usize, chunk_bytes: usize) usize {
+    if (payload_len == 0) return 0;
+    return (payload_len + chunk_bytes - 1) / chunk_bytes;
+}
+
+fn writeWebSocketStreamChunks(
+    allocator: std.mem.Allocator,
+    ws: *std.http.Server.WebSocket,
+    rpc_id: []const u8,
+    payload: []const u8,
+    chunk_bytes: usize,
+) !void {
+    const chunk_count = streamChunkCount(payload.len, chunk_bytes);
+    var chunk_index: usize = 0;
+    var offset: usize = 0;
+    while (offset < payload.len) : (chunk_index += 1) {
+        const remaining = payload.len - offset;
+        const take = @min(chunk_bytes, remaining);
+        const next_offset = offset + take;
+        const chunk = payload[offset..next_offset];
+        offset = next_offset;
+
+        const envelope = try encodeJson(allocator, .{
+            .jsonrpc = "2.0",
+            .id = rpc_id,
+            .stream = .{
+                .enabled = true,
+                .chunkIndex = chunk_index,
+                .chunkCount = chunk_count,
+                .done = chunk_index + 1 == chunk_count,
+                .chunkBytes = chunk.len,
+                .totalBytes = payload.len,
+            },
+            .chunk = chunk,
+        });
+        defer allocator.free(envelope);
+        try ws.writeMessage(envelope, .text);
+    }
+}
+
+fn boolFromJson(value: std.json.Value, fallback: bool) bool {
+    return switch (value) {
+        .bool => |b| b,
+        .string => |s| blk: {
+            const trimmed = std.mem.trim(u8, s, " \t\r\n");
+            if (trimmed.len == 0) break :blk fallback;
+            if (std.ascii.eqlIgnoreCase(trimmed, "true") or std.mem.eql(u8, trimmed, "1") or std.ascii.eqlIgnoreCase(trimmed, "yes") or std.ascii.eqlIgnoreCase(trimmed, "on")) break :blk true;
+            if (std.ascii.eqlIgnoreCase(trimmed, "false") or std.mem.eql(u8, trimmed, "0") or std.ascii.eqlIgnoreCase(trimmed, "no") or std.ascii.eqlIgnoreCase(trimmed, "off")) break :blk false;
+            break :blk fallback;
+        },
+        .integer => |i| i != 0,
+        else => fallback,
+    };
+}
+
+fn parsePositiveU64FromJson(value: std.json.Value) ?u64 {
+    return switch (value) {
+        .integer => |i| if (i > 0) @as(u64, @intCast(i)) else null,
+        .string => |s| blk: {
+            const trimmed = std.mem.trim(u8, s, " \t\r\n");
+            if (trimmed.len == 0) break :blk null;
+            const parsed = std.fmt.parseInt(u64, trimmed, 10) catch break :blk null;
+            if (parsed == 0) break :blk null;
+            break :blk parsed;
+        },
+        else => null,
+    };
 }
 
 fn bindRequiresGatewayToken(cfg: config.Config) bool {
@@ -702,4 +817,33 @@ test "rate limiter enforces max requests within window" {
     try std.testing.expect(limiter.allow(1_100));
     try std.testing.expect(!limiter.allow(1_200));
     try std.testing.expect(limiter.allow(2_200));
+}
+
+test "websocket stream chunk size normalization clamps bounds" {
+    try std.testing.expectEqual(@as(usize, ws_stream_chunk_min_bytes), normalizeWebSocketStreamChunkBytes(1));
+    try std.testing.expectEqual(@as(usize, ws_stream_chunk_default_bytes), normalizeWebSocketStreamChunkBytes(ws_stream_chunk_default_bytes));
+    try std.testing.expectEqual(@as(usize, ws_stream_chunk_max_bytes), normalizeWebSocketStreamChunkBytes(2 * ws_stream_chunk_max_bytes));
+}
+
+test "websocket stream options parse stream flag and bounded chunk bytes" {
+    const allocator = std.testing.allocator;
+    const options = parseWebSocketStreamOptions(
+        allocator,
+        "{\"id\":\"ws1\",\"method\":\"chat.send\",\"params\":{\"stream\":true,\"streamChunkBytes\":128}}",
+    );
+    try std.testing.expect(options.enabled);
+    try std.testing.expectEqual(@as(usize, ws_stream_chunk_min_bytes), options.chunk_bytes);
+
+    const disabled = parseWebSocketStreamOptions(
+        allocator,
+        "{\"id\":\"ws2\",\"method\":\"chat.send\",\"params\":{\"stream\":false,\"streamChunkBytes\":8192}}",
+    );
+    try std.testing.expect(!disabled.enabled);
+    try std.testing.expectEqual(@as(usize, 8192), disabled.chunk_bytes);
+}
+
+test "stream chunk count computes expected fragment count" {
+    try std.testing.expectEqual(@as(usize, 0), streamChunkCount(0, 1024));
+    try std.testing.expectEqual(@as(usize, 1), streamChunkCount(1, 1024));
+    try std.testing.expectEqual(@as(usize, 3), streamChunkCount(2049, 1024));
 }

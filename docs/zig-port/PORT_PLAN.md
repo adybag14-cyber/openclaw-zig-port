@@ -60,6 +60,10 @@ while maintaining parity-first validation and release gating.
     - native WebSocket gateway routes (`GET /ws` + root compatibility `GET /`) with upgrade handling + text-frame RPC dispatch
     - target-path normalization for gateway route matching (`/health|/rpc|/ws` now correctly match query-bearing targets like `/rpc?x=1` and `/ws?mode=compat`)
     - websocket RPC parity expanded to accept binary websocket frames in addition to text frames (aligned with Go transport behavior)
+    - websocket stream envelope path added for chunked responses:
+      - client may request chunked response frames with `params.stream=true`
+      - optional bounded chunk-size hint via `params.streamChunkBytes` (clamped for backpressure safety)
+      - websocket replies emit ordered stream envelopes with `chunkIndex/chunkCount/done/chunkBytes/totalBytes`
     - `security.audit` + `doctor` gateway auth/rate-limit checks and regression tests
     - non-loopback bind token policy enforcement shipped:
       - `/rpc` and websocket paths now enforce token auth on non-loopback bind regardless of `OPENCLAW_ZIG_GATEWAY_REQUIRE_TOKEN`

@@ -16,6 +16,7 @@ Release lock: no release tag is allowed until all phases are complete and parity
 - [x] Implement WebSocket routes (`GET /ws` + root compatibility `GET /`) with upgrade handling and RPC frame dispatch
 - [x] Normalize gateway route matching for query-bearing targets (`/health?`, `/rpc?`, `/ws?`) to preserve transport compatibility
 - [x] Accept websocket RPC frames over both text and binary message types for transport parity with Go
+- [x] Add websocket stream-chunk envelope path with bounded chunk sizing (`params.stream=true`, `params.streamChunkBytes`) and backpressure-oriented chunk limits
 - [x] Dispatcher fallback for registered methods now fails fast (`-32603 dispatcher gap`) instead of returning scaffold success payloads.
 
 ## Phase 3 - Runtime + Tooling
