@@ -60,6 +60,9 @@ Phase 6 progress notes:
     - `memory.store.test.store removeSession and trim keep ordering with linear compaction`
     - `runtime.state.test.runtime state queue depth stays correct across compaction cycles`
     - `channels.telegram_runtime.test.telegram runtime poll compacts queue front in one pass and keeps ordering`
+- Diagnostics perf hardening shipped:
+  - `security/audit.zig`: `doctor` now uses cached docker binary probe (`dockerAvailableCached`) to reduce repeated process-spawn cost on repeated diagnostics invocations.
+  - Added regression test: `security.audit.test.doctor includes docker binary check`.
 - Implemented edge contract slice in dispatcher: `edge.wasm.marketplace.list`, `edge.router.plan`, `edge.swarm.plan`, `edge.multimodal.inspect`, and `edge.voice.transcribe`.
 - Implemented advanced edge contract slice in dispatcher: `edge.enclave.status`, `edge.enclave.prove`, `edge.mesh.status`, `edge.homomorphic.compute`, `edge.finetune.status`, `edge.finetune.run`, `edge.identity.trust.status`, `edge.personality.profile`, `edge.handoff.plan`, `edge.marketplace.revenue.preview`, `edge.finetune.cluster.plan`, `edge.alignment.evaluate`, `edge.quantum.status`, and `edge.collaboration.plan`.
 - Added `edge.acceleration.status` parity handler with contract coverage.

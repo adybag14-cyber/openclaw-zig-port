@@ -90,6 +90,8 @@ pub const Options = struct {
     fix: bool = false,
 };
 
+var docker_available_cached: ?bool = null;
+
 pub fn optionsFromFrame(allocator: std.mem.Allocator, frame_json: []const u8) !Options {
     var out: Options = .{};
     var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
@@ -252,7 +254,7 @@ pub fn doctor(
         .message = "derived",
         .detail = "derived from security.audit findings",
     });
-    const docker_available = commandAvailable(allocator, "docker");
+    const docker_available = dockerAvailableCached();
     try checks.append(allocator, .{
         .id = "docker.binary",
         .status = if (docker_available) "pass" else "warn",
@@ -459,9 +461,15 @@ fn isLoopbackBind(bind: []const u8) bool {
         std.ascii.eqlIgnoreCase(trimmed, "localhost");
 }
 
-fn commandAvailable(allocator: std.mem.Allocator, command: []const u8) bool {
+fn dockerAvailableCached() bool {
+    if (docker_available_cached) |cached| return cached;
+    const probed = commandAvailable("docker");
+    docker_available_cached = probed;
+    return probed;
+}
+
+fn commandAvailable(command: []const u8) bool {
     const io = std.Io.Threaded.global_single_threaded.io();
-    _ = allocator;
     const timeout: std.Io.Timeout = switch (builtin.os.tag) {
         .windows => .none,
         else => .{
@@ -515,4 +523,25 @@ test "security audit warns when bind is not loopback" {
     var report = try run(allocator, cfg, &runtime_guard, .{});
     defer report.deinit(allocator);
     try std.testing.expect(report.summary.warn >= 1);
+}
+
+test "doctor includes docker binary check" {
+    const allocator = std.testing.allocator;
+    var cfg = config.defaults();
+    var runtime_guard = try guard.Guard.init(allocator, cfg.security);
+    defer runtime_guard.deinit();
+
+    var report = try doctor(allocator, cfg, &runtime_guard, .{});
+    defer report.deinit(allocator);
+
+    var found = false;
+    for (report.checks) |check| {
+        if (std.mem.eql(u8, check.id, "docker.binary")) {
+            found = true;
+            try std.testing.expect(
+                std.mem.eql(u8, check.status, "pass") or std.mem.eql(u8, check.status, "warn"),
+            );
+        }
+    }
+    try std.testing.expect(found);
 }

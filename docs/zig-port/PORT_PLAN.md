@@ -94,6 +94,9 @@ while maintaining parity-first validation and release gating.
     - Runtime job queue now uses head-offset dequeue with amortized compaction to avoid repeated `orderedRemove(0)` shifting (`src/runtime/state.zig`).
     - Telegram `poll` now drains queue prefixes in one compaction pass while preserving ordering (`src/channels/telegram_runtime.zig`).
     - Added regression tests for memory ordering/trim, runtime compaction depth/order invariants, and telegram poll compaction ordering.
+  - Diagnostics optimization slice shipped:
+    - `doctor` now uses a process-local cached docker binary probe to avoid repeated `docker --version` process spawns during repeated diagnostics calls (`src/security/audit.zig`).
+    - Added doctor check-presence regression coverage for `docker.binary`.
   - Dispatcher memory parity slice shipped: `sessions.history`, `chat.history`, and `doctor.memory.status`.
   - Edge handler parity slice shipped: `edge.wasm.marketplace.list`, `edge.router.plan`, `edge.swarm.plan`, `edge.multimodal.inspect`, and `edge.voice.transcribe`.
   - Advanced edge handler parity slice shipped: `edge.enclave.status`, `edge.enclave.prove`, `edge.mesh.status`, `edge.homomorphic.compute`, `edge.finetune.status`, `edge.finetune.run`, `edge.identity.trust.status`, `edge.personality.profile`, `edge.handoff.plan`, `edge.marketplace.revenue.preview`, `edge.finetune.cluster.plan`, `edge.alignment.evaluate`, `edge.quantum.status`, and `edge.collaboration.plan`.
