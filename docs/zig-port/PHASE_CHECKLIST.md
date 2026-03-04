@@ -102,6 +102,10 @@ Phase 6 progress notes:
   - runtime tool execution and file sandbox flows now route through PAL (`runtime/tool_runtime.zig` -> `pal.proc`, `pal.fs`, `pal.sandbox`).
   - Telegram Bot API connector now routes outbound POST delivery through PAL network interface (`channels/telegram_bot_api.zig` -> `pal.net`).
   - dispatcher env secret lookup now routes through PAL secrets interface (`gateway/dispatcher.zig` -> `pal.secrets`).
+- Secure secret storage backend abstraction shipped (`src/security/secret_store.zig`):
+  - new `secrets.store.*` methods: `status`, `set`, `get`, `delete`, `list`.
+  - encrypted-file backend implemented with XChaCha20-Poly1305 persistence (`secrets.store.enc.json`) and backend selection abstraction (`env`, `encrypted-file`, `dpapi/keychain/keystore` -> encrypted fallback).
+  - `secrets.resolve` now resolves in order: config overlay -> secure secret store -> environment aliases.
 - Implemented persistent memory store (`src/memory/store.zig`) with session/channel history handlers: `sessions.history`, `chat.history`, and `doctor.memory.status`.
 - Optimization hardening for Phase 6 shipped:
   - `memory/store.zig`: batched front-removal helper applied to overflow + trim, and `removeSession` rewritten to linear compaction while preserving order.
@@ -185,13 +189,13 @@ Phase 6 progress notes:
   - added `update.plan` (channel-aware update planning) and `update.status` (job/queue observability).
   - `update.run` now resolves channel aliases (`stable/latest/lts`, `edge/nightly/preview`) and surfaces npm release metadata.
   - added npm client package at `npm/openclaw-zig-rpc-client` and release workflow `.github/workflows/npm-release.yml`.
-- Method surface now at `155` Zig methods; tri-baseline method-set parity is complete:
+- Method surface now at `160` Zig methods; tri-baseline method-set parity is complete:
   - Go latest release baseline: `134/134` covered in Zig.
   - Original OpenClaw latest release baseline: `94/94` covered in Zig.
   - Original OpenClaw latest beta baseline: `94/94` covered in Zig.
   - Union baseline: `135/135` covered in Zig.
   - Gateway events parity: original stable `19/19`, original beta `19/19`, union `19/19` covered in Zig.
-  - Zig-only extras vs union baseline: `18` (`shutdown`, `doctor`, `security.audit`, `exec.run`, `file.read`, `file.write`, `web.login.complete`, `web.login.status`, `edge.wasm.install`, `edge.wasm.execute`, `edge.wasm.remove`, `edge.finetune.job.get`, `edge.finetune.cancel`, `system.maintenance.plan`, `system.maintenance.run`, `system.maintenance.status`, `update.plan`, `update.status`).
+  - Zig-only extras vs union baseline: `25` (`shutdown`, `doctor`, `security.audit`, `exec.run`, `file.read`, `file.write`, `web.login.complete`, `web.login.status`, `edge.wasm.install`, `edge.wasm.execute`, `edge.wasm.remove`, `edge.finetune.job.get`, `edge.finetune.cancel`, `system.maintenance.plan`, `system.maintenance.run`, `system.maintenance.status`, `update.plan`, `update.status`, `secrets.store.status`, `secrets.store.set`, `secrets.store.get`, `secrets.store.delete`, `secrets.store.list`).
 
 ## Phase 7 - Validation + Release
 - [x] Run full parity diff against Go baseline
@@ -202,7 +206,7 @@ Phase 6 progress notes:
 ## Latest Validation Snapshot
 - [x] `zig build`
 - [x] `zig build test`
-- [x] `zig build test --summary all` -> `116/116` passing (includes gateway auth/rate-limit hardening tests, runtime file/exec policy hardening tests, config-hash diagnostics coverage, bind-policy token enforcement checks, TTS/completion execution-path coverage, PAL extraction coverage, and bare-metal ABI v2 contract tests)
+- [x] `zig build test --summary all` -> `118/118` passing (includes gateway auth/rate-limit hardening tests, runtime file/exec policy hardening tests, config-hash diagnostics coverage, bind-policy token enforcement checks, TTS/completion execution-path coverage, PAL extraction coverage, secure secret-store backend coverage, and bare-metal ABI v2 contract tests)
 - [x] Runtime policy hardening slice shipped:
   - `file.read` / `file.write` optional sandbox enforcement with traversal + symlink denial paths:
     - `OPENCLAW_ZIG_RUNTIME_FILE_SANDBOX_ENABLED`
@@ -213,7 +217,7 @@ Phase 6 progress notes:
   - new runtime tests:
     - `runtime.tool_runtime.test.tool runtime file sandbox blocks traversal and out-of-root writes`
     - `runtime.tool_runtime.test.tool runtime exec policy denies non-allowlisted commands`
-- [x] `scripts/generate-rpc-reference.ps1` (regenerates `docs/rpc-reference.md` from `src/gateway/registry.zig`, currently `155` methods)
+- [x] `scripts/generate-rpc-reference.ps1` (regenerates `docs/rpc-reference.md` from `src/gateway/registry.zig`, currently `160` methods)
 - [x] `scripts/npm-pack-check.ps1` (validates npm package dry-run for `npm/openclaw-zig-rpc-client`)
 - [x] `scripts/python-pack-check.ps1` (validates python client package tests + wheel/sdist + twine checks for `python/openclaw-zig-rpc-client`)
 - [x] `zig test src/main.zig`
@@ -230,7 +234,7 @@ Phase 6 progress notes:
 - [x] `scripts/zig-syntax-check.ps1`
 - [x] `zig build baremetal` (freestanding image build: `openclaw-zig-baremetal.elf`)
 - [x] `scripts/zig-codeberg-master-check.ps1` (reports local vs remote master hash)
-- [x] Multi-baseline method diff check: `Go(latest)=134`, `Original(latest)=94`, `OriginalBeta(latest)=94`, `Union=135`, `Zig=155`, `missing_in_zig=0`, `union_extras=20`
+- [x] Multi-baseline method diff check: `Go(latest)=134`, `Original(latest)=94`, `OriginalBeta(latest)=94`, `Union=135`, `Zig=160`, `missing_in_zig=0`, `union_extras=25`
 - [x] Multi-baseline gateway event diff check: `OriginalEvents(latest)=19`, `OriginalBetaEvents(latest)=19`, `UnionEvents=19`, `ZigEvents=19`, `union_events_missing_in_zig=0`
 - [x] Rust-vs-Zig method diff check: `Rust=124`, `Zig=143`, `missing_in_zig=0`, `zig_extras=19`
 - [x] Smoke scripts now run against built binary (`zig-out/bin/openclaw-zig.exe`) with readiness loops + early-exit diagnostics:

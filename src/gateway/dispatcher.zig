@@ -10,6 +10,7 @@ const telegram_runtime = @import("../channels/telegram_runtime.zig");
 const telegram_bot_api = @import("../channels/telegram_bot_api.zig");
 const memory_store = @import("../memory/store.zig");
 const pal = @import("../pal/mod.zig");
+const secret_store = @import("../security/secret_store.zig");
 const tool_runtime = @import("../runtime/tool_runtime.zig");
 const security_guard = @import("../security/guard.zig");
 const security_audit = @import("../security/audit.zig");
@@ -28,6 +29,7 @@ var guard_instance: ?security_guard.Guard = null;
 var login_manager: ?web_login.LoginManager = null;
 var telegram_runtime_instance: ?telegram_runtime.TelegramRuntime = null;
 var memory_store_instance: ?memory_store.Store = null;
+var secret_store_instance: ?secret_store.SecretStore = null;
 var edge_state_instance: ?EdgeState = null;
 var compat_state_instance: ?CompatState = null;
 
@@ -1715,6 +1717,10 @@ pub fn setConfig(cfg: config.Config) void {
         memory_store_instance.?.deinit();
         memory_store_instance = null;
     }
+    if (secret_store_instance != null) {
+        secret_store_instance.?.deinit();
+        secret_store_instance = null;
+    }
     if (telegram_runtime_instance != null) {
         telegram_runtime_instance.?.deinit();
         telegram_runtime_instance = null;
@@ -1737,6 +1743,10 @@ pub fn setEnviron(environ: std.process.Environ) void {
     active_environ = environ;
     telegram_runtime.setEnviron(environ);
     environ_ready = true;
+    if (secret_store_instance != null) {
+        secret_store_instance.?.deinit();
+        secret_store_instance = null;
+    }
 }
 
 pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
@@ -3792,11 +3802,134 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                 0
         else
             0;
+        const secrets = try getSecretStore();
+        try secrets.reload();
+        const status = secrets.status();
         return protocol.encodeResult(allocator, req.id, .{
             .ok = true,
             .warningCount = key_count,
             .reloadedAtMs = time_util.nowMs(),
             .count = key_count,
+            .store = .{
+                .requestedBackend = status.requestedBackend,
+                .activeBackend = status.activeBackend,
+                .providerImplemented = status.providerImplemented,
+                .encryptedFallback = status.encryptedFallback,
+                .persistent = status.persistent,
+                .path = status.path,
+                .keySource = status.keySource,
+                .loadedAtMs = status.loadedAtMs,
+                .savedAtMs = status.savedAtMs,
+                .count = status.count,
+            },
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "secrets.store.status")) {
+        const secrets = try getSecretStore();
+        const status = secrets.status();
+        return protocol.encodeResult(allocator, req.id, .{
+            .store = .{
+                .requestedBackend = status.requestedBackend,
+                .activeBackend = status.activeBackend,
+                .providerImplemented = status.providerImplemented,
+                .encryptedFallback = status.encryptedFallback,
+                .persistent = status.persistent,
+                .path = status.path,
+                .keySource = status.keySource,
+                .loadedAtMs = status.loadedAtMs,
+                .savedAtMs = status.savedAtMs,
+                .count = status.count,
+            },
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "secrets.store.set")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const target_id = firstParamString(params, "targetId", firstParamString(params, "key", ""));
+        const value = firstParamString(params, "value", "");
+        if (target_id.len == 0 or value.len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "secrets.store.set requires targetId/key and value",
+            });
+        }
+        if (!isKnownSecretTargetId(target_id)) {
+            const message = try std.fmt.allocPrint(allocator, "invalid secrets.store.set target id \"{s}\"", .{target_id});
+            defer allocator.free(message);
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = message,
+            });
+        }
+        const secrets = try getSecretStore();
+        try secrets.setSecret(target_id, value);
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = true,
+            .targetId = target_id,
+            .valueLength = value.len,
+            .count = secrets.count(),
+            .savedAtMs = secrets.status().savedAtMs,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "secrets.store.get")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const target_id = firstParamString(params, "targetId", firstParamString(params, "key", ""));
+        if (target_id.len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "secrets.store.get requires targetId/key",
+            });
+        }
+        const include_value = firstParamBool(params, "includeValue", false);
+        const secrets = try getSecretStore();
+        const resolved = try secrets.resolveTargetAlloc(allocator, target_id);
+        defer if (resolved) |value| allocator.free(value);
+        const found = resolved != null;
+        const value = if (found and include_value) resolved.? else null;
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = true,
+            .targetId = target_id,
+            .found = found,
+            .value = value,
+            .valueLength = if (found) resolved.?.len else 0,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "secrets.store.delete")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const target_id = firstParamString(params, "targetId", firstParamString(params, "key", ""));
+        if (target_id.len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "secrets.store.delete requires targetId/key",
+            });
+        }
+        const secrets = try getSecretStore();
+        const deleted = try secrets.deleteSecret(target_id);
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = true,
+            .targetId = target_id,
+            .deleted = deleted,
+            .count = secrets.count(),
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "secrets.store.list")) {
+        const secrets = try getSecretStore();
+        const keys = try secrets.listKeys(allocator);
+        defer allocator.free(keys);
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = true,
+            .count = keys.len,
+            .items = keys,
         });
     }
 
@@ -6523,6 +6656,17 @@ fn getMemoryStore() !*memory_store.Store {
     return &memory_store_instance.?;
 }
 
+fn getSecretStore() !*secret_store.SecretStore {
+    if (secret_store_instance == null) {
+        secret_store_instance = try secret_store.SecretStore.init(
+            std.heap.page_allocator,
+            currentConfig().state_path,
+            if (environ_ready) active_environ else std.process.Environ.empty,
+        );
+    }
+    return &secret_store_instance.?;
+}
+
 fn getEdgeState() *EdgeState {
     if (edge_state_instance == null) {
         edge_state_instance = EdgeState.init(std.heap.page_allocator);
@@ -6616,6 +6760,11 @@ fn shouldEnforceGuard(method: []const u8) bool {
     if (std.ascii.eqlIgnoreCase(method, "exec.approval.resolve")) return false;
     if (std.ascii.eqlIgnoreCase(method, "secrets.reload")) return false;
     if (std.ascii.eqlIgnoreCase(method, "secrets.resolve")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "secrets.store.status")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "secrets.store.set")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "secrets.store.get")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "secrets.store.delete")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "secrets.store.list")) return false;
     if (std.ascii.eqlIgnoreCase(method, "config.get")) return false;
     if (std.ascii.eqlIgnoreCase(method, "config.set")) return false;
     if (std.ascii.eqlIgnoreCase(method, "config.patch")) return false;
@@ -7584,6 +7733,10 @@ fn resolveFirstSecretCandidateAlloc(
             if (trimmed.len > 0) return try allocator.dupe(u8, trimmed);
         }
     }
+    const store = try getSecretStore();
+    for (config_targets) |target| {
+        if (try store.resolveTargetAlloc(allocator, target)) |value| return value;
+    }
     for (env_targets) |name| {
         if (try envLookupAlloc(allocator, name)) |value| return value;
     }
@@ -7621,6 +7774,8 @@ fn resolveSecretTargetValue(
     if (compat.resolveConfigSecretValue(target_id)) |value| {
         return try allocator.dupe(u8, value);
     }
+    const store = try getSecretStore();
+    if (try store.resolveTargetAlloc(allocator, target_id)) |value| return value;
     return try resolveSecretFromEnvironment(allocator, target_id);
 }
 
@@ -9688,6 +9843,24 @@ test "dispatch compat config wizard and sessions patch resolve methods return co
     const secrets_reload = try dispatch(allocator, "{\"id\":\"compat-secrets\",\"method\":\"secrets.reload\",\"params\":{\"keys\":[\"A\",\"B\"]}}");
     defer allocator.free(secrets_reload);
     try std.testing.expect(std.mem.indexOf(u8, secrets_reload, "\"count\":2") != null);
+    try std.testing.expect(std.mem.indexOf(u8, secrets_reload, "\"store\"") != null);
+
+    const secret_store_set = try dispatch(allocator, "{\"id\":\"compat-secrets-store-set\",\"method\":\"secrets.store.set\",\"params\":{\"targetId\":\"tools.web.search.apiKey\",\"value\":\"web-secret-zig\"}}");
+    defer allocator.free(secret_store_set);
+    try std.testing.expect(std.mem.indexOf(u8, secret_store_set, "\"ok\":true") != null);
+
+    const secret_store_status = try dispatch(allocator, "{\"id\":\"compat-secrets-store-status\",\"method\":\"secrets.store.status\",\"params\":{}}");
+    defer allocator.free(secret_store_status);
+    try std.testing.expect(std.mem.indexOf(u8, secret_store_status, "\"activeBackend\"") != null);
+
+    const secret_store_get = try dispatch(allocator, "{\"id\":\"compat-secrets-store-get\",\"method\":\"secrets.store.get\",\"params\":{\"targetId\":\"tools.web.search.apiKey\",\"includeValue\":true}}");
+    defer allocator.free(secret_store_get);
+    try std.testing.expect(std.mem.indexOf(u8, secret_store_get, "\"found\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, secret_store_get, "\"value\":\"web-secret-zig\"") != null);
+
+    const secret_store_list = try dispatch(allocator, "{\"id\":\"compat-secrets-store-list\",\"method\":\"secrets.store.list\",\"params\":{}}");
+    defer allocator.free(secret_store_list);
+    try std.testing.expect(std.mem.indexOf(u8, secret_store_list, "\"tools.web.search.apiKey\"") != null);
 
     const config_secret = try dispatch(allocator, "{\"id\":\"compat-config-secret\",\"method\":\"config.set\",\"params\":{\"talk.apiKey\":\"sk-zig-local\",\"talk.providers.openrouter.apiKey\":\"or-zig-local\"}}");
     defer allocator.free(config_secret);
@@ -9703,10 +9876,19 @@ test "dispatch compat config wizard and sessions patch resolve methods return co
     try std.testing.expect(std.mem.indexOf(u8, secrets_resolve, "\"value\":\"sk-zig-local\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, secrets_resolve, "\"value\":\"or-zig-local\"") != null);
 
+    const secret_store_resolve = try dispatch(allocator, "{\"id\":\"compat-secrets-resolve-store\",\"method\":\"secrets.resolve\",\"params\":{\"commandName\":\"web search\",\"targetIds\":[\"tools.web.search.apiKey\"]}}");
+    defer allocator.free(secret_store_resolve);
+    try std.testing.expect(std.mem.indexOf(u8, secret_store_resolve, "\"resolvedCount\":1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, secret_store_resolve, "\"value\":\"web-secret-zig\"") != null);
+
     const secrets_resolve_unknown = try dispatch(allocator, "{\"id\":\"compat-secrets-resolve-unknown\",\"method\":\"secrets.resolve\",\"params\":{\"commandName\":\"memory status\",\"targetIds\":[\"unknown.target\"]}}");
     defer allocator.free(secrets_resolve_unknown);
     try std.testing.expect(std.mem.indexOf(u8, secrets_resolve_unknown, "\"code\":-32602") != null);
     try std.testing.expect(std.mem.indexOf(u8, secrets_resolve_unknown, "unknown target id") != null);
+
+    const secret_store_delete = try dispatch(allocator, "{\"id\":\"compat-secrets-store-delete\",\"method\":\"secrets.store.delete\",\"params\":{\"targetId\":\"tools.web.search.apiKey\"}}");
+    defer allocator.free(secret_store_delete);
+    try std.testing.expect(std.mem.indexOf(u8, secret_store_delete, "\"deleted\":true") != null);
 
     const wizard_status_initial = try dispatch(allocator, "{\"id\":\"compat-wizard-status0\",\"method\":\"wizard.status\",\"params\":{}}");
     defer allocator.free(wizard_status_initial);

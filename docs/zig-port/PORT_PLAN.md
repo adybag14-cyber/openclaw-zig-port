@@ -78,12 +78,17 @@ while maintaining parity-first validation and release gating.
     - deterministic config fingerprint surfaced in diagnostics:
       - `health`, `status`, and `config.get` now include `configHash`
       - `doctor` report now includes `configHash`
-    - validation: `zig build`, `zig build test` (`116/116`), `scripts/runtime-smoke-check.ps1`, `scripts/gateway-auth-smoke-check.ps1`, `scripts/websocket-smoke-check.ps1`, `scripts/web-login-smoke-check.ps1`
+    - validation: `zig build`, `zig build test` (`118/118`), `scripts/runtime-smoke-check.ps1`, `scripts/gateway-auth-smoke-check.ps1`, `scripts/websocket-smoke-check.ps1`, `scripts/web-login-smoke-check.ps1`
   - PAL v1 extraction shipped:
     - new PAL modules in `src/pal/`: `fs`, `proc`, `net`, `secrets`, `sandbox`.
     - runtime tool execution + file sandbox paths now route through PAL interfaces.
     - Telegram Bot API connector HTTP send path now routes through PAL net interface.
     - dispatcher env-secret lookup now routes through PAL secrets interface.
+  - Secure secret storage backend abstraction shipped:
+    - new module: `src/security/secret_store.zig`.
+    - new RPC methods: `secrets.store.status`, `secrets.store.set`, `secrets.store.get`, `secrets.store.delete`, `secrets.store.list`.
+    - encrypted fallback backend implemented with XChaCha20-Poly1305 persistence (`secrets.store.enc.json`) and backend-selection abstraction (`env` / `encrypted-file` / `dpapi|keychain|keystore` with encrypted fallback).
+    - `secrets.resolve` now checks secure store entries between config overlay and environment aliases.
   - README refreshed with current parity/validation state and workflow guidance.
   - Local Zig toolchain reference doc refreshed to current local/remote hashes.
   - MkDocs documentation site scaffolded with full feature/domain documentation and GitHub Pages deployment workflow.
@@ -299,7 +304,7 @@ while maintaining parity-first validation and release gating.
   - Added compat node + exec-approval surfaces with stateful behavior:
     - node: `node.pair.request|list|approve|reject|verify`, `node.rename`, `node.list`, `node.describe`, `node.invoke`, `node.invoke.result`, `node.event`, `node.canvas.capability.refresh`
     - approvals: `exec.approvals.get|set|node.get|node.set`, `exec.approval.request|waitdecision|resolve`
-  - Method surface moved to `155` Zig methods (from `126`) while preserving Lightpanda-only browser policy and green validation gates.
+  - Method surface moved to `160` Zig methods (from `126`) while preserving Lightpanda-only browser policy and green validation gates.
   - Added dispatcher contract tests for new edge methods and memory flows.
   - Method/event parity is now tracked and enforced against Go + original stable + original beta baselines:
     - Go release baseline (`adybag14-cyber/openclaw-go-port`): `134/134` covered in Zig.
@@ -307,7 +312,7 @@ while maintaining parity-first validation and release gating.
     - Original OpenClaw beta baseline (`openclaw/openclaw` latest prerelease): `94/94` covered in Zig.
     - Union baseline coverage: `135/135` covered in Zig.
     - Gateway events baseline coverage: stable `19/19`, beta `19/19`, union `19/19` covered in Zig.
-    - Intentional Zig-only extras retained for edge/runtime depth: `18`.
+    - Intentional Zig-only extras retained for edge/runtime depth: `25`.
   - Hardened smoke scripts to avoid flaky `zig build run` startup timing by prebuilding and launching the binary directly (`zig-out/bin/openclaw-zig.exe`) with explicit readiness and exit diagnostics.
 - Toolchain/runtime notes (local Windows Zig master):
   - Codeberg `master` is currently `0ae1c6b54acf112c7bbcc63a19f7ad8fa9842d2a`.
