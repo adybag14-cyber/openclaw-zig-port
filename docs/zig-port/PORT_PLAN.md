@@ -299,6 +299,7 @@ while maintaining parity-first validation and release gating.
 - Toolchain/runtime notes (local Windows Zig master):
   - Codeberg `master` is currently `0ae1c6b54acf112c7bbcc63a19f7ad8fa9842d2a`.
   - Local Zig toolchain remains `0.16.0-dev.2703+0a412853a` (hash `0a412853a`) and is behind current Codeberg `master` (acknowledged).
+  - `scripts/zig-codeberg-master-check.ps1` now degrades gracefully when Codeberg is unreachable by falling back to the GitHub Zig mirror for master-hash freshness checks.
   - Added Windows build workaround in `build.zig`:
     - use `-fstrip` for executable to avoid missing `.pdb` install failure on this master toolchain.
     - route `zig build test` through `zig test src/main.zig` on Windows to avoid build-runner `--listen` regression.
