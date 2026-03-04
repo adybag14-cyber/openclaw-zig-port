@@ -99,6 +99,10 @@ while maintaining parity-first validation and release gating.
     - new mailbox opcodes wired in runtime: `command_set_boot_phase`, `command_reset_boot_diagnostics`, `command_capture_stack_pointer`
     - boot phase transitions + command/tick telemetry now tracked in bare-metal runtime path
     - new bare-metal test added: `baremetal diagnostics command flow updates phase and stack snapshot`
+  - Bare-metal command-history depth expansion shipped:
+    - new command event ABI contract (`BaremetalCommandEvent`) and feature flags (`feature_command_history_export`, `kernel_abi_command_history`)
+    - exported history-ring telemetry + clear controls (`oc_command_history_capacity`, `oc_command_history_len`, `oc_command_history_event`, `oc_command_history_clear`)
+    - new mailbox opcode wired: `command_clear_command_history`
 - Phase 4 complete:
   - Guard pipeline with prompt-risk scoring + loop-guard enforcement (`src/security/guard.zig`, `src/security/loop_guard.zig`)
   - RPC diagnostics surfaces: `security.audit` and `doctor`

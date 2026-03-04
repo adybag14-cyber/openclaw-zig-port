@@ -6,6 +6,7 @@ const BaremetalStatus = abi.BaremetalStatus;
 const BaremetalCommand = abi.BaremetalCommand;
 const BaremetalKernelInfo = abi.BaremetalKernelInfo;
 const BaremetalBootDiagnostics = abi.BaremetalBootDiagnostics;
+const BaremetalCommandEvent = abi.BaremetalCommandEvent;
 
 const multiboot2_magic: u32 = 0xE85250D6;
 const multiboot2_architecture_i386: u32 = 0;
@@ -86,6 +87,12 @@ var boot_diagnostics: BaremetalBootDiagnostics = .{
     .reserved1 = 0,
 };
 
+const command_history_capacity: usize = 32;
+var command_history: [command_history_capacity]BaremetalCommandEvent = std.mem.zeroes([command_history_capacity]BaremetalCommandEvent);
+var command_history_count: u32 = 0;
+var command_history_head: u32 = 0;
+var command_history_overflow: u32 = 0;
+
 pub export fn oc_status_ptr() *const abi.BaremetalStatus {
     return &status;
 }
@@ -106,6 +113,43 @@ pub export fn oc_boot_diag_capture_stack() u64 {
     const snapshot = captureStackPointer();
     boot_diagnostics.stack_pointer_snapshot = snapshot;
     return snapshot;
+}
+
+pub export fn oc_command_history_capacity() u32 {
+    return @as(u32, command_history_capacity);
+}
+
+pub export fn oc_command_history_len() u32 {
+    return command_history_count;
+}
+
+pub export fn oc_command_history_head_index() u32 {
+    return command_history_head;
+}
+
+pub export fn oc_command_history_overflow_count() u32 {
+    return command_history_overflow;
+}
+
+pub export fn oc_command_history_ptr() *const [command_history_capacity]BaremetalCommandEvent {
+    return &command_history;
+}
+
+pub export fn oc_command_history_event(index: u32) BaremetalCommandEvent {
+    if (index >= command_history_count) {
+        return std.mem.zeroes(BaremetalCommandEvent);
+    }
+    const cap_u32: u32 = @as(u32, command_history_capacity);
+    const oldest = if (command_history_count == cap_u32) command_history_head else 0;
+    const pos = @mod(oldest + index, cap_u32);
+    return command_history[pos];
+}
+
+pub export fn oc_command_history_clear() void {
+    @memset(&command_history, std.mem.zeroes(BaremetalCommandEvent));
+    command_history_count = 0;
+    command_history_head = 0;
+    command_history_overflow = 0;
 }
 
 pub export fn oc_submit_command(opcode: u16, arg0: u64, arg1: u64) u32 {
@@ -165,6 +209,14 @@ fn processPendingCommand() void {
     status.command_seq_ack = command_mailbox.seq;
     boot_diagnostics.last_command_seq = status.command_seq_ack;
     boot_diagnostics.last_command_tick = status.ticks;
+    recordCommand(
+        status.command_seq_ack,
+        command_mailbox.opcode,
+        command_mailbox.arg0,
+        command_mailbox.arg1,
+        status.last_command_result,
+        status.ticks,
+    );
 }
 
 fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
@@ -187,6 +239,7 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
             x86_bootstrap.oc_reset_vector_counters();
             x86_bootstrap.oc_exception_history_clear();
             x86_bootstrap.oc_interrupt_history_clear();
+            oc_command_history_clear();
             return abi.result_ok;
         },
         abi.command_set_mode => {
@@ -261,7 +314,30 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
             _ = oc_boot_diag_capture_stack();
             return abi.result_ok;
         },
+        abi.command_clear_command_history => {
+            oc_command_history_clear();
+            return abi.result_ok;
+        },
         else => return abi.result_not_supported,
+    }
+}
+
+fn recordCommand(seq: u32, opcode: u16, arg0: u64, arg1: u64, result: i16, tick: u64) void {
+    const cap_u32: u32 = @as(u32, command_history_capacity);
+    const write_index = command_history_head;
+    command_history[write_index] = .{
+        .seq = seq,
+        .opcode = opcode,
+        .result = result,
+        .tick = tick,
+        .arg0 = arg0,
+        .arg1 = arg1,
+    };
+    command_history_head = @mod(command_history_head + 1, cap_u32);
+    if (command_history_count < cap_u32) {
+        command_history_count += 1;
+    } else {
+        command_history_overflow +%= 1;
     }
 }
 
@@ -356,6 +432,7 @@ test "baremetal diagnostics command flow updates phase and stack snapshot" {
         .arg1 = 0,
     };
     resetBootDiagnostics();
+    oc_command_history_clear();
 
     var seq = oc_submit_command(abi.command_capture_stack_pointer, 0, 0);
     oc_tick();
@@ -377,6 +454,54 @@ test "baremetal diagnostics command flow updates phase and stack snapshot" {
     seq = oc_submit_command(abi.command_reset_boot_diagnostics, 0, 0);
     oc_tick();
     try std.testing.expectEqual(seq, status.command_seq_ack);
-    try std.testing.expectEqual(@as(u64, 0), boot_diagnostics.last_command_seq);
+    try std.testing.expectEqual(@as(u64, seq), boot_diagnostics.last_command_seq);
     try std.testing.expect(boot_diagnostics.boot_seq > 0);
+    try std.testing.expectEqual(@as(u32, 4), oc_command_history_len());
+    const history_last = oc_command_history_event(oc_command_history_len() - 1);
+    try std.testing.expectEqual(@as(u16, abi.command_reset_boot_diagnostics), history_last.opcode);
+
+    seq = oc_submit_command(abi.command_clear_command_history, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(seq, status.command_seq_ack);
+    try std.testing.expectEqual(@as(u32, 1), oc_command_history_len());
+    const clear_event = oc_command_history_event(0);
+    try std.testing.expectEqual(@as(u16, abi.command_clear_command_history), clear_event.opcode);
+
+    oc_command_history_clear();
+    try std.testing.expectEqual(@as(u32, 0), oc_command_history_len());
+}
+
+test "baremetal command history ring keeps newest mailbox entries" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_command_history_clear();
+
+    const cap = oc_command_history_capacity();
+    var idx: u32 = 0;
+    while (idx < cap + 3) : (idx += 1) {
+        _ = oc_submit_command(abi.command_set_health_code, 100 + idx, 0);
+        oc_tick();
+    }
+
+    try std.testing.expectEqual(cap, oc_command_history_len());
+    try std.testing.expectEqual(@as(u32, 3), oc_command_history_overflow_count());
+
+    const first = oc_command_history_event(0);
+    try std.testing.expectEqual(@as(u32, 4), first.seq);
+    try std.testing.expectEqual(@as(u16, abi.command_set_health_code), first.opcode);
+
+    const last = oc_command_history_event(cap - 1);
+    try std.testing.expectEqual(cap + 3, last.seq);
+    try std.testing.expectEqual(@as(u64, 100 + (cap + 2)), last.arg0);
 }

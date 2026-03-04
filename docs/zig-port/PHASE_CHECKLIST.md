@@ -268,6 +268,10 @@ Phase 6 progress notes:
   - exports: `oc_boot_diag_ptr`, `oc_boot_diag_capture_stack`
   - ABI additions: `BaremetalBootDiagnostics`, boot phase constants, `feature_boot_diagnostics_export`, `kernel_abi_boot_diagnostics`
   - opcodes: `command_set_boot_phase`, `command_reset_boot_diagnostics`, `command_capture_stack_pointer`
+- [x] Bare-metal command-history telemetry added:
+  - exports: `oc_command_history_capacity`, `oc_command_history_len`, `oc_command_history_head_index`, `oc_command_history_overflow_count`, `oc_command_history_ptr`, `oc_command_history_event`, `oc_command_history_clear`
+  - ABI additions: `BaremetalCommandEvent`, `feature_command_history_export`, `kernel_abi_command_history`
+  - opcode: `command_clear_command_history`
 - [x] `scripts/baremetal-smoke-check.ps1` now validates Multiboot2 header fields and checksum (`magic`, `arch`, `header_length`, `checksum`, end-tag tuple) in addition to section/symbol invariants.
 - [x] Cross-target diagnostics matrix (`scripts/zig-cross-target-matrix.ps1`) now covers desktop + Android with per-target logs and JSON summary:
   - Local Windows Zig master result: `4/8` pass (`x86_64-windows`, `x86_64-linux`, `x86_64-macos`, `x86_64-linux-android`)
