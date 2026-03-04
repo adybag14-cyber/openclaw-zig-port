@@ -122,8 +122,7 @@ pub const Store = struct {
         });
 
         if (self.entries.items.len > self.max_entries) {
-            var removed = self.entries.orderedRemove(0);
-            removed.deinit(self.allocator);
+            _ = self.removeFrontEntries(self.entries.items.len - self.max_entries);
         }
         if (self.persistent) try self.persist();
     }
@@ -154,16 +153,21 @@ pub const Store = struct {
         if (needle.len == 0) return 0;
 
         var removed: usize = 0;
-        var idx: usize = 0;
-        while (idx < self.entries.items.len) {
-            if (std.mem.eql(u8, self.entries.items[idx].session_id, needle)) {
-                var entry = self.entries.orderedRemove(idx);
+        var write_idx: usize = 0;
+        var read_idx: usize = 0;
+        while (read_idx < self.entries.items.len) : (read_idx += 1) {
+            if (std.mem.eql(u8, self.entries.items[read_idx].session_id, needle)) {
+                var entry = self.entries.items[read_idx];
                 entry.deinit(self.allocator);
                 removed += 1;
-                continue;
+            } else {
+                if (write_idx != read_idx) {
+                    self.entries.items[write_idx] = self.entries.items[read_idx];
+                }
+                write_idx += 1;
             }
-            idx += 1;
         }
+        self.entries.items.len = write_idx;
 
         if (removed > 0 and self.persistent) try self.persist();
         return removed;
@@ -171,14 +175,21 @@ pub const Store = struct {
 
     pub fn trim(self: *Store, limit: usize) !usize {
         if (self.entries.items.len <= limit) return 0;
-        const to_remove = self.entries.items.len - limit;
-        var removed: usize = 0;
-        while (removed < to_remove) : (removed += 1) {
-            var entry = self.entries.orderedRemove(0);
-            entry.deinit(self.allocator);
-        }
+        const removed = self.removeFrontEntries(self.entries.items.len - limit);
         if (removed > 0 and self.persistent) try self.persist();
         return removed;
+    }
+
+    fn removeFrontEntries(self: *Store, remove_count: usize) usize {
+        if (remove_count == 0 or self.entries.items.len == 0) return 0;
+        const to_remove = @min(remove_count, self.entries.items.len);
+        for (self.entries.items[0..to_remove]) |*entry| entry.deinit(self.allocator);
+        const remain = self.entries.items.len - to_remove;
+        if (remain > 0) {
+            std.mem.copyForwards(MessageEntry, self.entries.items[0..remain], self.entries.items[to_remove..]);
+        }
+        self.entries.items.len = remain;
+        return to_remove;
     }
 
     fn historyByKey(self: *Store, allocator: std.mem.Allocator, key: []const u8, value: []const u8, limit: usize) !HistoryResult {
@@ -313,4 +324,39 @@ test "store append/history and persistence roundtrip" {
     var loaded_history = try loaded.historyBySession(allocator, "s1", 10);
     defer loaded_history.deinit(allocator);
     try std.testing.expectEqual(@as(usize, 2), loaded_history.count);
+}
+
+test "store removeSession and trim keep ordering with linear compaction" {
+    const allocator = std.testing.allocator;
+    var store = try Store.init(allocator, "memory://opt-test", 32);
+    defer store.deinit();
+
+    try store.append("s1", "telegram", "send", "user", "a1");
+    try store.append("s2", "telegram", "send", "user", "b1");
+    try store.append("s1", "telegram", "send", "assistant", "a2");
+    try store.append("s3", "telegram", "send", "user", "c1");
+
+    const removed_s1 = try store.removeSession("s1");
+    try std.testing.expectEqual(@as(usize, 2), removed_s1);
+    try std.testing.expectEqual(@as(usize, 2), store.count());
+
+    var s2_history = try store.historyBySession(allocator, "s2", 10);
+    defer s2_history.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 1), s2_history.count);
+    try std.testing.expect(std.mem.eql(u8, s2_history.items[0].text, "b1"));
+
+    var all_before_trim = try store.historyBySession(allocator, "", 10);
+    defer all_before_trim.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 2), all_before_trim.count);
+    try std.testing.expect(std.mem.eql(u8, all_before_trim.items[0].text, "b1"));
+    try std.testing.expect(std.mem.eql(u8, all_before_trim.items[1].text, "c1"));
+
+    const trimmed = try store.trim(1);
+    try std.testing.expectEqual(@as(usize, 1), trimmed);
+    try std.testing.expectEqual(@as(usize, 1), store.count());
+
+    var all_after_trim = try store.historyBySession(allocator, "", 10);
+    defer all_after_trim.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 1), all_after_trim.count);
+    try std.testing.expect(std.mem.eql(u8, all_after_trim.items[0].text, "c1"));
 }

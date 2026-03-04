@@ -52,6 +52,14 @@ Phase 5 enhancement notes:
 
 Phase 6 progress notes:
 - Implemented persistent memory store (`src/memory/store.zig`) with session/channel history handlers: `sessions.history`, `chat.history`, and `doctor.memory.status`.
+- Optimization hardening for Phase 6 shipped:
+  - `memory/store.zig`: batched front-removal helper applied to overflow + trim, and `removeSession` rewritten to linear compaction while preserving order.
+  - `runtime/state.zig`: pending job queue now dequeues via head offset + amortized compaction (replaces repeated front removal shifts).
+  - `channels/telegram_runtime.zig`: `poll` now drains queue prefix then compacts once, preserving FIFO ordering with lower churn.
+  - Added regression tests:
+    - `memory.store.test.store removeSession and trim keep ordering with linear compaction`
+    - `runtime.state.test.runtime state queue depth stays correct across compaction cycles`
+    - `channels.telegram_runtime.test.telegram runtime poll compacts queue front in one pass and keeps ordering`
 - Implemented edge contract slice in dispatcher: `edge.wasm.marketplace.list`, `edge.router.plan`, `edge.swarm.plan`, `edge.multimodal.inspect`, and `edge.voice.transcribe`.
 - Implemented advanced edge contract slice in dispatcher: `edge.enclave.status`, `edge.enclave.prove`, `edge.mesh.status`, `edge.homomorphic.compute`, `edge.finetune.status`, `edge.finetune.run`, `edge.identity.trust.status`, `edge.personality.profile`, `edge.handoff.plan`, `edge.marketplace.revenue.preview`, `edge.finetune.cluster.plan`, `edge.alignment.evaluate`, `edge.quantum.status`, and `edge.collaboration.plan`.
 - Added `edge.acceleration.status` parity handler with contract coverage.

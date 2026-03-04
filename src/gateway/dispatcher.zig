@@ -764,15 +764,20 @@ const CompatState = struct {
         var removed = self.agents.orderedRemove(idx);
         removed.deinit(self.allocator);
 
-        var i: usize = 0;
-        while (i < self.agent_files.items.len) {
-            if (std.ascii.eqlIgnoreCase(self.agent_files.items[i].agent_id, agent_id)) {
-                var removed_file = self.agent_files.orderedRemove(i);
+        var write_idx: usize = 0;
+        var read_idx: usize = 0;
+        while (read_idx < self.agent_files.items.len) : (read_idx += 1) {
+            if (std.ascii.eqlIgnoreCase(self.agent_files.items[read_idx].agent_id, agent_id)) {
+                var removed_file = self.agent_files.items[read_idx];
                 removed_file.deinit(self.allocator);
-                continue;
+            } else {
+                if (write_idx != read_idx) {
+                    self.agent_files.items[write_idx] = self.agent_files.items[read_idx];
+                }
+                write_idx += 1;
             }
-            i += 1;
         }
+        self.agent_files.items.len = write_idx;
         return true;
     }
 

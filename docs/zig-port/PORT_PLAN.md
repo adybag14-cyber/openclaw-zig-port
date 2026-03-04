@@ -89,6 +89,11 @@ while maintaining parity-first validation and release gating.
   - Added auth + reply-loop smokes (`scripts/web-login-smoke-check.ps1`, `scripts/telegram-reply-loop-smoke-check.ps1`)
 - Phase 6 in progress:
   - Memory persistence primitives implemented (`src/memory/store.zig`) with append/history/stats and on-disk JSON persistence.
+  - Memory/runtime/channel optimization slice shipped:
+    - `Store.removeSession` and `Store.trim` now use linear compaction (no repeated front `orderedRemove`) and append overflow uses batched front removal (`src/memory/store.zig`).
+    - Runtime job queue now uses head-offset dequeue with amortized compaction to avoid repeated `orderedRemove(0)` shifting (`src/runtime/state.zig`).
+    - Telegram `poll` now drains queue prefixes in one compaction pass while preserving ordering (`src/channels/telegram_runtime.zig`).
+    - Added regression tests for memory ordering/trim, runtime compaction depth/order invariants, and telegram poll compaction ordering.
   - Dispatcher memory parity slice shipped: `sessions.history`, `chat.history`, and `doctor.memory.status`.
   - Edge handler parity slice shipped: `edge.wasm.marketplace.list`, `edge.router.plan`, `edge.swarm.plan`, `edge.multimodal.inspect`, and `edge.voice.transcribe`.
   - Advanced edge handler parity slice shipped: `edge.enclave.status`, `edge.enclave.prove`, `edge.mesh.status`, `edge.homomorphic.compute`, `edge.finetune.status`, `edge.finetune.run`, `edge.identity.trust.status`, `edge.personality.profile`, `edge.handoff.plan`, `edge.marketplace.revenue.preview`, `edge.finetune.cluster.plan`, `edge.alignment.evaluate`, `edge.quantum.status`, and `edge.collaboration.plan`.

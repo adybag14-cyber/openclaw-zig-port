@@ -29,6 +29,7 @@ pub const RuntimeState = struct {
     allocator: std.mem.Allocator,
     sessions: std.StringHashMap(Session),
     pending_jobs: std.ArrayList(Job),
+    pending_jobs_head: usize,
     next_job_id: u64,
 
     pub fn init(allocator: std.mem.Allocator) RuntimeState {
@@ -36,6 +37,7 @@ pub const RuntimeState = struct {
             .allocator = allocator,
             .sessions = std.StringHashMap(Session).init(allocator),
             .pending_jobs = .empty,
+            .pending_jobs_head = 0,
             .next_job_id = 1,
         };
     }
@@ -48,7 +50,7 @@ pub const RuntimeState = struct {
         }
         self.sessions.deinit();
 
-        for (self.pending_jobs.items) |job| {
+        for (self.pending_jobs.items[self.pending_jobs_head..]) |job| {
             self.allocator.free(job.payload);
         }
         self.pending_jobs.deinit(self.allocator);
@@ -102,8 +104,11 @@ pub const RuntimeState = struct {
     }
 
     pub fn dequeueJob(self: *RuntimeState) ?Job {
-        if (self.pending_jobs.items.len == 0) return null;
-        return self.pending_jobs.orderedRemove(0);
+        if (self.pending_jobs_head >= self.pending_jobs.items.len) return null;
+        const job = self.pending_jobs.items[self.pending_jobs_head];
+        self.pending_jobs_head += 1;
+        self.compactPendingJobs();
+        return job;
     }
 
     pub fn releaseJob(self: *RuntimeState, job: Job) void {
@@ -111,11 +116,25 @@ pub const RuntimeState = struct {
     }
 
     pub fn queueDepth(self: *const RuntimeState) usize {
-        return self.pending_jobs.items.len;
+        return self.pending_jobs.items.len - self.pending_jobs_head;
     }
 
     pub fn sessionCount(self: *const RuntimeState) usize {
         return self.sessions.count();
+    }
+
+    fn compactPendingJobs(self: *RuntimeState) void {
+        const len = self.pending_jobs.items.len;
+        const head = self.pending_jobs_head;
+        if (head == 0) return;
+        if (head < 32 and head * 2 < len) return;
+
+        const remaining = len - head;
+        if (remaining > 0) {
+            std.mem.copyForwards(Job, self.pending_jobs.items[0..remaining], self.pending_jobs.items[head..]);
+        }
+        self.pending_jobs.items.len = remaining;
+        self.pending_jobs_head = 0;
     }
 };
 
@@ -156,4 +175,38 @@ test "runtime state queue preserves order" {
     try std.testing.expectEqual(JobKind.file_read, second.kind);
 
     try std.testing.expect(state.dequeueJob() == null);
+}
+
+test "runtime state queue depth stays correct across compaction cycles" {
+    const allocator = std.testing.allocator;
+    var state = RuntimeState.init(allocator);
+    defer state.deinit();
+
+    var idx: usize = 0;
+    while (idx < 96) : (idx += 1) {
+        _ = try state.enqueueJob(.exec, "{\"cmd\":\"echo hi\"}");
+    }
+    try std.testing.expectEqual(@as(usize, 96), state.queueDepth());
+
+    idx = 0;
+    while (idx < 80) : (idx += 1) {
+        const job = state.dequeueJob().?;
+        state.releaseJob(job);
+    }
+    try std.testing.expectEqual(@as(usize, 16), state.queueDepth());
+
+    idx = 0;
+    while (idx < 20) : (idx += 1) {
+        _ = try state.enqueueJob(.file_read, "{\"path\":\"README.md\"}");
+    }
+    try std.testing.expectEqual(@as(usize, 36), state.queueDepth());
+
+    var expected_id: u64 = 81;
+    while (state.dequeueJob()) |job| {
+        defer state.releaseJob(job);
+        try std.testing.expectEqual(expected_id, job.id);
+        expected_id += 1;
+    }
+    try std.testing.expectEqual(@as(u64, 117), expected_id);
+    try std.testing.expectEqual(@as(usize, 0), state.queueDepth());
 }

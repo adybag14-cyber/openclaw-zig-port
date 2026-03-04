@@ -180,19 +180,19 @@ pub const TelegramRuntime = struct {
         }
 
         while (idx < count) : (idx += 1) {
-            var popped = self.queue.orderedRemove(0);
-            defer popped.deinit(self.allocator);
+            const entry = self.queue.items[idx];
             updates[idx] = .{
-                .id = popped.id,
+                .id = entry.id,
                 .channel = try allocator.dupe(u8, "telegram"),
-                .to = try allocator.dupe(u8, popped.to),
-                .sessionId = try allocator.dupe(u8, popped.session_id),
-                .role = try allocator.dupe(u8, popped.role),
-                .kind = try allocator.dupe(u8, popped.kind),
-                .message = try allocator.dupe(u8, popped.message),
-                .createdAtMs = popped.created_at_ms,
+                .to = try allocator.dupe(u8, entry.to),
+                .sessionId = try allocator.dupe(u8, entry.session_id),
+                .role = try allocator.dupe(u8, entry.role),
+                .kind = try allocator.dupe(u8, entry.kind),
+                .message = try allocator.dupe(u8, entry.message),
+                .createdAtMs = entry.created_at_ms,
             };
         }
+        self.compactQueueFront(count);
 
         return .{
             .status = "ok",
@@ -201,6 +201,17 @@ pub const TelegramRuntime = struct {
             .remaining = self.queue.items.len,
             .updates = updates,
         };
+    }
+
+    fn compactQueueFront(self: *TelegramRuntime, count: usize) void {
+        if (count == 0 or self.queue.items.len == 0) return;
+        const to_remove = @min(count, self.queue.items.len);
+        for (self.queue.items[0..to_remove]) |*entry| entry.deinit(self.allocator);
+        const remaining = self.queue.items.len - to_remove;
+        if (remaining > 0) {
+            std.mem.copyForwards(QueuedMessage, self.queue.items[0..remaining], self.queue.items[to_remove..]);
+        }
+        self.queue.items.len = remaining;
     }
 
     const SendOutcome = struct {
@@ -1231,6 +1242,31 @@ test "telegram runtime auth command and reply poll lifecycle" {
     var poll_result = try runtime.pollFromFrame(allocator, poll_frame);
     defer poll_result.deinit(allocator);
     try std.testing.expect(poll_result.count >= 1);
+}
+
+test "telegram runtime poll compacts queue front in one pass and keeps ordering" {
+    var login = web_login.LoginManager.init(std.testing.allocator, 5 * 60 * 1000);
+    defer login.deinit();
+    var runtime = TelegramRuntime.init(std.testing.allocator, &login);
+    defer runtime.deinit();
+
+    const allocator = std.testing.allocator;
+    try runtime.enqueue("room-opt", "sess-opt", "assistant", "assistant_reply", "m1");
+    try runtime.enqueue("room-opt", "sess-opt", "assistant", "assistant_reply", "m2");
+    try runtime.enqueue("room-opt", "sess-opt", "assistant", "assistant_reply", "m3");
+
+    var poll_first = try runtime.pollFromFrame(allocator, "{\"id\":\"tg-poll-opt-1\",\"method\":\"poll\",\"params\":{\"channel\":\"telegram\",\"limit\":2}}");
+    defer poll_first.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 2), poll_first.count);
+    try std.testing.expectEqual(@as(usize, 1), poll_first.remaining);
+    try std.testing.expect(std.mem.eql(u8, poll_first.updates[0].message, "m1"));
+    try std.testing.expect(std.mem.eql(u8, poll_first.updates[1].message, "m2"));
+
+    var poll_second = try runtime.pollFromFrame(allocator, "{\"id\":\"tg-poll-opt-2\",\"method\":\"poll\",\"params\":{\"channel\":\"telegram\",\"limit\":5}}");
+    defer poll_second.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 1), poll_second.count);
+    try std.testing.expectEqual(@as(usize, 0), poll_second.remaining);
+    try std.testing.expect(std.mem.eql(u8, poll_second.updates[0].message, "m3"));
 }
 
 test "telegram runtime qwen guest auth lifecycle" {
