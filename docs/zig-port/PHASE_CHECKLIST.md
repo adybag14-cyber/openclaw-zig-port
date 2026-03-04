@@ -209,6 +209,7 @@ Phase 6 progress notes:
 - [x] Added update lifecycle smoke gate (`scripts/update-lifecycle-smoke-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (`update.plan`, `update.run`, `update.status` contract checks).
 - [x] Added system maintenance smoke gate (`scripts/system-maintenance-smoke-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (`system.maintenance.plan`, `system.maintenance.run`, `system.maintenance.status` contract checks).
 - [x] Added bare-metal smoke gate (`scripts/baremetal-smoke-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs.
+- [x] Added bare-metal release packaging to `release-preview` (publishes `openclaw-zig-<version>-x86_64-freestanding-none.elf` with checksums).
 - [x] Tracking/docs refresh:
   - README updated with current parity + validation + workflow status.
   - `docs/zig-port/ZIG_TOOLCHAIN_LOCAL.md` updated to current local/remote Zig hash state.

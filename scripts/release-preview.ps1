@@ -64,12 +64,12 @@ if (-not (Test-Path $parityScript)) {
     throw "Parity script not found: $parityScript"
 }
 try {
-    $parityArgs = @(
-        "-OutputJsonPath", $parityJsonPath,
-        "-OutputMarkdownPath", $parityMdPath
-    )
+    $parityArgs = @{
+        OutputJsonPath = $parityJsonPath
+        OutputMarkdownPath = $parityMdPath
+    }
     if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
-        $parityArgs += @("-GitHubToken", $env:GITHUB_TOKEN)
+        $parityArgs.GitHubToken = $env:GITHUB_TOKEN
     }
     & $parityScript @parityArgs
     if (-not $?) {
@@ -112,6 +112,17 @@ foreach ($target in $targets) {
     Compress-Archive -Path (Join-Path $stageDir "*") -DestinationPath $zipPath -Force
     $assets.Add($zipPath) | Out-Null
 }
+
+Write-Output "Building bare-metal target: x86_64-freestanding-none"
+Invoke-ZigChecked -Args @("build", "baremetal", "-Doptimize=ReleaseFast", "--summary", "all")
+$baremetalSource = Join-Path $repoRoot "zig-out\bin\openclaw-zig-baremetal.elf"
+if (-not (Test-Path $baremetalSource)) {
+    throw "Expected bare-metal build output missing: $baremetalSource"
+}
+$baremetalAssetName = "openclaw-zig-$Version-x86_64-freestanding-none.elf"
+$baremetalAssetPath = Join-Path $releaseRoot $baremetalAssetName
+Copy-Item -Force $baremetalSource $baremetalAssetPath
+$assets.Add($baremetalAssetPath) | Out-Null
 
 if ($assets.Count -eq 0) {
     throw "No release assets were produced."

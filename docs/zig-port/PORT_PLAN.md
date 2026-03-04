@@ -222,3 +222,4 @@ while maintaining parity-first validation and release gating.
   - added update lifecycle smoke script (`scripts/update-lifecycle-smoke-check.ps1`) and made it a required gate in both `zig-ci` and `release-preview` validate jobs (`update.plan`, `update.run`, `update.status` lifecycle checks).
   - added system maintenance smoke script (`scripts/system-maintenance-smoke-check.ps1`) and made it a required gate in both `zig-ci` and `release-preview` validate jobs (`system.maintenance.plan`, `system.maintenance.run`, `system.maintenance.status` lifecycle checks).
   - added bare-metal runtime profile (`src/baremetal_main.zig`) and build target (`zig build baremetal`) plus smoke gate (`scripts/baremetal-smoke-check.ps1`) in both `zig-ci` and `release-preview` validate jobs.
+  - release-preview packaging now ships the freestanding image artifact (`openclaw-zig-<version>-x86_64-freestanding-none.elf`) alongside desktop/android zips + checksums.

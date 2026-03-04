@@ -331,6 +331,7 @@ Validate npm package publishability:
 - upfront validate job (build + test + parity)
 - freestanding bare-metal smoke validation
 - full preview artifact matrix build and publish
+- includes bare-metal release artifact: `openclaw-zig-<version>-x86_64-freestanding-none.elf`
 - duplicate release tag guard
 - release asset parity evidence attachment
 - npm package dry-run validation gate in validate stage
