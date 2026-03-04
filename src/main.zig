@@ -161,6 +161,8 @@ test "baremetal abi module exposes expected v2 contract constants" {
     try std.testing.expect((baremetal_abi.defaultAbiFlags() & baremetal_abi.kernel_abi_health_history) != 0);
     try std.testing.expect((baremetal_abi.defaultFeatureFlags() & baremetal_abi.feature_mode_history_export) != 0);
     try std.testing.expect((baremetal_abi.defaultAbiFlags() & baremetal_abi.kernel_abi_mode_history) != 0);
+    try std.testing.expect((baremetal_abi.defaultFeatureFlags() & baremetal_abi.feature_boot_phase_history_export) != 0);
+    try std.testing.expect((baremetal_abi.defaultAbiFlags() & baremetal_abi.kernel_abi_boot_phase_history) != 0);
 }
 
 test "baremetal x86 bootstrap module exports descriptor table metadata" {

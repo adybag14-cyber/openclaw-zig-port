@@ -113,6 +113,11 @@ while maintaining parity-first validation and release gating.
     - exported mode history ring telemetry + clear controls (`oc_mode_history_capacity`, `oc_mode_history_len`, `oc_mode_history_event`, `oc_mode_history_clear`)
     - new mailbox opcode wired: `command_clear_mode_history`
     - runtime now records mode transitions across command-driven, tick-driven, and panic transitions.
+  - Bare-metal boot-phase-history depth expansion shipped:
+    - new boot phase transition ABI contract (`BaremetalBootPhaseEvent`) and feature flags (`feature_boot_phase_history_export`, `kernel_abi_boot_phase_history`)
+    - exported boot phase history ring telemetry + clear controls (`oc_boot_phase_history_capacity`, `oc_boot_phase_history_len`, `oc_boot_phase_history_event`, `oc_boot_phase_history_clear`)
+    - new mailbox opcode wired: `command_clear_boot_phase_history`
+    - runtime now records boot phase transitions across command-driven, runtime-tick, and panic transitions.
 - Phase 4 complete:
   - Guard pipeline with prompt-risk scoring + loop-guard enforcement (`src/security/guard.zig`, `src/security/loop_guard.zig`)
   - RPC diagnostics surfaces: `security.audit` and `doctor`

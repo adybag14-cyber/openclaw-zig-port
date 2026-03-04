@@ -9,6 +9,7 @@ const BaremetalBootDiagnostics = abi.BaremetalBootDiagnostics;
 const BaremetalCommandEvent = abi.BaremetalCommandEvent;
 const BaremetalHealthEvent = abi.BaremetalHealthEvent;
 const BaremetalModeEvent = abi.BaremetalModeEvent;
+const BaremetalBootPhaseEvent = abi.BaremetalBootPhaseEvent;
 
 const multiboot2_magic: u32 = 0xE85250D6;
 const multiboot2_architecture_i386: u32 = 0;
@@ -108,6 +109,13 @@ var mode_history_count: u32 = 0;
 var mode_history_head: u32 = 0;
 var mode_history_overflow: u32 = 0;
 var mode_history_seq: u32 = 0;
+
+const boot_phase_history_capacity: usize = 64;
+var boot_phase_history: [boot_phase_history_capacity]BaremetalBootPhaseEvent = std.mem.zeroes([boot_phase_history_capacity]BaremetalBootPhaseEvent);
+var boot_phase_history_count: u32 = 0;
+var boot_phase_history_head: u32 = 0;
+var boot_phase_history_overflow: u32 = 0;
+var boot_phase_history_seq: u32 = 0;
 
 pub export fn oc_status_ptr() *const abi.BaremetalStatus {
     return &status;
@@ -244,6 +252,44 @@ pub export fn oc_mode_history_clear() void {
     mode_history_seq = 0;
 }
 
+pub export fn oc_boot_phase_history_capacity() u32 {
+    return @as(u32, boot_phase_history_capacity);
+}
+
+pub export fn oc_boot_phase_history_len() u32 {
+    return boot_phase_history_count;
+}
+
+pub export fn oc_boot_phase_history_head_index() u32 {
+    return boot_phase_history_head;
+}
+
+pub export fn oc_boot_phase_history_overflow_count() u32 {
+    return boot_phase_history_overflow;
+}
+
+pub export fn oc_boot_phase_history_ptr() *const [boot_phase_history_capacity]BaremetalBootPhaseEvent {
+    return &boot_phase_history;
+}
+
+pub export fn oc_boot_phase_history_event(index: u32) BaremetalBootPhaseEvent {
+    if (index >= boot_phase_history_count) {
+        return std.mem.zeroes(BaremetalBootPhaseEvent);
+    }
+    const cap_u32: u32 = @as(u32, boot_phase_history_capacity);
+    const oldest = if (boot_phase_history_count == cap_u32) boot_phase_history_head else 0;
+    const pos = @mod(oldest + index, cap_u32);
+    return boot_phase_history[pos];
+}
+
+pub export fn oc_boot_phase_history_clear() void {
+    @memset(&boot_phase_history, std.mem.zeroes(BaremetalBootPhaseEvent));
+    boot_phase_history_count = 0;
+    boot_phase_history_head = 0;
+    boot_phase_history_overflow = 0;
+    boot_phase_history_seq = 0;
+}
+
 pub export fn oc_submit_command(opcode: u16, arg0: u64, arg1: u64) u32 {
     const next_seq = command_mailbox.seq +% 1;
     command_mailbox.opcode = opcode;
@@ -255,7 +301,7 @@ pub export fn oc_submit_command(opcode: u16, arg0: u64, arg1: u64) u32 {
 
 pub export fn oc_tick() void {
     if (!x86_bootstrap.oc_descriptor_tables_ready()) {
-        setBootPhase(abi.boot_phase_init);
+        setBootPhase(abi.boot_phase_init, abi.boot_phase_change_reason_boot);
         x86_bootstrap.init();
     }
     processPendingCommand();
@@ -263,7 +309,7 @@ pub export fn oc_tick() void {
         const previous_mode = status.mode;
         status.mode = abi.mode_running;
         recordMode(previous_mode, status.mode, abi.mode_change_reason_runtime_tick, status.ticks, status.command_seq_ack);
-        setBootPhase(abi.boot_phase_runtime);
+        setBootPhase(abi.boot_phase_runtime, abi.boot_phase_change_reason_runtime_tick);
     }
     if (status.mode != abi.mode_panicked) {
         status.last_health_code = 200;
@@ -282,13 +328,13 @@ pub export fn oc_tick_n(iterations: u32) void {
 }
 
 pub export fn _start() noreturn {
-    setBootPhase(abi.boot_phase_init);
+    setBootPhase(abi.boot_phase_init, abi.boot_phase_change_reason_boot);
     x86_bootstrap.init();
     _ = x86_bootstrap.oc_try_load_descriptor_tables();
     const previous_mode = status.mode;
     status.mode = abi.mode_running;
     recordMode(previous_mode, status.mode, abi.mode_change_reason_boot, status.ticks, status.command_seq_ack);
-    setBootPhase(abi.boot_phase_runtime);
+    setBootPhase(abi.boot_phase_runtime, abi.boot_phase_change_reason_boot);
     if (qemu_smoke_enabled) {
         qemuExit(qemu_boot_ok_code);
     }
@@ -340,6 +386,7 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
             oc_command_history_clear();
             oc_health_history_clear();
             oc_mode_history_clear();
+            oc_boot_phase_history_clear();
             return abi.result_ok;
         },
         abi.command_set_mode => {
@@ -357,7 +404,7 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
             const previous_mode = status.mode;
             status.mode = abi.mode_panicked;
             status.panic_count +%= 1;
-            setBootPhase(abi.boot_phase_panicked);
+            setBootPhase(abi.boot_phase_panicked, abi.boot_phase_change_reason_panic);
             if (previous_mode != status.mode) {
                 recordMode(previous_mode, status.mode, abi.mode_change_reason_panic, status.ticks, status.command_seq_ack);
             }
@@ -413,7 +460,7 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
             if (arg0 > std.math.maxInt(u8)) return abi.result_invalid_argument;
             const phase: u8 = @as(u8, @truncate(arg0));
             if (!abi.bootPhaseIsValid(phase)) return abi.result_invalid_argument;
-            setBootPhase(phase);
+            setBootPhase(phase, abi.boot_phase_change_reason_command);
             return abi.result_ok;
         },
         abi.command_reset_boot_diagnostics => {
@@ -434,6 +481,10 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
         },
         abi.command_clear_mode_history => {
             oc_mode_history_clear();
+            return abi.result_ok;
+        },
+        abi.command_clear_boot_phase_history => {
+            oc_boot_phase_history_clear();
             return abi.result_ok;
         },
         else => return abi.result_not_supported,
@@ -502,6 +553,28 @@ fn recordMode(previous_mode: u8, new_mode: u8, reason: u8, tick: u64, command_se
     }
 }
 
+fn recordBootPhase(previous_phase: u8, new_phase: u8, reason: u8, tick: u64, command_seq_ack: u32) void {
+    const cap_u32: u32 = @as(u32, boot_phase_history_capacity);
+    const write_index = boot_phase_history_head;
+    boot_phase_history_seq +%= 1;
+    boot_phase_history[write_index] = .{
+        .seq = boot_phase_history_seq,
+        .previous_phase = previous_phase,
+        .new_phase = new_phase,
+        .reason = reason,
+        .reserved0 = 0,
+        .tick = tick,
+        .command_seq_ack = command_seq_ack,
+        .reserved1 = 0,
+    };
+    boot_phase_history_head = @mod(boot_phase_history_head + 1, cap_u32);
+    if (boot_phase_history_count < cap_u32) {
+        boot_phase_history_count += 1;
+    } else {
+        boot_phase_history_overflow +%= 1;
+    }
+}
+
 fn resetBootDiagnostics() void {
     const phase = defaultBootPhaseForMode(status.mode);
     boot_diagnostics = .{
@@ -519,10 +592,12 @@ fn resetBootDiagnostics() void {
     };
 }
 
-fn setBootPhase(new_phase: u8) void {
+fn setBootPhase(new_phase: u8, reason: u8) void {
     if (!abi.bootPhaseIsValid(new_phase)) return;
-    if (boot_diagnostics.phase != new_phase) {
+    const previous_phase = boot_diagnostics.phase;
+    if (previous_phase != new_phase) {
         boot_diagnostics.phase_changes +%= 1;
+        recordBootPhase(previous_phase, new_phase, reason, status.ticks, status.command_seq_ack);
     }
     boot_diagnostics.phase = new_phase;
 }
@@ -573,7 +648,7 @@ pub fn panic(_: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
     const previous_mode = status.mode;
     status.mode = abi.mode_panicked;
     status.panic_count +%= 1;
-    setBootPhase(abi.boot_phase_panicked);
+    setBootPhase(abi.boot_phase_panicked, abi.boot_phase_change_reason_panic);
     if (previous_mode != status.mode) {
         recordMode(previous_mode, status.mode, abi.mode_change_reason_panic, status.ticks, status.command_seq_ack);
     }
@@ -601,6 +676,7 @@ test "baremetal diagnostics command flow updates phase and stack snapshot" {
     oc_command_history_clear();
     oc_health_history_clear();
     oc_mode_history_clear();
+    oc_boot_phase_history_clear();
 
     var seq = oc_submit_command(abi.command_capture_stack_pointer, 0, 0);
     oc_tick();
@@ -655,6 +731,7 @@ test "baremetal command history ring keeps newest mailbox entries" {
     };
     oc_command_history_clear();
     oc_mode_history_clear();
+    oc_boot_phase_history_clear();
 
     const cap = oc_command_history_capacity();
     var idx: u32 = 0;
@@ -691,6 +768,7 @@ test "baremetal health history captures tick health and clear control" {
     };
     oc_health_history_clear();
     oc_mode_history_clear();
+    oc_boot_phase_history_clear();
 
     oc_tick();
     oc_tick();
@@ -731,6 +809,7 @@ test "baremetal mode history captures command and panic transitions and clear co
         .arg1 = 0,
     };
     oc_mode_history_clear();
+    oc_boot_phase_history_clear();
 
     _ = oc_submit_command(abi.command_set_mode, abi.mode_booting, 0);
     oc_tick();
@@ -757,4 +836,55 @@ test "baremetal mode history captures command and panic transitions and clear co
     _ = oc_submit_command(abi.command_clear_mode_history, 0, 0);
     oc_tick();
     try std.testing.expectEqual(@as(u32, 0), oc_mode_history_len());
+}
+
+test "baremetal boot phase history captures command runtime and panic transitions" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.panic_count = 0;
+    status.tick_batch_hint = 1;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    resetBootDiagnostics();
+    oc_boot_phase_history_clear();
+
+    // Runtime -> init via command.
+    _ = oc_submit_command(abi.command_set_boot_phase, abi.boot_phase_init, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 1), oc_boot_phase_history_len());
+    const p0 = oc_boot_phase_history_event(0);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_runtime), p0.previous_phase);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), p0.new_phase);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_change_reason_command), p0.reason);
+
+    // Tick-driven mode booting -> running should emit init -> runtime.
+    _ = oc_submit_command(abi.command_set_mode, abi.mode_booting, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 2), oc_boot_phase_history_len());
+    const p1 = oc_boot_phase_history_event(1);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), p1.previous_phase);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_runtime), p1.new_phase);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_change_reason_runtime_tick), p1.reason);
+
+    // Panic command emits runtime -> panicked transition.
+    _ = oc_submit_command(abi.command_trigger_panic_flag, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 3), oc_boot_phase_history_len());
+    const p2 = oc_boot_phase_history_event(2);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_runtime), p2.previous_phase);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_panicked), p2.new_phase);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_change_reason_panic), p2.reason);
+
+    _ = oc_submit_command(abi.command_clear_boot_phase_history, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 0), oc_boot_phase_history_len());
 }
