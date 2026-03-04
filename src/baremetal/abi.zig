@@ -3,12 +3,18 @@ const std = @import("std");
 pub const status_magic: u32 = 0x4f43424d; // "OCBM"
 pub const command_magic: u32 = 0x4f43434d; // "OCCM"
 pub const kernel_info_magic: u32 = 0x4f434b49; // "OCKI"
+pub const boot_diag_magic: u32 = 0x4f434244; // "OCBD"
 
 pub const api_version: u16 = 2;
 
 pub const mode_booting: u8 = 0;
 pub const mode_running: u8 = 1;
 pub const mode_panicked: u8 = 255;
+
+pub const boot_phase_preinit: u8 = 0;
+pub const boot_phase_init: u8 = 1;
+pub const boot_phase_runtime: u8 = 2;
+pub const boot_phase_panicked: u8 = 255;
 
 pub const feature_os_hosted_runtime: u32 = 1 << 0;
 pub const feature_baremetal_runtime: u32 = 1 << 1;
@@ -27,6 +33,7 @@ pub const feature_exception_code_payload_export: u32 = 1 << 13;
 pub const feature_exception_history_export: u32 = 1 << 14;
 pub const feature_interrupt_history_export: u32 = 1 << 15;
 pub const feature_vector_counters_export: u32 = 1 << 16;
+pub const feature_boot_diagnostics_export: u32 = 1 << 17;
 
 pub const kernel_abi_multiboot2: u32 = 1 << 0;
 pub const kernel_abi_command_mailbox: u32 = 1 << 1;
@@ -42,6 +49,7 @@ pub const kernel_abi_exception_payload: u32 = 1 << 10;
 pub const kernel_abi_exception_history: u32 = 1 << 11;
 pub const kernel_abi_interrupt_history: u32 = 1 << 12;
 pub const kernel_abi_vector_counters: u32 = 1 << 13;
+pub const kernel_abi_boot_diagnostics: u32 = 1 << 14;
 
 pub const command_nop: u16 = 0;
 pub const command_set_health_code: u16 = 1;
@@ -59,6 +67,9 @@ pub const command_trigger_exception: u16 = 12;
 pub const command_clear_exception_history: u16 = 13;
 pub const command_clear_interrupt_history: u16 = 14;
 pub const command_reset_vector_counters: u16 = 15;
+pub const command_set_boot_phase: u16 = 16;
+pub const command_reset_boot_diagnostics: u16 = 17;
+pub const command_capture_stack_pointer: u16 = 18;
 
 pub const result_ok: i16 = 0;
 pub const result_invalid_argument: i16 = -22;
@@ -99,6 +110,20 @@ pub const BaremetalKernelInfo = extern struct {
     command_size: u32,
 };
 
+pub const BaremetalBootDiagnostics = extern struct {
+    magic: u32,
+    api_version: u16,
+    phase: u8,
+    reserved0: u8,
+    boot_seq: u32,
+    last_command_seq: u32,
+    last_command_tick: u64,
+    last_tick_observed: u64,
+    stack_pointer_snapshot: u64,
+    phase_changes: u32,
+    reserved1: u32,
+};
+
 pub fn defaultFeatureFlags() u32 {
     return feature_os_hosted_runtime |
         feature_baremetal_runtime |
@@ -116,7 +141,8 @@ pub fn defaultFeatureFlags() u32 {
         feature_exception_code_payload_export |
         feature_exception_history_export |
         feature_interrupt_history_export |
-        feature_vector_counters_export;
+        feature_vector_counters_export |
+        feature_boot_diagnostics_export;
 }
 
 pub fn defaultAbiFlags() u32 {
@@ -133,11 +159,19 @@ pub fn defaultAbiFlags() u32 {
         kernel_abi_exception_payload |
         kernel_abi_exception_history |
         kernel_abi_interrupt_history |
-        kernel_abi_vector_counters;
+        kernel_abi_vector_counters |
+        kernel_abi_boot_diagnostics;
 }
 
 pub fn modeIsValid(mode: u8) bool {
     return mode == mode_booting or mode == mode_running or mode == mode_panicked;
+}
+
+pub fn bootPhaseIsValid(phase: u8) bool {
+    return phase == boot_phase_preinit or
+        phase == boot_phase_init or
+        phase == boot_phase_runtime or
+        phase == boot_phase_panicked;
 }
 
 test "baremetal abi layout contract stays stable" {
@@ -157,6 +191,7 @@ test "baremetal abi layout contract stays stable" {
 test "baremetal kernel info size contract stays stable" {
     try std.testing.expectEqual(@as(usize, 20), @sizeOf(BaremetalKernelInfo));
     try std.testing.expectEqual(@as(usize, 32), @sizeOf(BaremetalCommand));
+    try std.testing.expectEqual(@as(usize, 48), @sizeOf(BaremetalBootDiagnostics));
 }
 
 test "baremetal mode helper validates supported modes" {
@@ -164,4 +199,12 @@ test "baremetal mode helper validates supported modes" {
     try std.testing.expect(modeIsValid(mode_running));
     try std.testing.expect(modeIsValid(mode_panicked));
     try std.testing.expect(!modeIsValid(2));
+}
+
+test "baremetal boot phase helper validates supported phases" {
+    try std.testing.expect(bootPhaseIsValid(boot_phase_preinit));
+    try std.testing.expect(bootPhaseIsValid(boot_phase_init));
+    try std.testing.expect(bootPhaseIsValid(boot_phase_runtime));
+    try std.testing.expect(bootPhaseIsValid(boot_phase_panicked));
+    try std.testing.expect(!bootPhaseIsValid(3));
 }

@@ -325,6 +325,8 @@ $requiredSymbols = @(
     "oc_tick",
     "oc_tick_n",
     "oc_status_ptr",
+    "oc_boot_diag_ptr",
+    "oc_boot_diag_capture_stack",
     "oc_command_ptr",
     "oc_kernel_info_ptr",
     "oc_submit_command",

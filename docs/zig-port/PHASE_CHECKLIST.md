@@ -179,7 +179,7 @@ Phase 6 progress notes:
 ## Latest Validation Snapshot
 - [x] `zig build`
 - [x] `zig build test`
-- [x] `zig build test --summary all` -> `94/94` passing (includes gateway auth/rate-limit hardening tests, runtime file/exec policy hardening tests, TTS/completion execution-path coverage, and bare-metal ABI v2 contract tests)
+- [x] `zig build test --summary all` -> `95/95` passing (includes gateway auth/rate-limit hardening tests, runtime file/exec policy hardening tests, TTS/completion execution-path coverage, and bare-metal ABI v2 contract tests)
 - [x] Runtime policy hardening slice shipped:
   - `file.read` / `file.write` optional sandbox enforcement with traversal + symlink denial paths:
     - `OPENCLAW_ZIG_RUNTIME_FILE_SANDBOX_ENABLED`
@@ -264,6 +264,10 @@ Phase 6 progress notes:
 - [x] Bare-metal vector counter telemetry added:
   - exports: `oc_interrupt_vector_counts_ptr`, `oc_interrupt_vector_count`, `oc_exception_vector_counts_ptr`, `oc_exception_vector_count`, `oc_reset_vector_counters`
   - opcode: `command_reset_vector_counters`
+- [x] Bare-metal boot diagnostics telemetry added:
+  - exports: `oc_boot_diag_ptr`, `oc_boot_diag_capture_stack`
+  - ABI additions: `BaremetalBootDiagnostics`, boot phase constants, `feature_boot_diagnostics_export`, `kernel_abi_boot_diagnostics`
+  - opcodes: `command_set_boot_phase`, `command_reset_boot_diagnostics`, `command_capture_stack_pointer`
 - [x] `scripts/baremetal-smoke-check.ps1` now validates Multiboot2 header fields and checksum (`magic`, `arch`, `header_length`, `checksum`, end-tag tuple) in addition to section/symbol invariants.
 - [x] Cross-target diagnostics matrix (`scripts/zig-cross-target-matrix.ps1`) now covers desktop + Android with per-target logs and JSON summary:
   - Local Windows Zig master result: `4/8` pass (`x86_64-windows`, `x86_64-linux`, `x86_64-macos`, `x86_64-linux-android`)

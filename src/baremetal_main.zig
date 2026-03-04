@@ -5,6 +5,7 @@ const build_options = @import("build_options");
 const BaremetalStatus = abi.BaremetalStatus;
 const BaremetalCommand = abi.BaremetalCommand;
 const BaremetalKernelInfo = abi.BaremetalKernelInfo;
+const BaremetalBootDiagnostics = abi.BaremetalBootDiagnostics;
 
 const multiboot2_magic: u32 = 0xE85250D6;
 const multiboot2_architecture_i386: u32 = 0;
@@ -71,6 +72,20 @@ pub export var kernel_info: BaremetalKernelInfo = .{
     .command_size = @sizeOf(BaremetalCommand),
 };
 
+var boot_diagnostics: BaremetalBootDiagnostics = .{
+    .magic = abi.boot_diag_magic,
+    .api_version = abi.api_version,
+    .phase = abi.boot_phase_preinit,
+    .reserved0 = 0,
+    .boot_seq = 0,
+    .last_command_seq = 0,
+    .last_command_tick = 0,
+    .last_tick_observed = 0,
+    .stack_pointer_snapshot = 0,
+    .phase_changes = 0,
+    .reserved1 = 0,
+};
+
 pub export fn oc_status_ptr() *const abi.BaremetalStatus {
     return &status;
 }
@@ -81,6 +96,16 @@ pub export fn oc_command_ptr() *const abi.BaremetalCommand {
 
 pub export fn oc_kernel_info_ptr() *const abi.BaremetalKernelInfo {
     return &kernel_info;
+}
+
+pub export fn oc_boot_diag_ptr() *const abi.BaremetalBootDiagnostics {
+    return &boot_diagnostics;
+}
+
+pub export fn oc_boot_diag_capture_stack() u64 {
+    const snapshot = captureStackPointer();
+    boot_diagnostics.stack_pointer_snapshot = snapshot;
+    return snapshot;
 }
 
 pub export fn oc_submit_command(opcode: u16, arg0: u64, arg1: u64) u32 {
@@ -94,17 +119,20 @@ pub export fn oc_submit_command(opcode: u16, arg0: u64, arg1: u64) u32 {
 
 pub export fn oc_tick() void {
     if (!x86_bootstrap.oc_descriptor_tables_ready()) {
+        setBootPhase(abi.boot_phase_init);
         x86_bootstrap.init();
     }
     processPendingCommand();
     if (status.mode == abi.mode_booting) {
         status.mode = abi.mode_running;
+        setBootPhase(abi.boot_phase_runtime);
     }
     if (status.mode != abi.mode_panicked) {
         status.last_health_code = 200;
     }
     const batch = if (status.tick_batch_hint == 0) @as(u32, 1) else status.tick_batch_hint;
     status.ticks +%= @as(u64, batch);
+    boot_diagnostics.last_tick_observed = status.ticks;
 }
 
 pub export fn oc_tick_n(iterations: u32) void {
@@ -115,9 +143,11 @@ pub export fn oc_tick_n(iterations: u32) void {
 }
 
 pub export fn _start() noreturn {
+    setBootPhase(abi.boot_phase_init);
     x86_bootstrap.init();
     _ = x86_bootstrap.oc_try_load_descriptor_tables();
     status.mode = abi.mode_running;
+    setBootPhase(abi.boot_phase_runtime);
     if (qemu_smoke_enabled) {
         qemuExit(qemu_boot_ok_code);
     }
@@ -133,6 +163,8 @@ fn processPendingCommand() void {
     status.last_command_opcode = command_mailbox.opcode;
     status.last_command_result = executeCommand(command_mailbox.opcode, command_mailbox.arg0, command_mailbox.arg1);
     status.command_seq_ack = command_mailbox.seq;
+    boot_diagnostics.last_command_seq = status.command_seq_ack;
+    boot_diagnostics.last_command_tick = status.ticks;
 }
 
 fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
@@ -214,8 +246,62 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
             x86_bootstrap.oc_reset_vector_counters();
             return abi.result_ok;
         },
+        abi.command_set_boot_phase => {
+            if (arg0 > std.math.maxInt(u8)) return abi.result_invalid_argument;
+            const phase: u8 = @as(u8, @truncate(arg0));
+            if (!abi.bootPhaseIsValid(phase)) return abi.result_invalid_argument;
+            setBootPhase(phase);
+            return abi.result_ok;
+        },
+        abi.command_reset_boot_diagnostics => {
+            resetBootDiagnostics();
+            return abi.result_ok;
+        },
+        abi.command_capture_stack_pointer => {
+            _ = oc_boot_diag_capture_stack();
+            return abi.result_ok;
+        },
         else => return abi.result_not_supported,
     }
+}
+
+fn resetBootDiagnostics() void {
+    const phase = defaultBootPhaseForMode(status.mode);
+    boot_diagnostics = .{
+        .magic = abi.boot_diag_magic,
+        .api_version = abi.api_version,
+        .phase = phase,
+        .reserved0 = 0,
+        .boot_seq = boot_diagnostics.boot_seq +% 1,
+        .last_command_seq = 0,
+        .last_command_tick = 0,
+        .last_tick_observed = status.ticks,
+        .stack_pointer_snapshot = 0,
+        .phase_changes = 0,
+        .reserved1 = 0,
+    };
+}
+
+fn setBootPhase(new_phase: u8) void {
+    if (!abi.bootPhaseIsValid(new_phase)) return;
+    if (boot_diagnostics.phase != new_phase) {
+        boot_diagnostics.phase_changes +%= 1;
+    }
+    boot_diagnostics.phase = new_phase;
+}
+
+fn defaultBootPhaseForMode(mode: u8) u8 {
+    return switch (mode) {
+        abi.mode_booting => abi.boot_phase_init,
+        abi.mode_running => abi.boot_phase_runtime,
+        abi.mode_panicked => abi.boot_phase_panicked,
+        else => abi.boot_phase_preinit,
+    };
+}
+
+fn captureStackPointer() u64 {
+    const fp = @frameAddress();
+    return @as(u64, @intCast(fp));
 }
 
 fn spinPause(iterations: usize) void {
@@ -249,7 +335,48 @@ fn out8(port: u16, value: u8) void {
 pub fn panic(_: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {
     status.mode = abi.mode_panicked;
     status.panic_count +%= 1;
+    setBootPhase(abi.boot_phase_panicked);
     while (true) {
         asm volatile ("" ::: "memory");
     }
+}
+
+test "baremetal diagnostics command flow updates phase and stack snapshot" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    resetBootDiagnostics();
+
+    var seq = oc_submit_command(abi.command_capture_stack_pointer, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(seq, status.command_seq_ack);
+    try std.testing.expectEqual(seq, boot_diagnostics.last_command_seq);
+    try std.testing.expect(boot_diagnostics.stack_pointer_snapshot != 0);
+    try std.testing.expect(boot_diagnostics.last_tick_observed >= boot_diagnostics.last_command_tick);
+
+    seq = oc_submit_command(abi.command_set_boot_phase, abi.boot_phase_init, 0);
+    oc_tick();
+    try std.testing.expectEqual(seq, status.command_seq_ack);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), boot_diagnostics.phase);
+
+    seq = oc_submit_command(abi.command_set_boot_phase, 99, 0);
+    oc_tick();
+    try std.testing.expectEqual(seq, status.command_seq_ack);
+    try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+
+    seq = oc_submit_command(abi.command_reset_boot_diagnostics, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(seq, status.command_seq_ack);
+    try std.testing.expectEqual(@as(u64, 0), boot_diagnostics.last_command_seq);
+    try std.testing.expect(boot_diagnostics.boot_seq > 0);
 }
