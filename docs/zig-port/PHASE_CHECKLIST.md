@@ -242,6 +242,9 @@ Phase 6 progress notes:
 - [x] Bare-metal exception/fault telemetry exports + reset opcode added:
   - exports: `oc_last_exception_vector`, `oc_exception_count`, `oc_reset_exception_counters`
   - opcode: `command_reset_exception_counters`
+- [x] Bare-metal exception payload path added:
+  - exports: `oc_last_exception_code`, `oc_trigger_exception`, `oc_exception_stub`
+  - opcode: `command_trigger_exception` (`arg0` vector + `arg1` fault code payload)
 - [x] `scripts/baremetal-smoke-check.ps1` now validates Multiboot2 header fields and checksum (`magic`, `arch`, `header_length`, `checksum`, end-tag tuple) in addition to section/symbol invariants.
 - [x] Cross-target diagnostics matrix (`scripts/zig-cross-target-matrix.ps1`) now covers desktop + Android with per-target logs and JSON summary:
   - Local Windows Zig master result: `4/8` pass (`x86_64-windows`, `x86_64-linux`, `x86_64-macos`, `x86_64-linux-android`)

@@ -275,6 +275,9 @@ while maintaining parity-first validation and release gating.
   - bare-metal exception/fault telemetry expansion shipped:
     - new exports: `oc_last_exception_vector`, `oc_exception_count`, `oc_reset_exception_counters`.
     - new command opcode wired: `command_reset_exception_counters`.
+  - bare-metal exception payload path expansion shipped:
+    - new exports: `oc_last_exception_code`, `oc_trigger_exception`, `oc_exception_stub`.
+    - new command opcode wired: `command_trigger_exception` using mailbox payload (`arg0=vector`, `arg1=fault_code`).
   - CI recovery note (2026-03-04):
     - fixed Zig master API regression in Telegram runtime env lookup (`.block = .global` on `std.process.Environ`), which broke `zig-ci` validate and all cross-target jobs on run `22668754695`.
     - implemented injected environ wiring (`telegram_runtime.setEnviron`) and switched env lookup to `std.process.Environ.getAlloc(process_environ, ...)`.

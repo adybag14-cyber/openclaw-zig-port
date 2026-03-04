@@ -135,7 +135,7 @@ fn processPendingCommand() void {
     status.command_seq_ack = command_mailbox.seq;
 }
 
-fn executeCommand(opcode: u16, arg0: u64, _: u64) i16 {
+fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
     switch (opcode) {
         abi.command_nop => return abi.result_ok,
         abi.command_set_health_code => {
@@ -190,6 +190,13 @@ fn executeCommand(opcode: u16, arg0: u64, _: u64) i16 {
         },
         abi.command_reset_exception_counters => {
             x86_bootstrap.oc_reset_exception_counters();
+            return abi.result_ok;
+        },
+        abi.command_trigger_exception => {
+            if (arg0 > std.math.maxInt(u8)) return abi.result_invalid_argument;
+            const vector: u8 = @as(u8, @truncate(arg0));
+            if (vector >= 32) return abi.result_invalid_argument;
+            x86_bootstrap.oc_trigger_exception(vector, arg1);
             return abi.result_ok;
         },
         else => return abi.result_not_supported,

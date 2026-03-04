@@ -39,6 +39,7 @@ pub const InterruptState = extern struct {
     last_exception_vector: u8,
     reserved1: [7]u8,
     exception_count: u64,
+    last_exception_code: u64,
 };
 
 var gdt: [gdt_entries_count]GdtEntry = undefined;
@@ -52,6 +53,7 @@ var last_interrupt_vector: u8 = 0;
 var interrupt_counter: u64 = 0;
 var last_exception_vector: u8 = 0;
 var exception_counter: u64 = 0;
+var last_exception_code: u64 = 0;
 var descriptor_init_counter: u32 = 0;
 var descriptor_load_attempts: u32 = 0;
 var descriptor_load_successes: u32 = 0;
@@ -67,6 +69,7 @@ var interrupt_state: InterruptState = .{
     .last_exception_vector = 0,
     .reserved1 = std.mem.zeroes([7]u8),
     .exception_count = 0,
+    .last_exception_code = 0,
 };
 
 const default_selector: u16 = 0x08;
@@ -172,6 +175,10 @@ pub export fn oc_exception_count() u64 {
     return exception_counter;
 }
 
+pub export fn oc_last_exception_code() u64 {
+    return last_exception_code;
+}
+
 pub export fn oc_descriptor_init_count() u32 {
     return descriptor_init_counter;
 }
@@ -218,6 +225,7 @@ pub export fn oc_reset_interrupt_counters() void {
 pub export fn oc_reset_exception_counters() void {
     last_exception_vector = 0;
     exception_counter = 0;
+    last_exception_code = 0;
     refreshInterruptState();
 }
 
@@ -225,11 +233,29 @@ pub export fn oc_trigger_interrupt(vector: u8) void {
     oc_interrupt_stub(vector);
 }
 
+pub export fn oc_trigger_exception(vector: u8, code: u64) void {
+    oc_exception_stub(vector, code);
+}
+
+pub export fn oc_exception_stub(vector: u8, code: u64) void {
+    if (vector >= exception_vector_limit) {
+        oc_interrupt_stub(vector);
+        return;
+    }
+    last_interrupt_vector = vector;
+    interrupt_counter +%= 1;
+    last_exception_vector = vector;
+    last_exception_code = code;
+    exception_counter +%= 1;
+    refreshInterruptState();
+}
+
 pub export fn oc_interrupt_stub(vector: u8) void {
     last_interrupt_vector = vector;
     interrupt_counter +%= 1;
     if (vector < exception_vector_limit) {
         last_exception_vector = vector;
+        last_exception_code = 0;
         exception_counter +%= 1;
     }
     refreshInterruptState();
@@ -248,6 +274,7 @@ fn refreshInterruptState() void {
         .last_exception_vector = last_exception_vector,
         .reserved1 = std.mem.zeroes([7]u8),
         .exception_count = exception_counter,
+        .last_exception_code = last_exception_code,
     };
 }
 
@@ -294,11 +321,13 @@ test "x86 bootstrap exception telemetry tracks exception vectors only" {
     init();
     oc_reset_exception_counters();
     const before = oc_exception_count();
-    oc_trigger_interrupt(14);
+    oc_trigger_exception(14, 0xDEAD_BEEF);
     oc_trigger_interrupt(200);
     const state = oc_interrupt_state_ptr().*;
     try std.testing.expectEqual(before + 1, oc_exception_count());
     try std.testing.expectEqual(@as(u8, 14), oc_last_exception_vector());
+    try std.testing.expectEqual(@as(u64, 0xDEAD_BEEF), oc_last_exception_code());
     try std.testing.expectEqual(before + 1, state.exception_count);
     try std.testing.expectEqual(@as(u8, 14), state.last_exception_vector);
+    try std.testing.expectEqual(@as(u64, 0xDEAD_BEEF), state.last_exception_code);
 }
