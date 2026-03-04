@@ -3,7 +3,7 @@
 ## Current Snapshot
 
 - Latest edge release: `v0.2.0-zig-edge.14`
-- Latest local test gate: `zig build test --summary all` -> `77/77` passing
+- Latest local test gate: `zig build test --summary all` -> `79/79` passing
 - Latest parity gate: `scripts/check-go-method-parity.ps1` -> `MISSING_IN_ZIG=0`, `ZIG_COUNT=153`
 
 ## Local Validation Matrix
@@ -15,6 +15,8 @@ Recommended sequence:
 ./scripts/check-go-method-parity.ps1
 ./scripts/docker-smoke-check.ps1
 ./scripts/runtime-smoke-check.ps1
+./scripts/gateway-auth-smoke-check.ps1
+./scripts/websocket-smoke-check.ps1
 ./scripts/web-login-smoke-check.ps1
 ./scripts/telegram-reply-loop-smoke-check.ps1
 ./scripts/npm-pack-check.ps1
@@ -27,7 +29,7 @@ Recommended sequence:
 
 - Zig master build/test gates
 - parity gate enforcement
-- runtime smoke checks
+- runtime + gateway-auth + websocket smoke checks
 - parity evidence artifacts
 
 ### `release-preview.yml`
@@ -35,6 +37,7 @@ Recommended sequence:
 - validate stage before artifact matrix
 - duplicate release-tag protection
 - preview artifact publishing with parity evidence
+- gateway-auth + websocket smoke checks in validate stage
 - npm package dry-run validation in release validate stage
 - python package validation (unit tests + build + twine check) in release validate stage
 
