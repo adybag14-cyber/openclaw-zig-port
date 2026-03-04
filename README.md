@@ -12,7 +12,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 - Latest local validation: `zig build test --summary all` -> `66/66` passing
 - Dual runtime profiles available:
   - OS-hosted profile: `openclaw-zig` (`--serve`, doctor, security audit, full RPC stack)
-  - Bare-metal profile: `openclaw-zig-baremetal.elf` (`zig build baremetal`, freestanding runtime loop)
+  - Bare-metal profile: `openclaw-zig-baremetal.elf` (`zig build baremetal`, freestanding runtime loop + Multiboot2 header)
 - Recent optimization slices (2026-03-04):
   - memory/runtime/channel queue compaction and retention hardening
   - diagnostics docker probe caching
@@ -49,7 +49,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 
 - Runtime profiles:
   - OS-hosted runtime: full HTTP/RPC gateway and feature surface.
-  - Bare-metal runtime: freestanding image exporting core lifecycle hooks (`_start`, `oc_tick`, `oc_status_ptr`) for bootloader/hypervisor integration.
+  - Bare-metal runtime: freestanding image exporting core lifecycle hooks (`_start`, `oc_tick`, `oc_status_ptr`) and a Multiboot2 header for bootloader/hypervisor integration.
 - Protocol: JSON-RPC request/response envelopes with deterministic error semantics.
 - Gateway: HTTP server with `GET /health` and `POST /rpc`, graceful shutdown via RPC.
 - Dispatcher: method routing and contract handling across runtime, security, browser/auth, channels, memory, and edge domains.

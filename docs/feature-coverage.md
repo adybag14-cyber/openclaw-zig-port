@@ -9,6 +9,7 @@ This page summarizes functional coverage across all major OpenClaw Zig runtime d
 - bare-metal profile:
   - freestanding runtime image (`zig build baremetal`)
   - exported lifecycle hooks for firmware/bootloader integration (`_start`, `oc_tick`, `oc_status_ptr`)
+  - Multiboot2 header embedded for loader compatibility checks
 
 ## Protocol and Gateway
 

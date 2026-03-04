@@ -62,7 +62,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     baremetal_module.single_threaded = true;
-    baremetal_module.strip = true;
+    baremetal_module.strip = false;
 
     const baremetal_exe = b.addExecutable(.{
         .name = "openclaw-zig-baremetal",

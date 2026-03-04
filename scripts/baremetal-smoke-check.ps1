@@ -55,6 +55,43 @@ if ($info.Length -le 0) {
     throw "bare-metal artifact is empty: $artifact"
 }
 
+function Find-BytePattern {
+    param(
+        [byte[]] $Bytes,
+        [byte[]] $Pattern
+    )
+    if ($Pattern.Length -eq 0 -or $Bytes.Length -lt $Pattern.Length) {
+        return $false
+    }
+    for ($i = 0; $i -le ($Bytes.Length - $Pattern.Length); $i++) {
+        $matched = $true
+        for ($j = 0; $j -lt $Pattern.Length; $j++) {
+            if ($Bytes[$i + $j] -ne $Pattern[$j]) {
+                $matched = $false
+                break
+            }
+        }
+        if ($matched) {
+            return $true
+        }
+    }
+    return $false
+}
+
+$bytes = [System.IO.File]::ReadAllBytes($artifact)
+if ($bytes.Length -lt 4 -or $bytes[0] -ne 0x7F -or $bytes[1] -ne 0x45 -or $bytes[2] -ne 0x4C -or $bytes[3] -ne 0x46) {
+    throw "artifact is not an ELF binary: $artifact"
+}
+
+# Multiboot2 magic in little-endian
+$multiboot2Magic = [byte[]] @(0xD6, 0x50, 0x52, 0xE8)
+$hasMultiboot2 = Find-BytePattern -Bytes $bytes -Pattern $multiboot2Magic
+if (-not $hasMultiboot2) {
+    throw "multiboot2 header magic not found in bare-metal artifact"
+}
+
 Write-Output "BAREMETAL_BUILD_HTTP=200"
 Write-Output "BAREMETAL_ARTIFACT=$artifact"
 Write-Output "BAREMETAL_SIZE_BYTES=$($info.Length)"
+Write-Output "BAREMETAL_ELF_MAGIC_PRESENT=True"
+Write-Output "BAREMETAL_MULTIBOOT2_MAGIC_PRESENT=True"
