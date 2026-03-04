@@ -51,6 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - validate
+    continue-on-error: ${{ matrix.optional }}
     strategy:
       fail-fast: false
       matrix:
@@ -58,18 +59,35 @@ jobs:
           - target: x86_64-windows
             label: x86_64-windows
             binary: openclaw-zig.exe
+            optional: false
           - target: x86_64-linux
             label: x86_64-linux
             binary: openclaw-zig
+            optional: false
           - target: x86_64-macos
             label: x86_64-macos
             binary: openclaw-zig
+            optional: false
+          - target: x86_64-linux-android
+            label: x86_64-android
+            binary: openclaw-zig
+            optional: false
+          - target: aarch64-linux-android
+            label: aarch64-android
+            binary: openclaw-zig
+            optional: true
+          - target: arm-linux-androideabi
+            label: armv7-android
+            binary: openclaw-zig
+            optional: true
           - target: aarch64-linux
             label: aarch64-linux
             binary: openclaw-zig
+            optional: true
           - target: aarch64-macos
             label: aarch64-macos
             binary: openclaw-zig
+            optional: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -122,6 +122,11 @@ Phase 6 progress notes:
 - [x] `scripts/docker-smoke-check.ps1` (host + Docker HTTP 200 checks on `/health` and `/rpc`)
 - [x] `scripts/web-login-smoke-check.ps1` (`web.login.start -> wait -> complete -> status` all HTTP 200 with authorized completion)
 - [x] `scripts/telegram-reply-loop-smoke-check.ps1` (`send /auth start -> send /auth complete -> send chat -> poll` all HTTP 200 with non-empty queued replies)
+- [x] Cross-target diagnostics matrix (`scripts/zig-cross-target-matrix.ps1`) now covers desktop + Android with per-target logs and JSON summary:
+  - Local Windows Zig master result: `4/8` pass (`x86_64-windows`, `x86_64-linux`, `x86_64-macos`, `x86_64-linux-android`)
+  - Local failures: `aarch64-linux`, `aarch64-macos`, `aarch64-linux-android`, `arm-linux-androideabi`
+  - Failure class reproduces in minimal targets and remains toolchain-level on this host (`compiler_rt` + `memory allocation failure`; `aarch64-linux*` additionally show `invalid constraint: 'X'`; `arm-linux-androideabi` minimal repro exits with access-violation code `-1073741819`)
+  - Evidence: `release/cross-target-diagnostics/summary.json` and per-target `stdout/stderr` logs in `release/cross-target-diagnostics/`
 - [x] Freshness check: Codeberg Zig `master`=`af1ab5fa08f2c58517f94c253535403e1575c3b6`; local toolchain=`0.16.0-dev.2703+0a412853a` (hash mismatch acknowledged)
 - [x] Serve smoke: `GET /health` and `POST /rpc` (`shutdown`) both returned HTTP 200
 - [x] Serve smoke: `POST /rpc` `file.write`, `file.read`, and `exec.run` returned HTTP 200 with real payloads
@@ -138,10 +143,16 @@ Phase 6 progress notes:
 - [x] Cross-target note: `aarch64-linux` and `aarch64-macos` failed on local Zig `0.16.0-dev.2703+0a412853a` Windows toolchain with compiler exit code `5`; release matrix kept to passing `x86_64` targets.
 - [x] Dispatcher coverage guard: registry-wide test asserts every method in `registry.supported_methods` resolves in dispatcher (prevents method-set drift regressions).
 - [x] Added CI pipeline (`.github/workflows/zig-ci.yml`) for build/test gates and cross-target release build attempts on Zig master.
+- [x] Expanded CI cross-target matrix with Android builds:
+  - `x86_64-linux-android` (required)
+  - `aarch64-linux-android` and `arm-linux-androideabi` (optional while Zig Windows local arm cross-toolchain remains unstable)
 - [x] Added arm64 diagnostic runner (`scripts/zig-arm64-diagnose.ps1`) to persist stdout/stderr logs for `aarch64-linux` and `aarch64-macos` failures.
 - [x] Arm64 diagnostics confirmed local Windows Zig master failure class is toolchain-level (repro on minimal `build-exe`): `compiler_rt` sub-compilation failure, `memory allocation failure`, and (`aarch64-linux`) `invalid constraint: 'X'`.
 - [x] CI confirmation: GitHub Actions run `22645119953` passed all jobs, including `aarch64-linux` and `aarch64-macos` cross-target builds on Ubuntu Zig master.
 - [x] Added CI release workflow (`.github/workflows/release-preview.yml`) to publish full preview artifact matrix from Linux runners, including arm64 targets.
+- [x] Expanded release preview build matrix with Android artifact targets:
+  - `x86_64-android` (required)
+  - `aarch64-android` and `armv7-android` (optional)
 - [x] Release workflow smoke validated: Actions run `22645353103` published `v0.1.0-zig-preview.ci-smoke` with full 5-target artifact set + `SHA256SUMS.txt`.
 - [x] Added cross-repo method parity gate script (`scripts/check-go-method-parity.ps1`) and wired it into CI + release workflows as a blocking check.
 - [x] Parity gate now resolves and checks both latest release baselines on each run:

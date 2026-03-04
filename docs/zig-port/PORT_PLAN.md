@@ -140,6 +140,10 @@ while maintaining parity-first validation and release gating.
   - Added Windows build workaround in `build.zig`:
     - use `-fstrip` for executable to avoid missing `.pdb` install failure on this master toolchain.
     - route `zig build test` through `zig test src/main.zig` on Windows to avoid build-runner `--listen` regression.
+  - Extended local cross-target diagnostics to include Android targets:
+    - Script: `scripts/zig-cross-target-matrix.ps1`
+    - Current local result: pass on `x86_64-windows`, `x86_64-linux`, `x86_64-macos`, `x86_64-linux-android`; fail on `aarch64-linux`, `aarch64-macos`, `aarch64-linux-android`, `arm-linux-androideabi`.
+    - Failing targets reproduce in minimal `build-exe` runs and point to local Zig Windows toolchain issues (`compiler_rt` / memory-allocation failure class), not project code regressions.
 - Phase 7 complete:
   - built `ReleaseFast` artifacts for `x86_64-windows`, `x86_64-linux`, and `x86_64-macos`
   - generated `SHA256SUMS.txt` for release zips
@@ -150,10 +154,13 @@ while maintaining parity-first validation and release gating.
   - added `scripts/release-preview.ps1` to automate deterministic preview artifact creation, checksum generation, and optional `gh release create` publishing.
   - added a registry-wide dispatcher coverage test to assert every method in `registry.supported_methods` is actually dispatchable (no `-32601` method-not-found drift).
   - added GitHub Actions workflow `.github/workflows/zig-ci.yml` to continuously run Zig master build/test and cross-target release build attempts.
+  - expanded CI cross-target coverage with Android targets (`x86_64-linux-android` required; `aarch64-linux-android` + `arm-linux-androideabi` optional).
   - added `scripts/zig-arm64-diagnose.ps1` to collect reproducible arm64 failure logs (`stdout`/`stderr`) for local Windows toolchain triage.
+  - added `scripts/zig-cross-target-matrix.ps1` to capture full desktop + Android compile matrix logs with JSON summary output.
   - arm64 diagnostics now confirm a local toolchain failure class on this Windows Zig build (reproducible on minimal source): `compiler_rt` sub-compilation failure + `memory allocation failure`, with additional `invalid constraint: 'X'` for `aarch64-linux`.
   - CI run `22645119953` validated that `aarch64-linux` and `aarch64-macos` cross-builds succeed on Ubuntu runners with Zig master, isolating the arm64 issue to the local Windows toolchain path.
   - added release automation workflow `.github/workflows/release-preview.yml` so preview tags can be built + published from Linux runners with full `x86_64` + `aarch64` target coverage.
+  - expanded release preview matrix with Android artifacts: required `x86_64-android`, optional `aarch64-android` and `armv7-android`.
   - release workflow smoke run `22645353103` succeeded and published `v0.1.0-zig-preview.ci-smoke` with `x86_64-windows`, `x86_64-linux`, `x86_64-macos`, `aarch64-linux`, `aarch64-macos`, and `SHA256SUMS.txt`.
   - upgraded `scripts/check-go-method-parity.ps1` into a dual-baseline parity gate and wired it into both CI workflows, enforcing that every method in:
     - latest Go release baseline, and
