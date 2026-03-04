@@ -72,6 +72,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-smoke-check.ps1
 
+      - name: Bare-metal QEMU smoke check (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-smoke-check.ps1 -SkipBuild
+
       - name: Runtime smoke check (serve + rpc)
         shell: pwsh
         run: ./scripts/runtime-smoke-check.ps1 -SkipBuild

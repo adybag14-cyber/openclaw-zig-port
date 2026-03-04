@@ -5,6 +5,7 @@ const http_server = @import("gateway/http_server.zig");
 const security_guard = @import("security/guard.zig");
 const security_audit = @import("security/audit.zig");
 const baremetal_abi = @import("baremetal/abi.zig");
+const baremetal_x86_bootstrap = @import("baremetal/x86_bootstrap.zig");
 
 const CliFlags = struct {
     serve: bool = false,
@@ -136,4 +137,13 @@ test "baremetal abi module exposes expected v2 contract constants" {
     try std.testing.expect((baremetal_abi.defaultAbiFlags() & baremetal_abi.kernel_abi_command_mailbox) != 0);
     try std.testing.expect((baremetal_abi.defaultFeatureFlags() & baremetal_abi.feature_descriptor_tables_export) != 0);
     try std.testing.expect((baremetal_abi.defaultAbiFlags() & baremetal_abi.kernel_abi_interrupt_stub) != 0);
+}
+
+test "baremetal x86 bootstrap module exports descriptor table metadata" {
+    baremetal_x86_bootstrap.init();
+    try std.testing.expect(baremetal_x86_bootstrap.oc_descriptor_tables_ready());
+    _ = baremetal_x86_bootstrap.oc_gdtr_ptr();
+    _ = baremetal_x86_bootstrap.oc_idtr_ptr();
+    _ = baremetal_x86_bootstrap.oc_gdt_ptr();
+    _ = baremetal_x86_bootstrap.oc_idt_ptr();
 }

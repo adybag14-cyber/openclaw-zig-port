@@ -3,7 +3,7 @@
 ## Current Snapshot
 
 - Latest edge release: `v0.2.0-zig-edge.14`
-- Latest local test gate: `zig build test --summary all` -> `84/84` passing
+- Latest local test gate: `zig build test --summary all` -> `87/87` passing
 - Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=153`, `ZIG_EVENTS_COUNT=19`
 
 ## Local Validation Matrix
@@ -15,6 +15,8 @@ Recommended sequence:
 ./scripts/check-go-method-parity.ps1
 ./scripts/docker-smoke-check.ps1
 ./scripts/runtime-smoke-check.ps1
+./scripts/baremetal-smoke-check.ps1
+./scripts/baremetal-qemu-smoke-check.ps1
 ./scripts/gateway-auth-smoke-check.ps1
 ./scripts/websocket-smoke-check.ps1
 ./scripts/web-login-smoke-check.ps1

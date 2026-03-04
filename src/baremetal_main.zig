@@ -1,12 +1,16 @@
 const std = @import("std");
 const abi = @import("baremetal/abi.zig");
 const x86_bootstrap = @import("baremetal/x86_bootstrap.zig");
+const build_options = @import("build_options");
 const BaremetalStatus = abi.BaremetalStatus;
 const BaremetalCommand = abi.BaremetalCommand;
 const BaremetalKernelInfo = abi.BaremetalKernelInfo;
 
 const multiboot2_magic: u32 = 0xE85250D6;
 const multiboot2_architecture_i386: u32 = 0;
+const qemu_debug_exit_port: u16 = 0xF4;
+const qemu_boot_ok_code: u8 = 0x2A;
+const qemu_smoke_enabled: bool = build_options.qemu_smoke;
 
 const Multiboot2Header = extern struct {
     magic: u32,
@@ -113,6 +117,9 @@ pub export fn oc_tick_n(iterations: u32) void {
 pub export fn _start() noreturn {
     x86_bootstrap.init();
     status.mode = abi.mode_running;
+    if (qemu_smoke_enabled) {
+        qemuExit(qemu_boot_ok_code);
+    }
     while (true) {
         oc_tick();
         spinPause(100_000);
@@ -176,6 +183,21 @@ fn spinPause(iterations: usize) void {
             asm volatile ("" ::: "memory");
         }
     }
+}
+
+fn qemuExit(code: u8) noreturn {
+    out8(qemu_debug_exit_port, code);
+    while (true) {
+        asm volatile ("hlt");
+    }
+}
+
+fn out8(port: u16, value: u8) void {
+    asm volatile ("out dx, al"
+        :
+        : [dx] "{dx}" (port),
+          [al] "{al}" (value),
+        : "memory");
 }
 
 pub fn panic(_: []const u8, _: ?*std.builtin.StackTrace, _: ?usize) noreturn {

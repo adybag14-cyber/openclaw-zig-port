@@ -11,13 +11,14 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - Original OpenClaw beta baseline (`v2026.3.2-beta.1`): `94/94` covered
   - Union baseline: `135/135` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
-- Latest local validation: `zig build test --summary all` -> `84/84` passing
+- Latest local validation: `zig build test --summary all` -> `87/87` passing
 - Latest edge release tag: `v0.2.0-zig-edge.14`
 - Dual runtime profiles available:
   - OS-hosted profile: `openclaw-zig` (`--serve`, doctor, security audit, full RPC stack)
 - Bare-metal profile: `openclaw-zig-baremetal.elf` (`zig build baremetal`, freestanding runtime loop + Multiboot2 header)
   - smoke gate validates ELF class/endianness, Multiboot2 location/alignment, `.multiboot` section, and required exported symbols
   - smoke gate also validates Multiboot2 header field contract and checksum
+  - optional QEMU boot smoke path available via `zig build baremetal -Dbaremetal-qemu-smoke=true` and `scripts/baremetal-qemu-smoke-check.ps1` (auto-skips when QEMU is unavailable)
   - bare-metal ABI now includes exported kernel info + command mailbox hooks (`oc_kernel_info_ptr`, `oc_command_ptr`, `oc_submit_command`, `oc_tick_n`)
   - x86 bootstrap exports now include descriptor table pointers and interrupt-tracking hooks (`oc_gdtr_ptr`, `oc_idtr_ptr`, `oc_gdt_ptr`, `oc_idt_ptr`, `oc_interrupt_count`, `oc_last_interrupt_vector`)
 - Recent optimization slices (2026-03-04):
