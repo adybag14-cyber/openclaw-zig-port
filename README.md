@@ -37,6 +37,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 - Local Zig toolchain notes: [`docs/zig-port/ZIG_TOOLCHAIN_LOCAL.md`](docs/zig-port/ZIG_TOOLCHAIN_LOCAL.md)
 - GitHub master tracking issue: <https://github.com/adybag14-cyber/openclaw-zig-port/issues/1>
 - Full method registry (source of truth): [`src/gateway/registry.zig`](src/gateway/registry.zig)
+- GitHub Pages docs site (after first deploy): <https://adybag14-cyber.github.io/openclaw-zig-port/>
 
 ## Architecture Overview
 
@@ -291,6 +292,12 @@ Run smoke checks:
 - dual-baseline parity enforcement
 - runtime smoke gate
 - parity evidence artifact publication (`parity-go-zig.json`, `parity-go-zig.md`)
+
+`docs-pages` workflow (`.github/workflows/docs-pages.yml`):
+
+- builds MkDocs docs (`mkdocs build --strict`)
+- publishes docs to GitHub Pages from `site/`
+- triggers on `docs/**`, `mkdocs.yml`, and docs workflow changes
 
 `release-preview` workflow (`.github/workflows/release-preview.yml`):
 

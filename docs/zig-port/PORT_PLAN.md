@@ -54,6 +54,7 @@ while maintaining parity-first validation and release gating.
 - Tracking and documentation refresh (2026-03-04):
   - README refreshed with current parity/validation state and workflow guidance.
   - Local Zig toolchain reference doc refreshed to current local/remote hashes.
+  - MkDocs documentation site scaffolded with full feature/domain documentation and GitHub Pages deployment workflow.
   - GitHub tracking issue updated with optimization-slice evidence:
     - https://github.com/adybag14-cyber/openclaw-zig-port/issues/1#issuecomment-3994942224
     - https://github.com/adybag14-cyber/openclaw-zig-port/issues/1#issuecomment-3994964162
