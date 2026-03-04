@@ -79,8 +79,21 @@ jobs:
             echo "Release ${TAG} not found. Skipping release upload."
           fi
 
+      - name: Detect PyPI token availability
+        id: auth
+        shell: bash
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${PYPI_API_TOKEN}" ]; then
+            echo "has_pypi_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_pypi_token=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish to PyPI
-        if: ${{ secrets.PYPI_API_TOKEN != '' }}
+        if: ${{ steps.auth.outputs.has_pypi_token == 'true' }}
         shell: bash
         env:
           TWINE_USERNAME: __token__
