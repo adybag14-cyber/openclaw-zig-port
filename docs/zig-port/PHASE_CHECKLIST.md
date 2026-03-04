@@ -48,6 +48,10 @@ Phase 5 enhancement notes:
 - Added live Lightpanda probe telemetry for `browser.request` and `browser.open`:
   - Dispatcher now probes `<endpoint>/json/version` per request and returns structured probe status (`ok/url/statusCode/latencyMs/error`).
   - Browser params now support endpoint/timeout overrides (`endpoint|bridgeEndpoint|lightpandaEndpoint`, `requestTimeoutMs|timeoutMs`) while preserving existing completion payload fields.
+- Added real Lightpanda completion execution path for `browser.request`:
+  - When prompt/messages are present, dispatcher now POSTs to `<endpoint>/v1/chat/completions`.
+  - RPC responses include structured `bridgeCompletion` telemetry (`requested/ok/provider/requestUrl/statusCode/model/assistantText/latencyMs/error`).
+  - Request parsing now supports completion payload keys with normalization: `messages`, `prompt|message|text`, `temperature`, `max_tokens|maxTokens`, `loginSessionId|login_session_id`, and `apiKey|api_key`.
 
 ## Phase 6 - Memory + Edge
 - [x] Port memory persistence primitives
@@ -140,7 +144,7 @@ Phase 6 progress notes:
 ## Latest Validation Snapshot
 - [x] `zig build`
 - [x] `zig build test`
-- [x] `zig build test --summary all` -> `71/71` passing (includes lightpanda endpoint probe telemetry coverage)
+- [x] `zig build test --summary all` -> `73/73` passing (includes lightpanda completion execution + parser telemetry coverage)
 - [x] `scripts/generate-rpc-reference.ps1` (regenerates `docs/rpc-reference.md` from `src/gateway/registry.zig`, currently `153` methods)
 - [x] `scripts/npm-pack-check.ps1` (validates npm package dry-run for `npm/openclaw-zig-rpc-client`)
 - [x] `zig test src/main.zig`

@@ -33,6 +33,34 @@ pub const BridgeProbe = struct {
     }
 };
 
+pub const CompletionMessage = struct {
+    role: []const u8,
+    content: []const u8,
+};
+
+pub const BridgeCompletionExecution = struct {
+    requested: bool,
+    ok: bool,
+    provider: []u8,
+    endpoint: []u8,
+    requestUrl: []u8,
+    requestTimeoutMs: u32,
+    statusCode: u16,
+    model: []u8,
+    assistantText: []u8,
+    latencyMs: i64,
+    errorText: []u8,
+
+    pub fn deinit(self: BridgeCompletionExecution, allocator: std.mem.Allocator) void {
+        allocator.free(self.provider);
+        allocator.free(self.endpoint);
+        allocator.free(self.requestUrl);
+        allocator.free(self.model);
+        allocator.free(self.assistantText);
+        allocator.free(self.errorText);
+    }
+};
+
 pub fn normalizeEngine(raw: []const u8) BridgeError![]const u8 {
     const engine = std.mem.trim(u8, raw, " \t\r\n");
     if (engine.len == 0) return "lightpanda";
@@ -175,6 +203,194 @@ pub fn probeEndpoint(allocator: std.mem.Allocator, endpoint_raw: []const u8) !Br
     };
 }
 
+pub fn executeCompletion(
+    allocator: std.mem.Allocator,
+    endpoint_raw: []const u8,
+    request_timeout_ms: u32,
+    provider_raw: []const u8,
+    model_raw: []const u8,
+    messages: []const CompletionMessage,
+    temperature: ?f64,
+    max_tokens: ?u32,
+    login_session_id_raw: []const u8,
+    api_key_raw: []const u8,
+) !BridgeCompletionExecution {
+    const endpoint = try normalizeEndpointForProbe(allocator, endpoint_raw);
+    errdefer allocator.free(endpoint);
+
+    const request_url = try std.fmt.allocPrint(allocator, "{s}/v1/chat/completions", .{endpoint});
+    errdefer allocator.free(request_url);
+
+    const provider = normalizeProvider(provider_raw) catch "chatgpt";
+    const model_trimmed = std.mem.trim(u8, model_raw, " \t\r\n");
+    const model = if (model_trimmed.len > 0) model_trimmed else defaultModelForProvider(provider);
+    const login_session_id = std.mem.trim(u8, login_session_id_raw, " \t\r\n");
+    const api_key = std.mem.trim(u8, api_key_raw, " \t\r\n");
+
+    const Payload = struct {
+        provider: []const u8,
+        model: []const u8,
+        messages: []const CompletionMessage,
+        temperature: ?f64 = null,
+        max_tokens: ?u32 = null,
+        loginSessionId: ?[]const u8 = null,
+        apiKey: ?[]const u8 = null,
+        api_key: ?[]const u8 = null,
+    };
+
+    const payload = Payload{
+        .provider = provider,
+        .model = model,
+        .messages = messages,
+        .temperature = temperature,
+        .max_tokens = max_tokens,
+        .loginSessionId = if (login_session_id.len > 0) login_session_id else null,
+        .apiKey = if (api_key.len > 0) api_key else null,
+        .api_key = if (api_key.len > 0) api_key else null,
+    };
+
+    var request_body: std.Io.Writer.Allocating = .init(allocator);
+    defer request_body.deinit();
+    try std.json.Stringify.value(payload, .{ .emit_null_optional_fields = false }, &request_body.writer);
+    const request_payload = try request_body.toOwnedSlice();
+    defer allocator.free(request_payload);
+
+    var client: std.http.Client = .{
+        .allocator = allocator,
+        .io = std.Io.Threaded.global_single_threaded.io(),
+    };
+    defer client.deinit();
+
+    var response_body: std.Io.Writer.Allocating = .init(allocator);
+    defer response_body.deinit();
+
+    const started_ms = time_util.nowMs();
+    const fetch_result = client.fetch(.{
+        .location = .{ .url = request_url },
+        .method = .POST,
+        .payload = request_payload,
+        .keep_alive = false,
+        .extra_headers = &.{
+            .{ .name = "content-type", .value = "application/json" },
+        },
+        .response_writer = &response_body.writer,
+    }) catch |err| {
+        return .{
+            .requested = true,
+            .ok = false,
+            .provider = try allocator.dupe(u8, provider),
+            .endpoint = endpoint,
+            .requestUrl = request_url,
+            .requestTimeoutMs = request_timeout_ms,
+            .statusCode = 0,
+            .model = try allocator.dupe(u8, model),
+            .assistantText = try allocator.dupe(u8, ""),
+            .latencyMs = time_util.nowMs() - started_ms,
+            .errorText = try std.fmt.allocPrint(allocator, "completion request failed: {s}", .{@errorName(err)}),
+        };
+    };
+
+    const response_status: u16 = @intCast(@intFromEnum(fetch_result.status));
+    const response_json = try response_body.toOwnedSlice();
+    defer allocator.free(response_json);
+
+    if (response_status < 200 or response_status >= 300) {
+        return .{
+            .requested = true,
+            .ok = false,
+            .provider = try allocator.dupe(u8, provider),
+            .endpoint = endpoint,
+            .requestUrl = request_url,
+            .requestTimeoutMs = request_timeout_ms,
+            .statusCode = response_status,
+            .model = try allocator.dupe(u8, model),
+            .assistantText = try allocator.dupe(u8, ""),
+            .latencyMs = time_util.nowMs() - started_ms,
+            .errorText = try allocErrorSnippet(allocator, response_json, response_status),
+        };
+    }
+
+    var parsed = std.json.parseFromSlice(std.json.Value, allocator, response_json, .{}) catch |err| {
+        return .{
+            .requested = true,
+            .ok = false,
+            .provider = try allocator.dupe(u8, provider),
+            .endpoint = endpoint,
+            .requestUrl = request_url,
+            .requestTimeoutMs = request_timeout_ms,
+            .statusCode = response_status,
+            .model = try allocator.dupe(u8, model),
+            .assistantText = try allocator.dupe(u8, ""),
+            .latencyMs = time_util.nowMs() - started_ms,
+            .errorText = try std.fmt.allocPrint(allocator, "invalid bridge JSON: {s}", .{@errorName(err)}),
+        };
+    };
+    defer parsed.deinit();
+
+    var resolved_model = model;
+    var assistant_text: []const u8 = "";
+    if (parsed.value == .object) {
+        if (parsed.value.object.get("model")) |value| {
+            if (value == .string) {
+                const trimmed = std.mem.trim(u8, value.string, " \t\r\n");
+                if (trimmed.len > 0) resolved_model = trimmed;
+            }
+        }
+        if (parsed.value.object.get("choices")) |choices_value| {
+            if (choices_value == .array and choices_value.array.items.len > 0) {
+                const first = choices_value.array.items[0];
+                if (first == .object) {
+                    if (first.object.get("message")) |message_value| {
+                        if (message_value == .object) {
+                            if (message_value.object.get("content")) |content_value| {
+                                if (content_value == .string) {
+                                    const trimmed = std.mem.trim(u8, content_value.string, " \t\r\n");
+                                    if (trimmed.len > 0) assistant_text = trimmed;
+                                }
+                            }
+                        }
+                    }
+                    if (assistant_text.len == 0) {
+                        if (first.object.get("text")) |text_value| {
+                            if (text_value == .string) {
+                                const trimmed = std.mem.trim(u8, text_value.string, " \t\r\n");
+                                if (trimmed.len > 0) assistant_text = trimmed;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return .{
+        .requested = true,
+        .ok = true,
+        .provider = try allocator.dupe(u8, provider),
+        .endpoint = endpoint,
+        .requestUrl = request_url,
+        .requestTimeoutMs = request_timeout_ms,
+        .statusCode = response_status,
+        .model = try allocator.dupe(u8, resolved_model),
+        .assistantText = try allocator.dupe(u8, assistant_text),
+        .latencyMs = time_util.nowMs() - started_ms,
+        .errorText = try allocator.dupe(u8, ""),
+    };
+}
+
+fn allocErrorSnippet(allocator: std.mem.Allocator, body: []const u8, status_code: u16) ![]u8 {
+    const trimmed = std.mem.trim(u8, body, " \t\r\n");
+    if (trimmed.len == 0) {
+        return std.fmt.allocPrint(allocator, "bridge returned status {d} (empty body)", .{status_code});
+    }
+    const max_len: usize = 200;
+    const prefix = if (trimmed.len > max_len) trimmed[0..max_len] else trimmed;
+    if (trimmed.len > max_len) {
+        return std.fmt.allocPrint(allocator, "bridge returned status {d}: {s}...", .{ status_code, prefix });
+    }
+    return std.fmt.allocPrint(allocator, "bridge returned status {d}: {s}", .{ status_code, prefix });
+}
+
 fn normalizeEndpointForProbe(allocator: std.mem.Allocator, endpoint_raw: []const u8) ![]u8 {
     const trimmed = std.mem.trim(u8, endpoint_raw, " \t\r\n");
     const endpoint = if (trimmed.len == 0) "http://127.0.0.1:9222" else trimmed;
@@ -245,4 +461,30 @@ test "probe endpoint returns structured failure for unreachable bridge" {
     try std.testing.expect(!probe.ok);
     try std.testing.expect(probe.statusCode == 0 or probe.statusCode >= 400);
     try std.testing.expect(probe.errorText.len > 0);
+}
+
+test "execute completion returns failure telemetry for unreachable endpoint" {
+    const allocator = std.testing.allocator;
+    const messages = [_]CompletionMessage{
+        .{ .role = "user", .content = "hello" },
+    };
+    var execution = try executeCompletion(
+        allocator,
+        "http://127.0.0.1:1",
+        1500,
+        "chatgpt",
+        "gpt-5.2",
+        messages[0..],
+        null,
+        null,
+        "",
+        "",
+    );
+    defer execution.deinit(allocator);
+
+    try std.testing.expect(execution.requested);
+    try std.testing.expect(!execution.ok);
+    try std.testing.expect(std.mem.eql(u8, execution.provider, "chatgpt"));
+    try std.testing.expect(std.mem.eql(u8, execution.requestUrl, "http://127.0.0.1:1/v1/chat/completions"));
+    try std.testing.expect(execution.errorText.len > 0);
 }

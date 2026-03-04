@@ -5790,6 +5790,56 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         var probe = try lightpanda.probeEndpoint(allocator, browser_params.endpoint);
         defer probe.deinit(allocator);
 
+        if (browser_params.has_completion_payload) {
+            var bridge_completion = try lightpanda.executeCompletion(
+                allocator,
+                browser_params.endpoint,
+                browser_params.request_timeout_ms,
+                completion.provider,
+                completion.model,
+                browser_params.completion_messages.items,
+                browser_params.temperature,
+                browser_params.max_tokens,
+                browser_params.login_session_id,
+                browser_params.api_key,
+            );
+            defer bridge_completion.deinit(allocator);
+
+            return protocol.encodeResult(allocator, req.id, .{
+                .ok = completion.ok,
+                .engine = completion.engine,
+                .provider = completion.provider,
+                .model = completion.model,
+                .status = completion.status,
+                .authMode = completion.authMode,
+                .guestBypassSupported = completion.guestBypassSupported,
+                .popupBypassAction = completion.popupBypassAction,
+                .message = completion.message,
+                .endpoint = probe.endpoint,
+                .requestTimeoutMs = browser_params.request_timeout_ms,
+                .probe = .{
+                    .ok = probe.ok,
+                    .url = probe.probeUrl,
+                    .statusCode = probe.statusCode,
+                    .latencyMs = probe.latencyMs,
+                    .@"error" = probe.errorText,
+                },
+                .bridgeCompletion = .{
+                    .requested = bridge_completion.requested,
+                    .ok = bridge_completion.ok,
+                    .provider = bridge_completion.provider,
+                    .endpoint = bridge_completion.endpoint,
+                    .requestUrl = bridge_completion.requestUrl,
+                    .requestTimeoutMs = bridge_completion.requestTimeoutMs,
+                    .statusCode = bridge_completion.statusCode,
+                    .model = bridge_completion.model,
+                    .assistantText = bridge_completion.assistantText,
+                    .latencyMs = bridge_completion.latencyMs,
+                    .@"error" = bridge_completion.errorText,
+                },
+            });
+        }
+
         return protocol.encodeResult(allocator, req.id, .{
             .ok = completion.ok,
             .engine = completion.engine,
@@ -5808,6 +5858,19 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                 .statusCode = probe.statusCode,
                 .latencyMs = probe.latencyMs,
                 .@"error" = probe.errorText,
+            },
+            .bridgeCompletion = .{
+                .requested = false,
+                .ok = false,
+                .provider = completion.provider,
+                .endpoint = probe.endpoint,
+                .requestUrl = "",
+                .requestTimeoutMs = browser_params.request_timeout_ms,
+                .statusCode = 0,
+                .model = completion.model,
+                .assistantText = "",
+                .latencyMs = 0,
+                .@"error" = "",
             },
         });
     }
@@ -5853,6 +5916,12 @@ const BrowserRequestParams = struct {
     auth_mode: []u8,
     endpoint: []u8,
     request_timeout_ms: u32,
+    completion_messages: std.ArrayList(lightpanda.CompletionMessage),
+    temperature: ?f64,
+    max_tokens: ?u32,
+    login_session_id: []u8,
+    api_key: []u8,
+    has_completion_payload: bool,
 
     fn deinit(self: BrowserRequestParams, allocator: std.mem.Allocator) void {
         allocator.free(self.engine);
@@ -5860,6 +5929,14 @@ const BrowserRequestParams = struct {
         allocator.free(self.model);
         allocator.free(self.auth_mode);
         allocator.free(self.endpoint);
+        allocator.free(self.login_session_id);
+        allocator.free(self.api_key);
+        for (self.completion_messages.items) |entry| {
+            allocator.free(entry.role);
+            allocator.free(entry.content);
+        }
+        var messages = self.completion_messages;
+        messages.deinit(allocator);
     }
 };
 
@@ -7442,6 +7519,19 @@ fn parseBrowserRequestFromFrame(
     var auth_mode: []const u8 = "";
     var endpoint: []const u8 = default_endpoint;
     var request_timeout_ms: u32 = default_timeout_ms;
+    var completion_messages: std.ArrayList(lightpanda.CompletionMessage) = .empty;
+    errdefer {
+        for (completion_messages.items) |entry| {
+            allocator.free(entry.role);
+            allocator.free(entry.content);
+        }
+        completion_messages.deinit(allocator);
+    }
+    var prompt_fallback: []const u8 = "";
+    var temperature: ?f64 = null;
+    var max_tokens: ?u32 = null;
+    var login_session_id: []const u8 = "";
+    var api_key: []const u8 = "";
     var engine_explicit = false;
     if (parsed.value == .object) {
         if (parsed.value.object.get("params")) |params_value| {
@@ -7492,11 +7582,84 @@ fn parseBrowserRequestFromFrame(
                 if (params_value.object.get("targetModel")) |value| {
                     if (value == .string and std.mem.trim(u8, model, " \t\r\n").len == 0) model = value.string;
                 }
+                if (params_value.object.get("messages")) |value| {
+                    if (value == .array) {
+                        for (value.array.items) |entry| {
+                            if (entry != .object) continue;
+                            const role_value = entry.object.get("role") orelse continue;
+                            const content_value = entry.object.get("content") orelse continue;
+                            if (role_value != .string or content_value != .string) continue;
+                            const role_trimmed = std.mem.trim(u8, role_value.string, " \t\r\n");
+                            const content_trimmed = std.mem.trim(u8, content_value.string, " \t\r\n");
+                            if (role_trimmed.len == 0 or content_trimmed.len == 0) continue;
+
+                            const role_copy = try allocator.dupe(u8, role_trimmed);
+                            errdefer allocator.free(role_copy);
+                            const content_copy = try allocator.dupe(u8, content_trimmed);
+                            errdefer allocator.free(content_copy);
+                            try completion_messages.append(allocator, .{
+                                .role = role_copy,
+                                .content = content_copy,
+                            });
+                        }
+                    }
+                }
+                if (params_value.object.get("prompt")) |value| {
+                    if (value == .string and prompt_fallback.len == 0) {
+                        const trimmed = std.mem.trim(u8, value.string, " \t\r\n");
+                        if (trimmed.len > 0) prompt_fallback = trimmed;
+                    }
+                }
+                if (params_value.object.get("message")) |value| {
+                    if (value == .string and prompt_fallback.len == 0) {
+                        const trimmed = std.mem.trim(u8, value.string, " \t\r\n");
+                        if (trimmed.len > 0) prompt_fallback = trimmed;
+                    }
+                }
+                if (params_value.object.get("text")) |value| {
+                    if (value == .string and prompt_fallback.len == 0) {
+                        const trimmed = std.mem.trim(u8, value.string, " \t\r\n");
+                        if (trimmed.len > 0) prompt_fallback = trimmed;
+                    }
+                }
+                if (params_value.object.get("temperature")) |value| {
+                    temperature = parseOptionalFloat(value);
+                }
+                if (params_value.object.get("max_tokens")) |value| {
+                    max_tokens = parseOptionalPositiveU32(value);
+                }
+                if (params_value.object.get("maxTokens")) |value| {
+                    if (max_tokens == null) max_tokens = parseOptionalPositiveU32(value);
+                }
                 if (params_value.object.get("authMode")) |value| {
                     if (value == .string) auth_mode = value.string;
                 }
                 if (params_value.object.get("mode")) |value| {
                     if (value == .string and std.mem.trim(u8, auth_mode, " \t\r\n").len == 0) auth_mode = value.string;
+                }
+                if (params_value.object.get("loginSessionId")) |value| {
+                    if (value == .string) {
+                        const trimmed = std.mem.trim(u8, value.string, " \t\r\n");
+                        if (trimmed.len > 0) login_session_id = trimmed;
+                    }
+                }
+                if (params_value.object.get("login_session_id")) |value| {
+                    if (value == .string and login_session_id.len == 0) {
+                        const trimmed = std.mem.trim(u8, value.string, " \t\r\n");
+                        if (trimmed.len > 0) login_session_id = trimmed;
+                    }
+                }
+                if (params_value.object.get("apiKey")) |value| {
+                    if (value == .string) {
+                        const trimmed = std.mem.trim(u8, value.string, " \t\r\n");
+                        if (trimmed.len > 0) api_key = trimmed;
+                    }
+                }
+                if (params_value.object.get("api_key")) |value| {
+                    if (value == .string and api_key.len == 0) {
+                        const trimmed = std.mem.trim(u8, value.string, " \t\r\n");
+                        if (trimmed.len > 0) api_key = trimmed;
+                    }
                 }
                 if (params_value.object.get("requestTimeoutMs")) |value| {
                     request_timeout_ms = parseTimeout(value, request_timeout_ms);
@@ -7508,6 +7671,17 @@ fn parseBrowserRequestFromFrame(
         }
     }
 
+    if (completion_messages.items.len == 0 and prompt_fallback.len > 0) {
+        const role_copy = try allocator.dupe(u8, "user");
+        errdefer allocator.free(role_copy);
+        const content_copy = try allocator.dupe(u8, prompt_fallback);
+        errdefer allocator.free(content_copy);
+        try completion_messages.append(allocator, .{
+            .role = role_copy,
+            .content = content_copy,
+        });
+    }
+
     return .{
         .engine = try allocator.dupe(u8, std.mem.trim(u8, engine, " \t\r\n")),
         .provider = try allocator.dupe(u8, std.mem.trim(u8, provider, " \t\r\n")),
@@ -7515,6 +7689,40 @@ fn parseBrowserRequestFromFrame(
         .auth_mode = try allocator.dupe(u8, std.mem.trim(u8, auth_mode, " \t\r\n")),
         .endpoint = try allocator.dupe(u8, std.mem.trim(u8, endpoint, " \t\r\n")),
         .request_timeout_ms = request_timeout_ms,
+        .completion_messages = completion_messages,
+        .temperature = temperature,
+        .max_tokens = max_tokens,
+        .login_session_id = try allocator.dupe(u8, login_session_id),
+        .api_key = try allocator.dupe(u8, api_key),
+        .has_completion_payload = completion_messages.items.len > 0,
+    };
+}
+
+fn parseOptionalFloat(value: std.json.Value) ?f64 {
+    return switch (value) {
+        .integer => |raw| @as(f64, @floatFromInt(raw)),
+        .float => |raw| raw,
+        .string => |raw| blk: {
+            const trimmed = std.mem.trim(u8, raw, " \t\r\n");
+            if (trimmed.len == 0) break :blk null;
+            break :blk std.fmt.parseFloat(f64, trimmed) catch null;
+        },
+        else => null,
+    };
+}
+
+fn parseOptionalPositiveU32(value: std.json.Value) ?u32 {
+    return switch (value) {
+        .integer => |raw| if (raw > 0 and raw <= std.math.maxInt(u32)) @as(u32, @intCast(raw)) else null,
+        .float => |raw| if (raw > 0 and raw <= @as(f64, @floatFromInt(std.math.maxInt(u32)))) @as(u32, @intFromFloat(raw)) else null,
+        .string => |raw| blk: {
+            const trimmed = std.mem.trim(u8, raw, " \t\r\n");
+            if (trimmed.len == 0) break :blk null;
+            const parsed_int = std.fmt.parseInt(u32, trimmed, 10) catch break :blk null;
+            if (parsed_int == 0) break :blk null;
+            break :blk parsed_int;
+        },
+        else => null,
     };
 }
 
@@ -7564,6 +7772,7 @@ test "dispatch accepts lightpanda provider" {
     try std.testing.expect(std.mem.indexOf(u8, out, "\"engine\":\"lightpanda\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"probe\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"requestTimeoutMs\":15000") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"bridgeCompletion\":{\"requested\":false") != null);
 }
 
 test "dispatch browser.request accepts qwen target provider with guest metadata" {
@@ -7586,6 +7795,18 @@ test "dispatch browser.request supports endpoint override telemetry" {
     try std.testing.expect(std.mem.indexOf(u8, out, "\"endpoint\":\"http://127.0.0.1:1\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"url\":\"http://127.0.0.1:1/json/version\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"requestTimeoutMs\":3210") != null);
+}
+
+test "dispatch browser.request executes completion payload path with failure telemetry when bridge is unavailable" {
+    const allocator = std.testing.allocator;
+    const out = try dispatch(
+        allocator,
+        "{\"id\":\"3d\",\"method\":\"browser.request\",\"params\":{\"provider\":\"chatgpt\",\"endpoint\":\"http://127.0.0.1:1\",\"prompt\":\"hello from zig\"}}",
+    );
+    defer allocator.free(out);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"bridgeCompletion\":{\"requested\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"requestUrl\":\"http://127.0.0.1:1/v1/chat/completions\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"assistantText\":\"\"") != null);
 }
 
 test "dispatch config.get and tools.catalog expose runtime + wasm contracts" {

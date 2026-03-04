@@ -107,6 +107,10 @@ while maintaining parity-first validation and release gating.
     - `browser.request` and `browser.open` now run a real endpoint probe against `<endpoint>/json/version`.
     - Probe telemetry is returned in the RPC payload (`probe.ok/url/statusCode/latencyMs/error`) alongside completion metadata.
     - Request params now accept bridge overrides (`endpoint|bridgeEndpoint|lightpandaEndpoint`, `requestTimeoutMs|timeoutMs`) for parity-safe smoke and deployment checks.
+  - Added real browser completion execution path in dispatcher:
+    - `browser.request` now executes live Lightpanda completion calls when prompt/messages payloads are present (`POST <endpoint>/v1/chat/completions`).
+    - Responses now include `bridgeCompletion` telemetry with request URL, status code, assistant text extraction, latency, and failure reason surfaces.
+    - Completion parser now normalizes aliases and payload keys (`prompt|message|text`, `messages`, `max_tokens|maxTokens`, `loginSessionId|login_session_id`, `apiKey|api_key`) for parity with Go runtime behavior.
   - Dispatcher `channels.status` now includes telegram queue/target/auth telemetry
   - Added auth + reply-loop smokes (`scripts/web-login-smoke-check.ps1`, `scripts/telegram-reply-loop-smoke-check.ps1`)
   - Telegram reply-loop smoke now asserts `/auth link` parity guidance includes active code/session identifiers and completion command hints.
