@@ -8559,6 +8559,14 @@ fn makeTelegramSkippedDeliveryResult(
     };
 }
 
+fn sleepTelegramChunkDelay(delay_ms: u32) void {
+    if (delay_ms == 0) return;
+    const deadline = time_util.nowMs() + @as(i64, @intCast(delay_ms));
+    while (time_util.nowMs() < deadline) {
+        std.atomic.spinLoopHint();
+    }
+}
+
 fn deliverTelegramMessageBatch(
     allocator: std.mem.Allocator,
     token: []const u8,
@@ -8589,6 +8597,7 @@ fn deliverTelegramMessageBatch(
         delivery = try makeTelegramSkippedDeliveryResult(allocator, timeout_ms, "delivery pending");
         var idx: usize = 0;
         while (idx < chunks.len) : (idx += 1) {
+            if (idx > 0 and options.chunk_delay_ms > 0) sleepTelegramChunkDelay(options.chunk_delay_ms);
             const reply_to = if (idx == 0) reply_to_message_id else null;
             var chunk_delivery = try telegram_bot_api.sendMessage(
                 allocator,
