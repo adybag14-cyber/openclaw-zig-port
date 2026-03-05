@@ -134,6 +134,8 @@ pub const supported_methods = [_][]const u8{
     "system.maintenance.status",
     "system.boot.status",
     "system.boot.verify",
+    "system.boot.policy.get",
+    "system.boot.policy.set",
     "system.rollback.plan",
     "system.rollback.run",
     "update.plan",

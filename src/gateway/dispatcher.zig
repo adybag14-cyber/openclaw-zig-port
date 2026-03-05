@@ -438,6 +438,9 @@ const CompatState = struct {
     update_npm_dist_tag: []u8,
     boot_secure_enabled: bool,
     boot_policy: []u8,
+    boot_enforce_update_gate: bool,
+    boot_verification_max_age_ms: i64,
+    boot_required_signer: []u8,
     boot_signer: []u8,
     boot_last_measurement: []u8,
     boot_last_verified: bool,
@@ -523,6 +526,9 @@ const CompatState = struct {
             .update_npm_dist_tag = try allocator.dupe(u8, "edge"),
             .boot_secure_enabled = true,
             .boot_policy = try allocator.dupe(u8, "signature-required"),
+            .boot_enforce_update_gate = false,
+            .boot_verification_max_age_ms = 86_400_000,
+            .boot_required_signer = try allocator.dupe(u8, "sigstore"),
             .boot_signer = try allocator.dupe(u8, "sigstore"),
             .boot_last_measurement = try allocator.dupe(u8, "unverified"),
             .boot_last_verified = false,
@@ -591,6 +597,7 @@ const CompatState = struct {
         self.allocator.free(self.update_npm_package);
         self.allocator.free(self.update_npm_dist_tag);
         self.allocator.free(self.boot_policy);
+        self.allocator.free(self.boot_required_signer);
         self.allocator.free(self.boot_signer);
         self.allocator.free(self.boot_last_measurement);
         self.allocator.free(self.boot_active_slot);
@@ -955,6 +962,67 @@ const CompatState = struct {
     fn latestUpdateJob(self: *const CompatState) ?CompatUpdateJob {
         if (self.update_jobs.items.len == 0) return null;
         return self.update_jobs.items[self.update_jobs.items.len - 1];
+    }
+
+    fn setBootPolicy(
+        self: *CompatState,
+        policy: []const u8,
+        enabled: bool,
+        enforce_update_gate: bool,
+        verification_max_age_ms: i64,
+        required_signer: []const u8,
+    ) !void {
+        const normalized_policy = normalizeBootPolicy(policy, self.boot_policy);
+        const normalized_required_signer = std.mem.trim(u8, required_signer, " \t\r\n");
+        const signer_value = if (normalized_required_signer.len > 0) normalized_required_signer else "sigstore";
+        const max_age_ms = std.math.clamp(verification_max_age_ms, 60_000, 7 * 24 * 60 * 60 * 1000);
+
+        const owned_policy = try self.allocator.dupe(u8, normalized_policy);
+        errdefer self.allocator.free(owned_policy);
+        const owned_signer = try self.allocator.dupe(u8, signer_value);
+        errdefer self.allocator.free(owned_signer);
+
+        self.allocator.free(self.boot_policy);
+        self.boot_policy = owned_policy;
+        self.allocator.free(self.boot_required_signer);
+        self.boot_required_signer = owned_signer;
+        self.boot_secure_enabled = enabled;
+        self.boot_enforce_update_gate = enforce_update_gate;
+        self.boot_verification_max_age_ms = max_age_ms;
+    }
+
+    const BootGateStatus = struct {
+        allowed: bool,
+        reason: []const u8,
+        age_ms: i64,
+        stale: bool,
+    };
+
+    fn bootGateStatus(self: *const CompatState, now_ms: i64) BootGateStatus {
+        if (!self.boot_secure_enabled) {
+            return .{ .allowed = true, .reason = "secure-boot-disabled", .age_ms = -1, .stale = false };
+        }
+        if (!self.boot_enforce_update_gate) {
+            return .{ .allowed = true, .reason = "enforcement-disabled", .age_ms = -1, .stale = false };
+        }
+        if (!self.boot_last_verified) {
+            return .{ .allowed = false, .reason = "not-verified", .age_ms = -1, .stale = false };
+        }
+        if (self.boot_last_verified_at_ms <= 0) {
+            return .{ .allowed = false, .reason = "missing-verification-timestamp", .age_ms = -1, .stale = false };
+        }
+
+        const age = if (now_ms >= self.boot_last_verified_at_ms) now_ms - self.boot_last_verified_at_ms else 0;
+        if (age > self.boot_verification_max_age_ms) {
+            return .{
+                .allowed = false,
+                .reason = "verification-stale",
+                .age_ms = age,
+                .stale = true,
+            };
+        }
+
+        return .{ .allowed = true, .reason = "ok", .age_ms = age, .stale = false };
     }
 
     fn setBootVerification(
@@ -3706,17 +3774,32 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
 
     if (std.ascii.eqlIgnoreCase(req.method, "system.boot.status")) {
         const compat = try getCompatState();
+        const now_ms = time_util.nowMs();
+        const gate = compat.bootGateStatus(now_ms);
         return protocol.encodeResult(allocator, req.id, .{
             .ok = true,
             .secureBoot = .{
                 .enabled = compat.boot_secure_enabled,
                 .policy = compat.boot_policy,
+                .enforceUpdateGate = compat.boot_enforce_update_gate,
+                .verificationMaxAgeMs = compat.boot_verification_max_age_ms,
+                .requiredSigner = compat.boot_required_signer,
                 .signer = compat.boot_signer,
                 .lastMeasurement = compat.boot_last_measurement,
                 .lastVerified = compat.boot_last_verified,
                 .lastVerifiedAtMs = compat.boot_last_verified_at_ms,
+                .verificationAgeMs = gate.age_ms,
+                .verificationStale = gate.stale,
                 .activeSlot = compat.boot_active_slot,
                 .previousSlot = compat.boot_previous_slot,
+            },
+            .updateGate = .{
+                .enforced = compat.boot_secure_enabled and compat.boot_enforce_update_gate,
+                .allowed = gate.allowed,
+                .reason = gate.reason,
+                .ageMs = gate.age_ms,
+                .stale = gate.stale,
+                .checkedAtMs = now_ms,
             },
             .rollback = .{
                 .pending = compat.rollback_pending,
@@ -3739,26 +3822,131 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         const expected_hash = std.mem.trim(u8, firstParamString(params, "expectedHash", ""), " \t\r\n");
         const signer = firstParamString(params, "signer", "sigstore");
         const force = firstParamBool(params, "force", false);
-        const verified = force or expected_hash.len == 0 or std.ascii.eqlIgnoreCase(expected_hash, measurement);
+        const policy = normalizeBootPolicy(compat.boot_policy, "signature-required");
+        const required_signer = std.mem.trim(u8, compat.boot_required_signer, " \t\r\n");
+        const strict_policy = std.ascii.eqlIgnoreCase(policy, "signature-required");
+        const signer_mismatch = strict_policy and required_signer.len > 0 and !std.ascii.eqlIgnoreCase(required_signer, signer);
         const mismatch = expected_hash.len > 0 and !std.ascii.eqlIgnoreCase(expected_hash, measurement);
+        var verified = !mismatch and !signer_mismatch;
+        if (expected_hash.len == 0 and !signer_mismatch) verified = true;
+        if (std.ascii.eqlIgnoreCase(policy, "warn-only") or std.ascii.eqlIgnoreCase(policy, "disabled")) {
+            verified = true;
+        }
+        if (force) verified = true;
 
         try compat.setBootVerification(measurement, signer, verified);
-        const evt = try compat.addEvent(if (verified) "system.boot.verified" else "system.boot.verify.failed");
+        const evt_kind = blk: {
+            if (!verified) break :blk "system.boot.verify.failed";
+            if (mismatch or signer_mismatch) break :blk "system.boot.verified.with-warnings";
+            break :blk "system.boot.verified";
+        };
+        const evt = try compat.addEvent(evt_kind);
+        const gate = compat.bootGateStatus(time_util.nowMs());
         return protocol.encodeResult(allocator, req.id, .{
             .ok = verified,
             .verified = verified,
             .forced = force,
+            .policy = policy,
             .measurement = measurement,
             .expectedHash = expected_hash,
             .mismatch = mismatch,
+            .requiredSigner = required_signer,
+            .signerMismatch = signer_mismatch,
             .secureBoot = .{
                 .enabled = compat.boot_secure_enabled,
                 .policy = compat.boot_policy,
+                .enforceUpdateGate = compat.boot_enforce_update_gate,
+                .verificationMaxAgeMs = compat.boot_verification_max_age_ms,
+                .requiredSigner = compat.boot_required_signer,
                 .signer = compat.boot_signer,
                 .activeSlot = compat.boot_active_slot,
                 .previousSlot = compat.boot_previous_slot,
                 .lastVerified = compat.boot_last_verified,
                 .lastVerifiedAtMs = compat.boot_last_verified_at_ms,
+            },
+            .updateGate = .{
+                .enforced = compat.boot_secure_enabled and compat.boot_enforce_update_gate,
+                .allowed = gate.allowed,
+                .reason = gate.reason,
+                .ageMs = gate.age_ms,
+                .stale = gate.stale,
+            },
+            .event = .{
+                .id = evt.id,
+                .kind = evt.kind,
+                .createdAtMs = evt.created_at_ms,
+            },
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "system.boot.policy.get")) {
+        const compat = try getCompatState();
+        const now_ms = time_util.nowMs();
+        const gate = compat.bootGateStatus(now_ms);
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = true,
+            .secureBoot = .{
+                .enabled = compat.boot_secure_enabled,
+                .policy = compat.boot_policy,
+                .enforceUpdateGate = compat.boot_enforce_update_gate,
+                .verificationMaxAgeMs = compat.boot_verification_max_age_ms,
+                .requiredSigner = compat.boot_required_signer,
+                .lastVerified = compat.boot_last_verified,
+                .lastVerifiedAtMs = compat.boot_last_verified_at_ms,
+                .lastMeasurement = compat.boot_last_measurement,
+                .lastSigner = compat.boot_signer,
+            },
+            .updateGate = .{
+                .enforced = compat.boot_secure_enabled and compat.boot_enforce_update_gate,
+                .allowed = gate.allowed,
+                .reason = gate.reason,
+                .ageMs = gate.age_ms,
+                .stale = gate.stale,
+                .checkedAtMs = now_ms,
+            },
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "system.boot.policy.set")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const compat = try getCompatState();
+
+        const requested_policy = normalizeBootPolicy(firstParamString(params, "policy", compat.boot_policy), compat.boot_policy);
+        var enabled = firstParamBool(params, "enabled", compat.boot_secure_enabled);
+        if (std.ascii.eqlIgnoreCase(requested_policy, "disabled")) enabled = false;
+
+        var enforce_update_gate = firstParamBool(params, "enforceUpdateGate", compat.boot_enforce_update_gate);
+        if (!enabled) enforce_update_gate = false;
+
+        const verification_max_age_ms = firstParamInt(params, "verificationMaxAgeMs", compat.boot_verification_max_age_ms);
+        const required_signer = firstParamString(params, "requiredSigner", compat.boot_required_signer);
+
+        try compat.setBootPolicy(
+            requested_policy,
+            enabled,
+            enforce_update_gate,
+            verification_max_age_ms,
+            required_signer,
+        );
+        const evt = try compat.addEvent("system.boot.policy.updated");
+        const gate = compat.bootGateStatus(time_util.nowMs());
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = true,
+            .secureBoot = .{
+                .enabled = compat.boot_secure_enabled,
+                .policy = compat.boot_policy,
+                .enforceUpdateGate = compat.boot_enforce_update_gate,
+                .verificationMaxAgeMs = compat.boot_verification_max_age_ms,
+                .requiredSigner = compat.boot_required_signer,
+            },
+            .updateGate = .{
+                .enforced = compat.boot_secure_enabled and compat.boot_enforce_update_gate,
+                .allowed = gate.allowed,
+                .reason = gate.reason,
+                .ageMs = gate.age_ms,
+                .stale = gate.stale,
             },
             .event = .{
                 .id = evt.id,
@@ -3916,6 +4104,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         const params = getParamsObjectOrNull(parsed.value);
         const compat = try getCompatState();
         const resolved = resolveUpdateTarget(params, compat.update_channel);
+        const gate = compat.bootGateStatus(time_util.nowMs());
         const update_required = !std.ascii.eqlIgnoreCase(resolved.target_version, compat.update_current_version);
         const channels = [_]struct {
             id: []const u8,
@@ -3962,6 +4151,15 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                 .{ .id = "verify", .title = "Run health and parity validation" },
             },
             .channels = channels,
+            .bootGate = .{
+                .enforced = compat.boot_secure_enabled and compat.boot_enforce_update_gate,
+                .allowed = gate.allowed,
+                .reason = gate.reason,
+                .ageMs = gate.age_ms,
+                .stale = gate.stale,
+                .lastVerifiedAtMs = compat.boot_last_verified_at_ms,
+                .maxAgeMs = compat.boot_verification_max_age_ms,
+            },
             .generatedAtMs = time_util.nowMs(),
         });
     }
@@ -3971,6 +4169,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         defer parsed.deinit();
         const params = getParamsObjectOrNull(parsed.value);
         const compat = try getCompatState();
+        const gate = compat.bootGateStatus(time_util.nowMs());
 
         var limit_i64 = firstParamInt(params, "limit", 20);
         limit_i64 = std.math.clamp(limit_i64, 1, 200);
@@ -4048,6 +4247,15 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                 .targetVersion = latest.?.target_version,
                 .updatedAtMs = latest.?.updated_at_ms,
             } else null,
+            .bootGate = .{
+                .enforced = compat.boot_secure_enabled and compat.boot_enforce_update_gate,
+                .allowed = gate.allowed,
+                .reason = gate.reason,
+                .ageMs = gate.age_ms,
+                .stale = gate.stale,
+                .lastVerifiedAtMs = compat.boot_last_verified_at_ms,
+                .maxAgeMs = compat.boot_verification_max_age_ms,
+            },
             .items = items.items,
         });
     }
@@ -4062,6 +4270,51 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         const force = firstParamBool(params, "force", false);
         const already_current = std.ascii.eqlIgnoreCase(resolved.target_version, compat.update_current_version);
         const job = try compat.createUpdateJob(resolved.target_version, dry_run, force);
+        const gate = compat.bootGateStatus(time_util.nowMs());
+        const requires_boot_gate = compat.boot_secure_enabled and compat.boot_enforce_update_gate and !dry_run and (!already_current or force);
+
+        if (requires_boot_gate and !gate.allowed) {
+            _ = compat.setUpdateJobState(job.id, "failed", "boot-gate", 0);
+            const evt = try compat.addEvent("system.update.blocked.secure-boot");
+            const job_idx = compat.findUpdateJobIndex(job.id) orelse return protocol.encodeError(allocator, req.id, .{
+                .code = -32603,
+                .message = "internal update state error",
+            });
+            const final_job = compat.update_jobs.items[job_idx];
+            return protocol.encodeResult(allocator, req.id, .{
+                .ok = false,
+                .jobId = final_job.id,
+                .status = final_job.status,
+                .phase = final_job.phase,
+                .progress = final_job.progress,
+                .targetVersion = final_job.target_version,
+                .dryRun = final_job.dry_run,
+                .force = final_job.force,
+                .channel = resolved.channel,
+                .npmPackage = compat.update_npm_package,
+                .npmDistTag = resolved.npm_dist_tag,
+                .source = resolved.source,
+                .updateRequired = !already_current or force,
+                .blockedBySecureBoot = true,
+                .note = "secure boot policy blocked update: verify boot state first",
+                .currentVersion = compat.update_current_version,
+                .startedAtMs = final_job.created_at_ms,
+                .updatedAtMs = final_job.updated_at_ms,
+                .bootGate = .{
+                    .enforced = true,
+                    .allowed = gate.allowed,
+                    .reason = gate.reason,
+                    .ageMs = gate.age_ms,
+                    .stale = gate.stale,
+                    .lastVerifiedAtMs = compat.boot_last_verified_at_ms,
+                },
+                .event = .{
+                    .id = evt.id,
+                    .kind = evt.kind,
+                    .createdAtMs = evt.created_at_ms,
+                },
+            });
+        }
 
         var note: []const u8 = "queued";
         if (dry_run) {
@@ -4083,6 +4336,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         });
         const final_job = compat.update_jobs.items[job_idx];
         return protocol.encodeResult(allocator, req.id, .{
+            .ok = true,
             .jobId = final_job.id,
             .status = final_job.status,
             .phase = final_job.phase,
@@ -4099,6 +4353,14 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             .currentVersion = compat.update_current_version,
             .startedAtMs = final_job.created_at_ms,
             .updatedAtMs = final_job.updated_at_ms,
+            .bootGate = .{
+                .enforced = compat.boot_secure_enabled and compat.boot_enforce_update_gate,
+                .allowed = gate.allowed or !requires_boot_gate,
+                .reason = gate.reason,
+                .ageMs = gate.age_ms,
+                .stale = gate.stale,
+                .lastVerifiedAtMs = compat.boot_last_verified_at_ms,
+            },
         });
     }
 
@@ -7272,6 +7534,8 @@ fn shouldEnforceGuard(method: []const u8) bool {
     if (std.ascii.eqlIgnoreCase(method, "system.maintenance.status")) return false;
     if (std.ascii.eqlIgnoreCase(method, "system.boot.status")) return false;
     if (std.ascii.eqlIgnoreCase(method, "system.boot.verify")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "system.boot.policy.get")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "system.boot.policy.set")) return false;
     if (std.ascii.eqlIgnoreCase(method, "system.rollback.plan")) return false;
     if (std.ascii.eqlIgnoreCase(method, "system.rollback.run")) return false;
     if (std.ascii.eqlIgnoreCase(method, "security.audit")) return false;
@@ -8006,6 +8270,21 @@ fn firstParamBool(params: ?std.json.ObjectMap, key: []const u8, fallback: bool) 
         }
     }
     return fallback;
+}
+
+fn normalizeBootPolicy(raw: []const u8, fallback: []const u8) []const u8 {
+    const trimmed = std.mem.trim(u8, raw, " \t\r\n");
+    if (trimmed.len == 0) return fallback;
+    if (std.ascii.eqlIgnoreCase(trimmed, "signature") or std.ascii.eqlIgnoreCase(trimmed, "signature-required")) {
+        return "signature-required";
+    }
+    if (std.ascii.eqlIgnoreCase(trimmed, "warn") or std.ascii.eqlIgnoreCase(trimmed, "warn-only")) {
+        return "warn-only";
+    }
+    if (std.ascii.eqlIgnoreCase(trimmed, "off") or std.ascii.eqlIgnoreCase(trimmed, "disabled")) {
+        return "disabled";
+    }
+    return trimmed;
 }
 
 fn normalizeBootSlot(raw: []const u8, fallback: []const u8) []const u8 {
@@ -10374,11 +10653,21 @@ test "dispatch compat talk tts models and control methods return contracts" {
     defer allocator.free(boot_status);
     try std.testing.expect(std.mem.indexOf(u8, boot_status, "\"secureBoot\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, boot_status, "\"activeSlot\":\"A\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, boot_status, "\"updateGate\"") != null);
 
-    const boot_verify = try dispatch(allocator, "{\"id\":\"compat-boot-verify\",\"method\":\"system.boot.verify\",\"params\":{\"measurement\":\"abc123\",\"expectedHash\":\"abc123\",\"signer\":\"sigstore-ci\"}}");
+    const boot_policy_get = try dispatch(allocator, "{\"id\":\"compat-boot-policy-get\",\"method\":\"system.boot.policy.get\",\"params\":{}}");
+    defer allocator.free(boot_policy_get);
+    try std.testing.expect(std.mem.indexOf(u8, boot_policy_get, "\"secureBoot\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, boot_policy_get, "\"verificationMaxAgeMs\"") != null);
+
+    const boot_verify = try dispatch(allocator, "{\"id\":\"compat-boot-verify\",\"method\":\"system.boot.verify\",\"params\":{\"measurement\":\"abc123\",\"expectedHash\":\"abc123\",\"signer\":\"sigstore\"}}");
     defer allocator.free(boot_verify);
     try std.testing.expect(std.mem.indexOf(u8, boot_verify, "\"verified\":true") != null);
     try std.testing.expect(std.mem.indexOf(u8, boot_verify, "\"measurement\":\"abc123\"") != null);
+
+    const boot_policy_set = try dispatch(allocator, "{\"id\":\"compat-boot-policy-set\",\"method\":\"system.boot.policy.set\",\"params\":{\"policy\":\"signature-required\",\"enforceUpdateGate\":true,\"verificationMaxAgeMs\":300000,\"requiredSigner\":\"sigstore\"}}");
+    defer allocator.free(boot_policy_set);
+    try std.testing.expect(std.mem.indexOf(u8, boot_policy_set, "\"enforceUpdateGate\":true") != null);
 
     const rollback_plan = try dispatch(allocator, "{\"id\":\"compat-rollback-plan\",\"method\":\"system.rollback.plan\",\"params\":{\"targetSlot\":\"B\",\"reason\":\"canary-failure\"}}");
     defer allocator.free(rollback_plan);
@@ -10415,6 +10704,33 @@ test "dispatch compat talk tts models and control methods return contracts" {
     const chat_abort = try dispatch(allocator, "{\"id\":\"compat-chat-abort\",\"method\":\"chat.abort\",\"params\":{\"jobId\":\"job-1\"}}");
     defer allocator.free(chat_abort);
     try std.testing.expect(std.mem.indexOf(u8, chat_abort, "\"aborted\":true") != null);
+}
+
+test "dispatch update.run enforces secure boot gate when configured" {
+    const allocator = std.testing.allocator;
+
+    const policy = try dispatch(allocator, "{\"id\":\"boot-policy-set\",\"method\":\"system.boot.policy.set\",\"params\":{\"policy\":\"signature-required\",\"enforceUpdateGate\":true,\"verificationMaxAgeMs\":300000,\"requiredSigner\":\"sigstore\"}}");
+    defer allocator.free(policy);
+    try std.testing.expect(std.mem.indexOf(u8, policy, "\"enforceUpdateGate\":true") != null);
+
+    const verify_fail = try dispatch(allocator, "{\"id\":\"boot-verify-fail\",\"method\":\"system.boot.verify\",\"params\":{\"measurement\":\"mismatch-a\",\"expectedHash\":\"mismatch-b\",\"signer\":\"sigstore\"}}");
+    defer allocator.free(verify_fail);
+    try std.testing.expect(std.mem.indexOf(u8, verify_fail, "\"verified\":false") != null);
+
+    const blocked_update = try dispatch(allocator, "{\"id\":\"update-blocked\",\"method\":\"update.run\",\"params\":{\"targetVersion\":\"edge-next\"}}");
+    defer allocator.free(blocked_update);
+    try std.testing.expect(std.mem.indexOf(u8, blocked_update, "\"ok\":false") != null);
+    try std.testing.expect(std.mem.indexOf(u8, blocked_update, "\"blockedBySecureBoot\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, blocked_update, "\"status\":\"failed\"") != null);
+
+    const verify_ok = try dispatch(allocator, "{\"id\":\"boot-verify-ok\",\"method\":\"system.boot.verify\",\"params\":{\"measurement\":\"hash-1\",\"expectedHash\":\"hash-1\",\"signer\":\"sigstore\"}}");
+    defer allocator.free(verify_ok);
+    try std.testing.expect(std.mem.indexOf(u8, verify_ok, "\"verified\":true") != null);
+
+    const allowed_update = try dispatch(allocator, "{\"id\":\"update-allowed\",\"method\":\"update.run\",\"params\":{\"targetVersion\":\"edge-next\",\"force\":true}}");
+    defer allocator.free(allowed_update);
+    try std.testing.expect(std.mem.indexOf(u8, allowed_update, "\"ok\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, allowed_update, "\"status\":\"completed\"") != null);
 }
 
 test "dispatch tts.convert validates output format and requireRealAudio constraints" {

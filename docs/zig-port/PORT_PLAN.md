@@ -312,11 +312,12 @@ while maintaining parity-first validation and release gating.
   - Added compat node + exec-approval surfaces with stateful behavior:
     - node: `node.pair.request|list|approve|reject|verify`, `node.rename`, `node.list`, `node.describe`, `node.invoke`, `node.invoke.result`, `node.event`, `node.canvas.capability.refresh`
     - approvals: `exec.approvals.get|set|node.get|node.set`, `exec.approval.request|waitdecision|resolve`
-  - Method surface moved to `164` Zig methods (from `126`) while preserving Lightpanda-only browser policy and green validation gates.
+  - Method surface moved to `166` Zig methods (from `126`) while preserving Lightpanda-only browser policy and green validation gates.
   - Added Zig-OS appliance control-plane methods with stateful behavior:
-    - `system.boot.status`, `system.boot.verify`
+    - `system.boot.status`, `system.boot.verify`, `system.boot.policy.get`, `system.boot.policy.set`
     - `system.rollback.plan`, `system.rollback.run`
-    - secure-boot measurement/signer verification telemetry and slot-aware rollback apply flow (`A/B`) now persist through compat state with update-job/event traces.
+    - secure-boot measurement/signer verification telemetry, policy management (`enforceUpdateGate`, `verificationMaxAgeMs`, `requiredSigner`), and slot-aware rollback apply flow (`A/B`) now persist through compat state with update-job/event traces.
+    - `update.run` now supports secure-boot gate enforcement with explicit blocked-state telemetry (`bootGate`) when verification is stale or missing.
   - WASM lifecycle hardening now includes trust metadata + host-hook capability enforcement:
     - install path supports hash/signature trust policy with deterministic verification errors.
     - execute path rejects host hooks lacking declared capabilities and returns explicit deny telemetry.
@@ -327,7 +328,7 @@ while maintaining parity-first validation and release gating.
     - Original OpenClaw beta baseline (`openclaw/openclaw` latest prerelease): `94/94` covered in Zig.
     - Union baseline coverage: `135/135` covered in Zig.
     - Gateway events baseline coverage: stable `19/19`, beta `19/19`, union `19/19` covered in Zig.
-    - Intentional Zig-only extras retained for edge/runtime depth: `29`.
+    - Intentional Zig-only extras retained for edge/runtime depth: `31`.
   - Hardened smoke scripts to avoid flaky `zig build run` startup timing by prebuilding and launching the binary directly (`zig-out/bin/openclaw-zig.exe`) with explicit readiness and exit diagnostics.
 - Toolchain/runtime notes (local Windows Zig master):
   - Codeberg `master` is currently `0ae1c6b54acf112c7bbcc63a19f7ad8fa9842d2a`.

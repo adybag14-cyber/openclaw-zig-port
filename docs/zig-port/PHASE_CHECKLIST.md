@@ -191,19 +191,20 @@ Phase 6 progress notes:
   - methods: `system.maintenance.plan`, `system.maintenance.run`, `system.maintenance.status`.
   - integrates doctor/security/memory/heartbeat signals into health scoring and actionable remediation workflows.
 - Zig-OS appliance control-plane slice:
-  - methods: `system.boot.status`, `system.boot.verify`, `system.rollback.plan`, `system.rollback.run`.
-  - adds stateful secure-boot verification telemetry (`measurement`, `signer`, verification timestamp) and slot-aware rollback planning/apply lifecycle (`A/B` slot switching with update-job + event traces).
+  - methods: `system.boot.status`, `system.boot.verify`, `system.boot.policy.get`, `system.boot.policy.set`, `system.rollback.plan`, `system.rollback.run`.
+  - adds stateful secure-boot verification telemetry (`measurement`, `signer`, verification timestamp), policy controls (`enforceUpdateGate`, `verificationMaxAgeMs`, `requiredSigner`), and slot-aware rollback planning/apply lifecycle (`A/B` slot switching with update-job + event traces).
+  - `update.run` now honors optional secure-boot gate enforcement and fails closed with structured `bootGate` telemetry when verification is stale/missing.
 - Next-generation update/release slice:
   - added `update.plan` (channel-aware update planning) and `update.status` (job/queue observability).
   - `update.run` now resolves channel aliases (`stable/latest/lts`, `edge/nightly/preview`) and surfaces npm release metadata.
   - added npm client package at `npm/openclaw-zig-rpc-client` and release workflow `.github/workflows/npm-release.yml`.
-- Method surface now at `164` Zig methods; tri-baseline method-set parity is complete:
+- Method surface now at `166` Zig methods; tri-baseline method-set parity is complete:
   - Go latest release baseline: `134/134` covered in Zig.
   - Original OpenClaw latest release baseline: `94/94` covered in Zig.
   - Original OpenClaw latest beta baseline: `94/94` covered in Zig.
   - Union baseline: `135/135` covered in Zig.
   - Gateway events parity: original stable `19/19`, original beta `19/19`, union `19/19` covered in Zig.
-  - Zig-only extras vs union baseline: `29` (`shutdown`, `doctor`, `security.audit`, `exec.run`, `file.read`, `file.write`, `web.login.complete`, `web.login.status`, `edge.wasm.install`, `edge.wasm.execute`, `edge.wasm.remove`, `edge.finetune.job.get`, `edge.finetune.cancel`, `system.maintenance.plan`, `system.maintenance.run`, `system.maintenance.status`, `system.boot.status`, `system.boot.verify`, `system.rollback.plan`, `system.rollback.run`, `update.plan`, `update.status`, `secrets.store.status`, `secrets.store.set`, `secrets.store.get`, `secrets.store.delete`, `secrets.store.list`).
+  - Zig-only extras vs union baseline: `31` (`shutdown`, `doctor`, `security.audit`, `exec.run`, `file.read`, `file.write`, `web.login.complete`, `web.login.status`, `edge.wasm.install`, `edge.wasm.execute`, `edge.wasm.remove`, `edge.finetune.job.get`, `edge.finetune.cancel`, `system.maintenance.plan`, `system.maintenance.run`, `system.maintenance.status`, `system.boot.status`, `system.boot.verify`, `system.boot.policy.get`, `system.boot.policy.set`, `system.rollback.plan`, `system.rollback.run`, `update.plan`, `update.status`, `secrets.store.status`, `secrets.store.set`, `secrets.store.get`, `secrets.store.delete`, `secrets.store.list`).
 
 ## Phase 7 - Validation + Release
 - [x] Run full parity diff against Go baseline
@@ -214,7 +215,7 @@ Phase 6 progress notes:
 ## Latest Validation Snapshot
 - [x] `zig build`
 - [x] `zig build test`
-- [x] `zig build test --summary all` -> `118/118` passing (includes gateway auth/rate-limit hardening tests, runtime file/exec policy hardening tests, config-hash diagnostics coverage, bind-policy token enforcement checks, TTS/completion execution-path coverage, PAL extraction coverage, secure secret-store backend coverage, and bare-metal ABI v2 contract tests)
+- [x] `zig build test --summary all` -> `119/119` passing (includes gateway auth/rate-limit hardening tests, runtime file/exec policy hardening tests, config-hash diagnostics coverage, bind-policy token enforcement checks, secure-boot policy/update-gate enforcement coverage, TTS/completion execution-path coverage, PAL extraction coverage, secure secret-store backend coverage, and bare-metal ABI v2 contract tests)
 - [x] Runtime policy hardening slice shipped:
   - `file.read` / `file.write` optional sandbox enforcement with traversal + symlink denial paths:
     - `OPENCLAW_ZIG_RUNTIME_FILE_SANDBOX_ENABLED`
