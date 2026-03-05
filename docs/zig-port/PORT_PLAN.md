@@ -149,6 +149,15 @@ Full-stack replacement execution reference:
     - regression tests added:
       - `web login persistence roundtrip restores authorized session`
       - `telegram runtime persistence roundtrip restores model auth binding and queue`.
+  - FS1 compat runtime/control-plane recovery slice shipped:
+    - compat runtime state persistence/replay added in dispatcher (`src/gateway/dispatcher.zig`) via `<state_path>/compat-state.json`.
+    - persisted payload includes core control-plane fields used by compat runtime methods:
+      - heartbeat/presence/talk/tts/voicewake profile
+      - update head metadata + bounded event/update histories
+      - config overlay entries + session tombstones
+    - dispatcher now performs safe compat-state snapshot writes after request handling when compat state is active.
+    - regression test added:
+      - `compat state persistence roundtrip restores core runtime settings and histories`.
   - Bare-metal diagnostics depth expansion shipped:
     - new boot diagnostics ABI contract (`BaremetalBootDiagnostics`) with exported pointer + stack snapshot helper (`oc_boot_diag_ptr`, `oc_boot_diag_capture_stack`)
     - new mailbox opcodes wired in runtime: `command_set_boot_phase`, `command_reset_boot_diagnostics`, `command_capture_stack_pointer`

@@ -52,6 +52,12 @@ FS1 runtime/core consolidation slice (active):
   - regression tests added:
     - `web login persistence roundtrip restores authorized session`
     - `telegram runtime persistence roundtrip restores model auth binding and queue`.
+- [x] Compat runtime/control-plane restart replay added (`src/gateway/dispatcher.zig`):
+  - `CompatState` now persists/restores core runtime-control settings and history (`compat-state.json`) under configured `state_path`.
+  - persisted state includes heartbeat/presence/talk/tts/voicewake profile, update head metadata, bounded event/update histories, config overlay entries, and session tombstones.
+  - dispatcher now writes compat persistence snapshots safely after request handling when compatibility state is active.
+  - regression test added:
+    - `compat state persistence roundtrip restores core runtime settings and histories`.
 
 ## Phase 4 - Security + Diagnostics
 - [x] Port core guard flow (prompt/tool policy checks)

@@ -349,6 +349,61 @@ const ConfigOverlayEntry = struct {
     value: []const u8,
 };
 
+const PersistedCompatEvent = struct {
+    id: u64,
+    kind: []const u8,
+    createdAtMs: i64,
+};
+
+const PersistedCompatUpdateJob = struct {
+    id: []const u8,
+    status: []const u8,
+    phase: []const u8,
+    progress: u8,
+    targetVersion: []const u8,
+    dryRun: bool,
+    force: bool,
+    createdAtMs: i64,
+    updatedAtMs: i64,
+};
+
+const PersistedConfigEntry = struct {
+    key: []const u8,
+    value: []const u8,
+};
+
+const PersistedCompatState = struct {
+    heartbeatEnabled: bool = true,
+    heartbeatIntervalMs: u32 = 15_000,
+    lastHeartbeatMs: i64 = 0,
+    presenceMode: []const u8 = "",
+    presenceSource: []const u8 = "",
+    presenceUpdatedMs: i64 = 0,
+    talkMode: []const u8 = "",
+    talkVoice: []const u8 = "",
+    ttsEnabled: bool = true,
+    ttsProvider: []const u8 = "",
+    ttsAutoMode: bool = false,
+    ttsAudioSequence: u64 = 1,
+    voiceInputDevice: []const u8 = "",
+    voiceOutputDevice: []const u8 = "",
+    voicewakeEnabled: bool = false,
+    voicewakePhrase: []const u8 = "",
+    wizardActive: bool = false,
+    wizardStep: u32 = 0,
+    wizardFlow: []const u8 = "",
+    updateCurrentVersion: []const u8 = "",
+    updateChannel: []const u8 = "",
+    updateNpmPackage: []const u8 = "",
+    updateNpmDistTag: []const u8 = "",
+    nextEventId: u64 = 1,
+    nextUpdateId: u64 = 1,
+    events: []PersistedCompatEvent = &.{},
+    updateJobs: []PersistedCompatUpdateJob = &.{},
+    configOverlay: []PersistedConfigEntry = &.{},
+    sessionTombstones: []const []const u8 = &.{},
+};
+
 fn trimFrontOwnedList(comptime T: type, allocator: std.mem.Allocator, list: *std.ArrayList(T), max_len: usize) void {
     if (max_len == 0) {
         for (list.items) |*entry| entry.deinit(allocator);
@@ -456,6 +511,8 @@ const CompatState = struct {
     next_event_id: u64,
     next_update_id: u64,
     session_tombstones: std.StringHashMap(void),
+    state_path: ?[]u8,
+    persistent: bool,
 
     fn init(allocator: std.mem.Allocator) !CompatState {
         const now = time_util.nowMs();
@@ -544,6 +601,8 @@ const CompatState = struct {
             .next_event_id = 1,
             .next_update_id = 1,
             .session_tombstones = std.StringHashMap(void).init(allocator),
+            .state_path = null,
+            .persistent = false,
         };
     }
 
@@ -614,6 +673,240 @@ const CompatState = struct {
         var tombstones = self.session_tombstones.iterator();
         while (tombstones.next()) |entry| self.allocator.free(entry.key_ptr.*);
         self.session_tombstones.deinit();
+        if (self.state_path) |path| self.allocator.free(path);
+        self.state_path = null;
+        self.persistent = false;
+    }
+
+    fn configurePersistence(self: *CompatState, state_root: []const u8) !void {
+        const resolved = try resolveCompatStatePath(self.allocator, state_root);
+        if (self.state_path) |path| self.allocator.free(path);
+        self.state_path = resolved;
+        self.persistent = shouldPersistCompatState(resolved);
+        if (!self.persistent) return;
+        if (self.isPersistedStatePristine()) try self.load();
+    }
+
+    fn isPersistedStatePristine(self: *const CompatState) bool {
+        return self.events.items.len == 0 and
+            self.update_jobs.items.len == 0 and
+            self.config_overlay.count() == 0 and
+            self.session_tombstones.count() == 0 and
+            self.next_event_id == 1 and
+            self.next_update_id == 1;
+    }
+
+    fn clearPersistedCollections(self: *CompatState) void {
+        for (self.events.items) |*event| event.deinit(self.allocator);
+        self.events.clearRetainingCapacity();
+
+        for (self.update_jobs.items) |*job| job.deinit(self.allocator);
+        self.update_jobs.clearRetainingCapacity();
+
+        var overlay_it = self.config_overlay.iterator();
+        while (overlay_it.next()) |entry| {
+            self.allocator.free(entry.key_ptr.*);
+            self.allocator.free(entry.value_ptr.*);
+        }
+        self.config_overlay.clearRetainingCapacity();
+
+        var tombstones = self.session_tombstones.iterator();
+        while (tombstones.next()) |entry| self.allocator.free(entry.key_ptr.*);
+        self.session_tombstones.clearRetainingCapacity();
+    }
+
+    fn setOwnedStringIfPresent(self: *CompatState, target: *[]u8, value: []const u8) !void {
+        const trimmed = std.mem.trim(u8, value, " \t\r\n");
+        if (trimmed.len == 0) return;
+        self.allocator.free(target.*);
+        target.* = try self.allocator.dupe(u8, trimmed);
+    }
+
+    fn load(self: *CompatState) !void {
+        const path = self.state_path orelse return;
+        const io = std.Io.Threaded.global_single_threaded.io();
+        const raw = std.Io.Dir.cwd().readFileAlloc(io, path, self.allocator, .limited(8 * 1024 * 1024)) catch |err| switch (err) {
+            error.FileNotFound => return,
+            else => return err,
+        };
+        defer self.allocator.free(raw);
+
+        var parsed = try std.json.parseFromSlice(PersistedCompatState, self.allocator, raw, .{ .ignore_unknown_fields = true });
+        defer parsed.deinit();
+
+        self.clearPersistedCollections();
+
+        self.heartbeat_enabled = parsed.value.heartbeatEnabled;
+        self.heartbeat_interval_ms = parsed.value.heartbeatIntervalMs;
+        self.last_heartbeat_ms = parsed.value.lastHeartbeatMs;
+        self.presence_updated_ms = parsed.value.presenceUpdatedMs;
+        self.tts_enabled = parsed.value.ttsEnabled;
+        self.tts_auto_mode = parsed.value.ttsAutoMode;
+        self.tts_audio_sequence = if (parsed.value.ttsAudioSequence == 0) 1 else parsed.value.ttsAudioSequence;
+        self.voicewake_enabled = parsed.value.voicewakeEnabled;
+        self.wizard_active = parsed.value.wizardActive;
+        self.wizard_step = parsed.value.wizardStep;
+
+        try self.setOwnedStringIfPresent(&self.presence_mode, parsed.value.presenceMode);
+        try self.setOwnedStringIfPresent(&self.presence_source, parsed.value.presenceSource);
+        try self.setOwnedStringIfPresent(&self.talk_mode, parsed.value.talkMode);
+        try self.setOwnedStringIfPresent(&self.talk_voice, parsed.value.talkVoice);
+        try self.setOwnedStringIfPresent(&self.tts_provider, parsed.value.ttsProvider);
+        try self.setOwnedStringIfPresent(&self.voice_input_device, parsed.value.voiceInputDevice);
+        try self.setOwnedStringIfPresent(&self.voice_output_device, parsed.value.voiceOutputDevice);
+        try self.setOwnedStringIfPresent(&self.voicewake_phrase, parsed.value.voicewakePhrase);
+        try self.setOwnedStringIfPresent(&self.wizard_flow, parsed.value.wizardFlow);
+        try self.setOwnedStringIfPresent(&self.update_current_version, parsed.value.updateCurrentVersion);
+        try self.setOwnedStringIfPresent(&self.update_channel, parsed.value.updateChannel);
+        try self.setOwnedStringIfPresent(&self.update_npm_package, parsed.value.updateNpmPackage);
+        try self.setOwnedStringIfPresent(&self.update_npm_dist_tag, parsed.value.updateNpmDistTag);
+
+        var max_event_id: u64 = 0;
+        for (parsed.value.events) |entry| {
+            const kind = std.mem.trim(u8, entry.kind, " \t\r\n");
+            if (kind.len == 0) continue;
+            try self.events.append(self.allocator, .{
+                .id = entry.id,
+                .kind = try self.allocator.dupe(u8, kind),
+                .created_at_ms = entry.createdAtMs,
+            });
+            if (entry.id > max_event_id) max_event_id = entry.id;
+        }
+        trimFrontOwnedList(CompatEvent, self.allocator, &self.events, 256);
+
+        var max_update_id: u64 = 0;
+        for (parsed.value.updateJobs) |entry| {
+            const id_trimmed = std.mem.trim(u8, entry.id, " \t\r\n");
+            if (id_trimmed.len == 0) continue;
+            try self.update_jobs.append(self.allocator, .{
+                .id = try self.allocator.dupe(u8, id_trimmed),
+                .status = try self.allocator.dupe(u8, if (std.mem.trim(u8, entry.status, " \t\r\n").len > 0) std.mem.trim(u8, entry.status, " \t\r\n") else "queued"),
+                .phase = try self.allocator.dupe(u8, if (std.mem.trim(u8, entry.phase, " \t\r\n").len > 0) std.mem.trim(u8, entry.phase, " \t\r\n") else "queued"),
+                .progress = entry.progress,
+                .target_version = try self.allocator.dupe(u8, if (std.mem.trim(u8, entry.targetVersion, " \t\r\n").len > 0) std.mem.trim(u8, entry.targetVersion, " \t\r\n") else "unknown"),
+                .dry_run = entry.dryRun,
+                .force = entry.force,
+                .created_at_ms = entry.createdAtMs,
+                .updated_at_ms = entry.updatedAtMs,
+            });
+            const parsed_id = parseCompatNumericSuffix(id_trimmed, "update-");
+            if (parsed_id > max_update_id) max_update_id = parsed_id;
+        }
+        trimFrontOwnedList(CompatUpdateJob, self.allocator, &self.update_jobs, 256);
+
+        for (parsed.value.configOverlay) |entry| {
+            try self.mergeConfigEntry(entry.key, entry.value);
+        }
+
+        for (parsed.value.sessionTombstones) |entry| {
+            try self.markSessionDeleted(entry);
+        }
+
+        self.next_event_id = parsed.value.nextEventId;
+        if (self.next_event_id <= max_event_id) self.next_event_id = max_event_id + 1;
+        if (self.next_event_id == 0) self.next_event_id = 1;
+
+        self.next_update_id = parsed.value.nextUpdateId;
+        if (self.next_update_id <= max_update_id) self.next_update_id = max_update_id + 1;
+        if (self.next_update_id == 0) self.next_update_id = 1;
+    }
+
+    fn persist(self: *CompatState) !void {
+        if (!self.persistent) return;
+        const path = self.state_path orelse return;
+        const io = std.Io.Threaded.global_single_threaded.io();
+
+        if (std.fs.path.dirname(path)) |parent| {
+            if (parent.len > 0) try std.Io.Dir.cwd().createDirPath(io, parent);
+        }
+
+        var persisted_events = try self.allocator.alloc(PersistedCompatEvent, self.events.items.len);
+        defer self.allocator.free(persisted_events);
+        for (self.events.items, 0..) |entry, idx| {
+            persisted_events[idx] = .{
+                .id = entry.id,
+                .kind = entry.kind,
+                .createdAtMs = entry.created_at_ms,
+            };
+        }
+
+        var persisted_update_jobs = try self.allocator.alloc(PersistedCompatUpdateJob, self.update_jobs.items.len);
+        defer self.allocator.free(persisted_update_jobs);
+        for (self.update_jobs.items, 0..) |entry, idx| {
+            persisted_update_jobs[idx] = .{
+                .id = entry.id,
+                .status = entry.status,
+                .phase = entry.phase,
+                .progress = entry.progress,
+                .targetVersion = entry.target_version,
+                .dryRun = entry.dry_run,
+                .force = entry.force,
+                .createdAtMs = entry.created_at_ms,
+                .updatedAtMs = entry.updated_at_ms,
+            };
+        }
+
+        var persisted_overlay = try self.allocator.alloc(PersistedConfigEntry, self.config_overlay.count());
+        defer self.allocator.free(persisted_overlay);
+        var overlay_index: usize = 0;
+        var overlay_it = self.config_overlay.iterator();
+        while (overlay_it.next()) |entry| {
+            persisted_overlay[overlay_index] = .{
+                .key = entry.key_ptr.*,
+                .value = entry.value_ptr.*,
+            };
+            overlay_index += 1;
+        }
+
+        var persisted_tombstones = try self.allocator.alloc([]const u8, self.session_tombstones.count());
+        defer self.allocator.free(persisted_tombstones);
+        var tombstone_index: usize = 0;
+        var tombstones = self.session_tombstones.iterator();
+        while (tombstones.next()) |entry| {
+            persisted_tombstones[tombstone_index] = entry.key_ptr.*;
+            tombstone_index += 1;
+        }
+
+        var out: std.Io.Writer.Allocating = .init(self.allocator);
+        defer out.deinit();
+        try std.json.Stringify.value(.{
+            .heartbeatEnabled = self.heartbeat_enabled,
+            .heartbeatIntervalMs = self.heartbeat_interval_ms,
+            .lastHeartbeatMs = self.last_heartbeat_ms,
+            .presenceMode = self.presence_mode,
+            .presenceSource = self.presence_source,
+            .presenceUpdatedMs = self.presence_updated_ms,
+            .talkMode = self.talk_mode,
+            .talkVoice = self.talk_voice,
+            .ttsEnabled = self.tts_enabled,
+            .ttsProvider = self.tts_provider,
+            .ttsAutoMode = self.tts_auto_mode,
+            .ttsAudioSequence = self.tts_audio_sequence,
+            .voiceInputDevice = self.voice_input_device,
+            .voiceOutputDevice = self.voice_output_device,
+            .voicewakeEnabled = self.voicewake_enabled,
+            .voicewakePhrase = self.voicewake_phrase,
+            .wizardActive = self.wizard_active,
+            .wizardStep = self.wizard_step,
+            .wizardFlow = self.wizard_flow,
+            .updateCurrentVersion = self.update_current_version,
+            .updateChannel = self.update_channel,
+            .updateNpmPackage = self.update_npm_package,
+            .updateNpmDistTag = self.update_npm_dist_tag,
+            .nextEventId = self.next_event_id,
+            .nextUpdateId = self.next_update_id,
+            .events = persisted_events,
+            .updateJobs = persisted_update_jobs,
+            .configOverlay = persisted_overlay,
+            .sessionTombstones = persisted_tombstones,
+        }, .{}, &out.writer);
+        const payload = try out.toOwnedSlice();
+        defer self.allocator.free(payload);
+
+        try std.Io.Dir.cwd().writeFile(io, .{
+            .sub_path = path,
+            .data = payload,
+        });
     }
 
     fn heartbeatSnapshot(self: *const CompatState) HeartbeatSnapshot {
@@ -1669,6 +1962,31 @@ const CompatState = struct {
     }
 };
 
+fn parseCompatNumericSuffix(value: []const u8, prefix: []const u8) u64 {
+    if (!std.mem.startsWith(u8, value, prefix)) return 0;
+    const suffix = std.mem.trim(u8, value[prefix.len..], " \t\r\n");
+    if (suffix.len == 0) return 0;
+    return std.fmt.parseInt(u64, suffix, 10) catch 0;
+}
+
+fn resolveCompatStatePath(allocator: std.mem.Allocator, state_root: []const u8) ![]u8 {
+    const trimmed = std.mem.trim(u8, state_root, " \t\r\n");
+    if (trimmed.len == 0) return allocator.dupe(u8, "memory://compat-state");
+    if (isCompatMemoryScheme(trimmed)) return allocator.dupe(u8, trimmed);
+    if (std.mem.endsWith(u8, trimmed, ".json")) return allocator.dupe(u8, trimmed);
+    return std.fs.path.join(allocator, &.{ trimmed, "compat-state.json" });
+}
+
+fn shouldPersistCompatState(path: []const u8) bool {
+    return !isCompatMemoryScheme(path);
+}
+
+fn isCompatMemoryScheme(path: []const u8) bool {
+    const prefix = "memory://";
+    if (path.len < prefix.len) return false;
+    return std.ascii.eqlIgnoreCase(path[0..prefix.len], prefix);
+}
+
 const EnclaveProof = struct {
     statement: []u8,
     proof: []u8,
@@ -1949,6 +2267,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         });
     };
     defer req.deinit(allocator);
+    defer persistCompatStateSafe();
 
     if (!registry.supports(req.method)) {
         return protocol.encodeError(allocator, req.id, .{
@@ -7733,8 +8052,22 @@ fn getEdgeState() *EdgeState {
 fn getCompatState() !*CompatState {
     if (compat_state_instance == null) {
         compat_state_instance = try CompatState.init(std.heap.page_allocator);
+        if (!builtin.is_test) {
+            compat_state_instance.?.configurePersistence(currentConfig().state_path) catch |err| {
+                std.log.warn("compat state persistence init failed: {s}", .{@errorName(err)});
+            };
+        }
     }
     return &compat_state_instance.?;
+}
+
+fn persistCompatStateSafe() void {
+    if (compat_state_instance) |*compat| {
+        if (!compat.persistent) return;
+        compat.persist() catch |err| {
+            std.log.warn("compat state persistence write failed: {s}", .{@errorName(err)});
+        };
+    }
 }
 
 fn getRuntimeIo() std.Io {
@@ -11912,6 +12245,61 @@ test "dispatch advanced edge methods return parity contracts" {
     const collaboration = try dispatch(allocator, "{\"id\":\"edge-collab\",\"method\":\"edge.collaboration.plan\",\"params\":{\"team\":\"platform\",\"goal\":\"shipping\"}}");
     defer allocator.free(collaboration);
     try std.testing.expect(std.mem.indexOf(u8, collaboration, "\"checkpoints\"") != null);
+}
+
+test "compat state persistence roundtrip restores core runtime settings and histories" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const io = std.Io.Threaded.global_single_threaded.io();
+    const root = try tmp.dir.realPathFileAlloc(io, ".", allocator);
+    defer allocator.free(root);
+
+    {
+        var state = try CompatState.init(allocator);
+        defer state.deinit();
+        try state.configurePersistence(root);
+
+        _ = state.touchHeartbeat(true, 45_000);
+        try state.setPresence("busy", "telegram");
+        try state.setTalkConfig("active", "nova");
+        state.tts_enabled = false;
+        state.tts_auto_mode = true;
+        try state.setTTSProvider("kittentts");
+        try state.setVoiceDevices("mic-usb", "speaker-usb");
+        try state.setVoicewake(true, "hey zig");
+        try state.mergeConfigEntry("talk.apiKey", "sk-zig-local");
+        try state.markSessionDeleted("session-z1");
+        _ = try state.addEvent("runtime-replay");
+        _ = try state.createUpdateJob("v0.2.1-zig-edge", true, false);
+        try state.persist();
+    }
+
+    {
+        var restored = try CompatState.init(allocator);
+        defer restored.deinit();
+        try restored.configurePersistence(root);
+
+        try std.testing.expect(restored.heartbeat_enabled);
+        try std.testing.expectEqual(@as(u32, 45_000), restored.heartbeat_interval_ms);
+        try std.testing.expect(std.mem.eql(u8, restored.presence_mode, "busy"));
+        try std.testing.expect(std.mem.eql(u8, restored.presence_source, "telegram"));
+        try std.testing.expect(std.mem.eql(u8, restored.talk_mode, "active"));
+        try std.testing.expect(std.mem.eql(u8, restored.talk_voice, "nova"));
+        try std.testing.expect(!restored.tts_enabled);
+        try std.testing.expect(restored.tts_auto_mode);
+        try std.testing.expect(std.mem.eql(u8, restored.tts_provider, "kittentts"));
+        try std.testing.expect(std.mem.eql(u8, restored.voice_input_device, "mic-usb"));
+        try std.testing.expect(std.mem.eql(u8, restored.voice_output_device, "speaker-usb"));
+        try std.testing.expect(restored.voicewake_enabled);
+        try std.testing.expect(std.mem.eql(u8, restored.voicewake_phrase, "hey zig"));
+        try std.testing.expectEqual(@as(usize, 1), restored.events.items.len);
+        try std.testing.expect(std.mem.eql(u8, restored.events.items[0].kind, "runtime-replay"));
+        try std.testing.expectEqual(@as(usize, 1), restored.update_jobs.items.len);
+        try std.testing.expect(std.mem.eql(u8, restored.update_jobs.items[0].target_version, "v0.2.1-zig-edge"));
+        try std.testing.expectEqual(@as(usize, 1), restored.config_overlay.count());
+        try std.testing.expect(restored.session_tombstones.contains("session-z1"));
+    }
 }
 
 test "compat state bounded history keeps newest events" {
