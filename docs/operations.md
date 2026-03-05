@@ -2,9 +2,9 @@
 
 ## Current Snapshot
 
-- Latest edge release: `v0.2.0-zig-edge.14`
-- Latest local test gate: `zig build test --summary all` -> `92/92` passing
-- Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=153`, `ZIG_EVENTS_COUNT=19`
+- Latest published edge release: `v0.2.0-zig-edge.24`
+- Latest local test gate: `zig build test --summary all` -> `124/124` passing
+- Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=169`, `ZIG_EVENTS_COUNT=19`
 
 ## Local Validation Matrix
 

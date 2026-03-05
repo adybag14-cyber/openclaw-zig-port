@@ -4,15 +4,15 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 
 ## Current Status
 
-- RPC method surface in Zig: `160`
+- RPC method surface in Zig: `169`
 - Latest parity gate (tri-baseline):
   - Go baseline (`v2.14.0-go`): `134/134` covered
   - Original OpenClaw baseline (`v2026.3.2`): `94/94` covered
   - Original OpenClaw beta baseline (`v2026.3.2-beta.1`): `94/94` covered
   - Union baseline: `135/135` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
-- Latest local validation: `zig build test --summary all` -> `118/118` passing
-- Latest edge release tag: `v0.2.0-zig-edge.19`
+- Latest local validation: `zig build test --summary all` -> `124/124` passing
+- Latest published edge release tag: `v0.2.0-zig-edge.24`
 - Dual runtime profiles available:
   - OS-hosted profile: `openclaw-zig` (`--serve`, doctor, security audit, full RPC stack)
 - Bare-metal profile: `openclaw-zig-baremetal.elf` (`zig build baremetal`, freestanding runtime loop + Multiboot2 header)
@@ -398,17 +398,17 @@ Validate python package publishability:
 Manual release-preview trigger:
 
 ```powershell
-gh workflow run release-preview.yml -R adybag14-cyber/openclaw-zig-port -f version=v0.1.1-zig-preview.2
+gh workflow run release-preview.yml -R adybag14-cyber/openclaw-zig-port -f version=<release-tag>
 ```
 
 Manual npm release trigger:
 
 ```powershell
-gh workflow run npm-release.yml -R adybag14-cyber/openclaw-zig-port -f version=v0.2.0-zig-edge -f dist_tag=edge
+gh workflow run npm-release.yml -R adybag14-cyber/openclaw-zig-port -f version=<release-tag> -f dist_tag=edge
 ```
 
 Manual python release trigger:
 
 ```powershell
-gh workflow run python-release.yml -R adybag14-cyber/openclaw-zig-port -f version=0.2.0.dev14 -f release_tag=v0.2.0-zig-edge.14
+gh workflow run python-release.yml -R adybag14-cyber/openclaw-zig-port -f version=<pep440-version> -f release_tag=<release-tag>
 ```
