@@ -31,6 +31,7 @@ Recommended sequence:
 ### `zig-ci.yml`
 
 - Zig master build/test gates
+- Zig master freshness snapshot (`scripts/zig-codeberg-master-check.ps1`, Codeberg primary + GitHub mirror fallback)
 - parity gate enforcement (Go latest + original stable latest + original beta latest, including gateway event parity)
 - docs status drift gate (`scripts/docs-status-check.ps1`)
 - runtime + gateway-auth + websocket smoke checks

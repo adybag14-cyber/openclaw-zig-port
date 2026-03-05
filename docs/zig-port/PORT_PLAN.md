@@ -429,6 +429,10 @@ while maintaining parity-first validation and release gating.
     - first CI attempt surfaced environment-specific exit propagation from `gh` CLI release lookup (`zig-ci` run `22698812368`).
     - fix commit `bcc0e68` switched release-tag lookup to GitHub REST API for deterministic CI behavior.
     - verification runs after fix: `zig-ci` `22698898719` success and `docs-pages` `22698975595` success.
+  - Zig freshness evidence slice (2026-03-05):
+    - `scripts/zig-codeberg-master-check.ps1` made cross-platform and CI-safe by resolving zig executable via `-ZigExePath`, `OPENCLAW_ZIG_EXE`, repo-local Windows default, then PATH fallback.
+    - script now supports JSON evidence output (`-OutputJsonPath`) while retaining Codeberg primary + GitHub mirror fallback hash resolution.
+    - `zig-ci` now runs freshness snapshot as non-blocking observability step and publishes `zig-master-freshness.json` artifact for build provenance context.
   - bare-metal wake queue reason-selective drain slice shipped:
     - new opcode: `command_wake_queue_pop_reason` for selective queue draining by wake reason (`timer`, `interrupt`, `manual`) with bounded count semantics (`count=0` -> pop one).
     - new export: `oc_wake_queue_reason_count(reason)` for reason-specific telemetry without mutating queue state.

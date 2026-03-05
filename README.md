@@ -318,6 +318,7 @@ Check Zig Codeberg freshness against local toolchain:
 
 ```powershell
 ./scripts/zig-codeberg-master-check.ps1
+./scripts/zig-codeberg-master-check.ps1 -OutputJsonPath .\release\zig-master-freshness.json
 ```
 
 Run parity gate and emit evidence artifacts:
@@ -357,6 +358,7 @@ Validate python package publishability:
 `zig-ci` workflow (`.github/workflows/zig-ci.yml`):
 
 - Zig master build/test gates
+- Zig master freshness snapshot (`scripts/zig-codeberg-master-check.ps1`) with Codeberg->GitHub mirror fallback
 - tri-baseline method/event parity enforcement (Go latest + original stable latest + original beta latest)
 - docs status drift gate (`scripts/docs-status-check.ps1`) against parity snapshot + latest release tag
 - freestanding bare-metal artifact smoke gate

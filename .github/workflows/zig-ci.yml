@@ -53,6 +53,11 @@ jobs:
       - name: Zig version
         run: zig version
 
+      - name: Zig master freshness snapshot (Codeberg with mirror fallback)
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/zig-codeberg-master-check.ps1 -OutputJsonPath zig-master-freshness.json
+
       - name: Validate npm package (dry-run)
         working-directory: npm/openclaw-zig-rpc-client
         run: npm pack --dry-run
@@ -89,6 +94,14 @@ jobs:
           path: |
             parity-go-zig.json
             parity-go-zig.md
+
+      - name: Upload Zig freshness snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zig-master-freshness
+          path: zig-master-freshness.json
+          if-no-files-found: ignore
 
       - name: Build release (x86_64-linux)
         run: zig build -Dtarget=x86_64-linux -Doptimize=ReleaseFast --summary all
