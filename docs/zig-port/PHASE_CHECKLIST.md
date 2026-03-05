@@ -156,6 +156,8 @@ Phase 5 enhancement notes:
   - regression coverage extended to assert `count/items` and Telegram item presence.
 - Send channel alias compatibility slice:
   - `send` now normalizes channel aliases for compatibility with Go channel routing (`web|webchat`, `cli|console|terminal`, `telegram|tg|tele`).
+  - `send|chat.send|sessions.send` now inherit the last known session channel when `params.channel` is omitted; unknown/new sessions default to `webchat`.
+  - `connect` now records session/channel state into memory history so omitted-channel sends resolve consistently from the first message.
   - `poll` remains Telegram-only by design and now rejects non-Telegram aliases deterministically.
   - regression coverage added for alias acceptance and unsupported-channel rejection paths:
     - `channels.telegram_runtime.test.telegram runtime send accepts webchat and cli channel aliases`

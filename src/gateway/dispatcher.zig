@@ -2311,6 +2311,8 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         const role = firstParamString(params, "role", "client");
         const channel = firstParamString(params, "channel", "webchat");
         const session_id = firstParamString(params, "sessionId", "session-zig-local");
+        const memory = try getMemoryStore();
+        try memory.append(session_id, channel, "connect", "system", "session connected");
         return protocol.encodeResult(allocator, req.id, .{
             .sessionId = session_id,
             .role = role,
@@ -6005,13 +6007,16 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
 
     if (std.ascii.eqlIgnoreCase(req.method, "send") or std.ascii.eqlIgnoreCase(req.method, "chat.send") or std.ascii.eqlIgnoreCase(req.method, "sessions.send")) {
         const runtime = try getTelegramRuntime();
-        var send_result = runtime.sendFromFrame(allocator, frame_json) catch |err| {
+        const resolved_send_frame = try normalizeSendFrameChannelForDispatch(allocator, frame_json);
+        defer allocator.free(resolved_send_frame);
+
+        var send_result = runtime.sendFromFrame(allocator, resolved_send_frame) catch |err| {
             return encodeTelegramRuntimeError(allocator, req.id, err);
         };
         defer send_result.deinit(allocator);
 
         const memory = try getMemoryStore();
-        const send_mem = parseSendMemoryFromFrame(allocator, frame_json) catch null;
+        const send_mem = parseSendMemoryFromFrame(allocator, resolved_send_frame) catch null;
         if (send_mem) |user_entry| {
             defer user_entry.deinit(allocator);
             try memory.append(user_entry.session_id, user_entry.channel, "send", "user", user_entry.message);
@@ -8895,6 +8900,36 @@ fn parseHistoryParams(allocator: std.mem.Allocator, frame_json: []const u8) !His
     };
 }
 
+fn normalizeSendFrameChannelForDispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+    defer parsed.deinit();
+    if (parsed.value != .object) return allocator.dupe(u8, frame_json);
+
+    const params_value = parsed.value.object.getPtr("params") orelse return allocator.dupe(u8, frame_json);
+    if (params_value.* != .object) return allocator.dupe(u8, frame_json);
+    const params = &params_value.object;
+
+    var explicit_channel: []const u8 = "";
+    if (params.get("channel")) |value| {
+        if (value == .string) explicit_channel = std.mem.trim(u8, value.string, " \t\r\n");
+    }
+    if (explicit_channel.len > 0) return allocator.dupe(u8, frame_json);
+
+    const session_id = resolveSessionId(params.*);
+    var resolved_channel: []const u8 = "";
+    if (session_id.len > 0) {
+        const memory = try getMemoryStore();
+        const compat = try getCompatState();
+        if (try findSessionSummary(allocator, memory, compat, session_id)) |summary| {
+            resolved_channel = std.mem.trim(u8, summary.channel, " \t\r\n");
+        }
+    }
+    if (resolved_channel.len == 0) resolved_channel = "webchat";
+
+    try params.put("channel", .{ .string = resolved_channel });
+    return stringifyJsonValue(allocator, parsed.value);
+}
+
 fn parseSendMemoryFromFrame(allocator: std.mem.Allocator, frame_json: []const u8) !?SendMemoryEntry {
     var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
     defer parsed.deinit();
@@ -8913,7 +8948,7 @@ fn parseSendMemoryFromFrame(allocator: std.mem.Allocator, frame_json: []const u8
             session_id = std.mem.trim(u8, value.string, " \t\r\n");
         }
     }
-    var channel: []const u8 = "telegram";
+    var channel: []const u8 = "webchat";
     if (params.object.get("channel")) |value| {
         if (value == .string and std.mem.trim(u8, value.string, " \t\r\n").len > 0) {
             channel = std.mem.trim(u8, value.string, " \t\r\n");
@@ -11423,6 +11458,20 @@ test "dispatch browser.open and send aliases follow existing runtime paths" {
     defer allocator.free(cli_alias_send);
     try std.testing.expect(std.mem.indexOf(u8, cli_alias_send, "\"accepted\":true") != null);
     try std.testing.expect(std.mem.indexOf(u8, cli_alias_send, "\"channel\":\"cli\"") != null);
+
+    const connect_cli = try dispatch(allocator, "{\"id\":\"connect-cli\",\"method\":\"connect\",\"params\":{\"sessionId\":\"alias-cli-fallback\",\"channel\":\"cli\"}}");
+    defer allocator.free(connect_cli);
+    try std.testing.expect(std.mem.indexOf(u8, connect_cli, "\"sessionId\":\"alias-cli-fallback\"") != null);
+
+    const send_without_channel = try dispatch(allocator, "{\"id\":\"send-no-channel\",\"method\":\"send\",\"params\":{\"to\":\"alias-cli\",\"sessionId\":\"alias-cli-fallback\",\"message\":\"hello by fallback\"}}");
+    defer allocator.free(send_without_channel);
+    try std.testing.expect(std.mem.indexOf(u8, send_without_channel, "\"accepted\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, send_without_channel, "\"channel\":\"cli\"") != null);
+
+    const send_without_channel_unknown_session = try dispatch(allocator, "{\"id\":\"send-no-channel-new\",\"method\":\"send\",\"params\":{\"sessionId\":\"alias-new-session\",\"message\":\"hello default channel\"}}");
+    defer allocator.free(send_without_channel_unknown_session);
+    try std.testing.expect(std.mem.indexOf(u8, send_without_channel_unknown_session, "\"accepted\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, send_without_channel_unknown_session, "\"channel\":\"webchat\"") != null);
 }
 
 test "dispatch file.write and file.read lifecycle updates status counters" {

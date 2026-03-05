@@ -52,6 +52,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
     - `send` responses now expose `replySource` (`bridge_completion`, `runtime_echo`, `auth_required`, `command`) for deterministic reply provenance
   - send channel-alias parity:
     - `send` now accepts Go-compatible channel aliases (`web`, `console`, `terminal`, `tg`, `tele`) and normalizes to canonical channels (`webchat`, `cli`, `telegram`)
+    - omitted-channel `send|chat.send|sessions.send` now inherit the session channel (defaulting to `webchat` when no session channel is known)
     - `poll` remains Telegram-only and returns deterministic unsupported-channel errors for non-Telegram polling requests
   - runtime policy hardening:
     - configurable filesystem sandbox for `file.read` / `file.write` (`OPENCLAW_ZIG_RUNTIME_FILE_SANDBOX_ENABLED`, `OPENCLAW_ZIG_RUNTIME_FILE_ALLOWED_ROOTS`)
