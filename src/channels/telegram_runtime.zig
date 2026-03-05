@@ -235,13 +235,21 @@ pub const TelegramRuntime = struct {
         };
     }
 
+    fn normalizeSendChannelAlias(channel: []const u8) ?[]const u8 {
+        const trimmed = std.mem.trim(u8, channel, " \t\r\n");
+        if (trimmed.len == 0) return "telegram";
+        if (std.ascii.eqlIgnoreCase(trimmed, "telegram") or std.ascii.eqlIgnoreCase(trimmed, "tg") or std.ascii.eqlIgnoreCase(trimmed, "tele")) return "telegram";
+        if (std.ascii.eqlIgnoreCase(trimmed, "webchat") or std.ascii.eqlIgnoreCase(trimmed, "web")) return "webchat";
+        if (std.ascii.eqlIgnoreCase(trimmed, "cli") or std.ascii.eqlIgnoreCase(trimmed, "console") or std.ascii.eqlIgnoreCase(trimmed, "terminal")) return "cli";
+        return null;
+    }
+
     pub fn sendFromFrame(self: *TelegramRuntime, allocator: std.mem.Allocator, frame_json: []const u8) !SendResult {
         var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
         defer parsed.deinit();
         const params = try getParamsObject(parsed.value);
 
-        const channel = getOptionalString(params, "channel", "telegram");
-        if (!std.ascii.eqlIgnoreCase(channel, "telegram")) return error.UnsupportedChannel;
+        const channel = normalizeSendChannelAlias(getOptionalString(params, "channel", "telegram")) orelse return error.UnsupportedChannel;
         const target = getOptionalString(params, "to", "default");
         const session_id = getOptionalString(params, "sessionId", "tg-chat-default");
         const message = try getRequiredString(params, "message", "text", error.MissingMessage);
@@ -256,8 +264,8 @@ pub const TelegramRuntime = struct {
         var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
         defer parsed.deinit();
         const params = try getParamsObject(parsed.value);
-        const channel = getOptionalString(params, "channel", "telegram");
-        if (!std.ascii.eqlIgnoreCase(channel, "telegram")) return error.UnsupportedChannel;
+        const channel = normalizeSendChannelAlias(getOptionalString(params, "channel", "telegram")) orelse return error.UnsupportedChannel;
+        if (!std.mem.eql(u8, channel, "telegram")) return error.UnsupportedChannel;
         const limit = std.math.clamp(getOptionalUsize(params, "limit", 20), 1, 100);
 
         const count = @min(limit, self.queue.items.len);
@@ -2100,6 +2108,42 @@ test "telegram runtime unauthorized chat marks auth_required reply source" {
     defer chat.deinit(allocator);
     try std.testing.expect(std.mem.eql(u8, chat.replySource, "auth_required"));
     try std.testing.expect(std.mem.indexOf(u8, chat.reply, "Auth required") != null);
+}
+
+test "telegram runtime send accepts webchat and cli channel aliases" {
+    var login = web_login.LoginManager.init(std.testing.allocator, 5 * 60 * 1000);
+    defer login.deinit();
+    var runtime = TelegramRuntime.init(std.testing.allocator, &login);
+    defer runtime.deinit();
+
+    const allocator = std.testing.allocator;
+    var webchat = try runtime.sendFromFrame(allocator, "{\"id\":\"send-web\",\"method\":\"send\",\"params\":{\"channel\":\"web\",\"to\":\"room-web\",\"sessionId\":\"sess-web\",\"message\":\"hello web alias\"}}");
+    defer webchat.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, webchat.channel, "webchat"));
+    try std.testing.expect(std.mem.eql(u8, webchat.to, "room-web"));
+    try std.testing.expect(std.mem.eql(u8, webchat.sessionId, "sess-web"));
+
+    var cli = try runtime.sendFromFrame(allocator, "{\"id\":\"send-cli\",\"method\":\"send\",\"params\":{\"channel\":\"console\",\"to\":\"room-cli\",\"sessionId\":\"sess-cli\",\"message\":\"hello cli alias\"}}");
+    defer cli.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, cli.channel, "cli"));
+    try std.testing.expect(std.mem.eql(u8, cli.to, "room-cli"));
+    try std.testing.expect(std.mem.eql(u8, cli.sessionId, "sess-cli"));
+}
+
+test "telegram runtime send and poll reject unsupported channels" {
+    var login = web_login.LoginManager.init(std.testing.allocator, 5 * 60 * 1000);
+    defer login.deinit();
+    var runtime = TelegramRuntime.init(std.testing.allocator, &login);
+    defer runtime.deinit();
+
+    try std.testing.expectError(
+        error.UnsupportedChannel,
+        runtime.sendFromFrame(std.testing.allocator, "{\"id\":\"send-unsupported\",\"method\":\"send\",\"params\":{\"channel\":\"matrix\",\"message\":\"hello\"}}"),
+    );
+    try std.testing.expectError(
+        error.UnsupportedChannel,
+        runtime.pollFromFrame(std.testing.allocator, "{\"id\":\"poll-cli\",\"method\":\"poll\",\"params\":{\"channel\":\"cli\",\"limit\":10}}"),
+    );
 }
 
 test "telegram runtime poll compacts queue front in one pass and keeps ordering" {

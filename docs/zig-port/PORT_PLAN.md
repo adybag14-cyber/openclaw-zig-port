@@ -56,7 +56,7 @@ Full-stack replacement execution reference:
 
 ## Current Progress Snapshot
 
-- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `137/137`.
+- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `139/139`.
 - Full-stack replacement kickoff (2026-03-05):
   - master tracking issue refreshed with FS0..FS7 execution gates.
   - FS0 execution issue opened (`#2`) and linked from master issue.
@@ -308,6 +308,10 @@ Full-stack replacement execution reference:
     - `channels.status` now emits Go-style channel driver status envelope (`count`, `items[]`) while preserving existing Zig summary fields.
     - compatibility items currently include `webchat`, `cli`, and `telegram` with `connected/running/defaultTarget/aliases/lastError`.
     - Telegram connectivity is now inferred from resolved bot-token availability for deterministic status behavior.
+  - Added send-channel alias compatibility parity:
+    - `send` now accepts and normalizes channel aliases to Go-compatible canonical names (`webchat`, `cli`, `telegram`).
+    - normalized aliases include `web`, `console`, `terminal`, `tg`, and `tele`.
+    - `poll` remains Telegram-only, preserving existing queue semantics while returning deterministic unsupported-channel errors for non-Telegram polling attempts.
   - Dispatcher `channels.status` now includes telegram queue/target/auth telemetry
   - Added auth + reply-loop smokes (`scripts/web-login-smoke-check.ps1`, `scripts/telegram-reply-loop-smoke-check.ps1`)
   - Telegram reply-loop smoke now asserts `/auth link` parity guidance includes active code/session identifiers and completion command hints.

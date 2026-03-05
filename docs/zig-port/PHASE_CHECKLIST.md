@@ -1,7 +1,7 @@
 # Phase Checklist
 
 Release lock: no release tag is allowed until all phases are complete and parity is measured at 100%.
-Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `137/137`.
+Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `139/139`.
 
 ## Full-Stack Replacement Track (FS0..FS7)
 - [x] FS0 - Scope lock + baseline freeze (`docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`, issue `#2`)
@@ -154,6 +154,13 @@ Phase 5 enhancement notes:
   - `channels.status` now also emits Go-style channel registry status fields (`count`, `items[]`) while preserving the Zig summary envelope (`channels`, `webLogin`, `status`).
   - status items now include canonical channel entries (`webchat`, `cli`, `telegram`) with compatibility fields (`connected`, `running`, `defaultTarget`, `aliases`, `lastError`).
   - regression coverage extended to assert `count/items` and Telegram item presence.
+- Send channel alias compatibility slice:
+  - `send` now normalizes channel aliases for compatibility with Go channel routing (`web|webchat`, `cli|console|terminal`, `telegram|tg|tele`).
+  - `poll` remains Telegram-only by design and now rejects non-Telegram aliases deterministically.
+  - regression coverage added for alias acceptance and unsupported-channel rejection paths:
+    - `channels.telegram_runtime.test.telegram runtime send accepts webchat and cli channel aliases`
+    - `channels.telegram_runtime.test.telegram runtime send and poll reject unsupported channels`
+    - `gateway.dispatcher.test.dispatch browser.open and send aliases follow existing runtime paths`
 - Completion semantics hardening:
   - Top-level `ok/status/message` for `browser.request` now reflect live completion outcome when completion execution is requested (`status=failed` on bridge failure).
   - Assistant text extraction now supports additional response shapes: `output_text`, `output[].content[]`, and array-based `choices[].message.content`.
@@ -289,7 +296,7 @@ Phase 6 progress notes:
 ## Latest Validation Snapshot
 - [x] `zig build`
 - [x] `zig build test`
-- [x] `zig build test --summary all` -> `137/137` passing (includes gateway auth/rate-limit hardening tests, runtime file/exec policy hardening tests, config-hash diagnostics coverage, bind-policy token enforcement checks, secure-boot policy/update-gate enforcement coverage, boot attestation + attestation-verify + rollback-cancel coverage, TTS/completion execution-path coverage, PAL extraction coverage, secure secret-store backend coverage, and bare-metal ABI v2 contract tests)
+- [x] `zig build test --summary all` -> `139/139` passing (includes gateway auth/rate-limit hardening tests, runtime file/exec policy hardening tests, config-hash diagnostics coverage, bind-policy token enforcement checks, secure-boot policy/update-gate enforcement coverage, boot attestation + attestation-verify + rollback-cancel coverage, TTS/completion execution-path coverage, PAL extraction coverage, secure secret-store backend coverage, and bare-metal ABI v2 contract tests)
 - [x] Runtime policy hardening slice shipped:
   - `file.read` / `file.write` optional sandbox enforcement with traversal + symlink denial paths:
     - `OPENCLAW_ZIG_RUNTIME_FILE_SANDBOX_ENABLED`

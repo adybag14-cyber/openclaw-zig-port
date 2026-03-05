@@ -8803,7 +8803,7 @@ fn encodeTelegramRuntimeError(
         const message = switch (err) {
             error.InvalidParamsFrame => "invalid params frame",
             error.MissingMessage => "send requires message",
-            error.UnsupportedChannel => "only telegram channel is supported",
+            error.UnsupportedChannel => "unsupported channel (supported: telegram, webchat, cli)",
             else => "invalid channel params",
         };
         return protocol.encodeError(allocator, id, .{
@@ -8919,12 +8919,22 @@ fn parseSendMemoryFromFrame(allocator: std.mem.Allocator, frame_json: []const u8
             channel = std.mem.trim(u8, value.string, " \t\r\n");
         }
     }
+    channel = normalizeSendMemoryChannel(channel);
 
     return SendMemoryEntry{
         .session_id = try allocator.dupe(u8, session_id),
         .channel = try allocator.dupe(u8, channel),
         .message = try allocator.dupe(u8, message),
     };
+}
+
+fn normalizeSendMemoryChannel(raw: []const u8) []const u8 {
+    const trimmed = std.mem.trim(u8, raw, " \t\r\n");
+    if (trimmed.len == 0) return "telegram";
+    if (std.ascii.eqlIgnoreCase(trimmed, "telegram") or std.ascii.eqlIgnoreCase(trimmed, "tg") or std.ascii.eqlIgnoreCase(trimmed, "tele")) return "telegram";
+    if (std.ascii.eqlIgnoreCase(trimmed, "webchat") or std.ascii.eqlIgnoreCase(trimmed, "web")) return "webchat";
+    if (std.ascii.eqlIgnoreCase(trimmed, "cli") or std.ascii.eqlIgnoreCase(trimmed, "console") or std.ascii.eqlIgnoreCase(trimmed, "terminal")) return "cli";
+    return trimmed;
 }
 
 fn stringifyJsonValue(allocator: std.mem.Allocator, value: std.json.Value) ![]u8 {
@@ -11403,6 +11413,16 @@ test "dispatch browser.open and send aliases follow existing runtime paths" {
     const sessions_send = try dispatch(allocator, "{\"id\":\"sessions-send\",\"method\":\"sessions.send\",\"params\":{\"channel\":\"telegram\",\"to\":\"alias-room\",\"sessionId\":\"alias-1\",\"message\":\"hello alias\"}}");
     defer allocator.free(sessions_send);
     try std.testing.expect(std.mem.indexOf(u8, sessions_send, "\"accepted\":true") != null);
+
+    const web_alias_send = try dispatch(allocator, "{\"id\":\"web-alias-send\",\"method\":\"send\",\"params\":{\"channel\":\"web\",\"to\":\"alias-web\",\"sessionId\":\"alias-web-1\",\"message\":\"hello web alias\"}}");
+    defer allocator.free(web_alias_send);
+    try std.testing.expect(std.mem.indexOf(u8, web_alias_send, "\"accepted\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, web_alias_send, "\"channel\":\"webchat\"") != null);
+
+    const cli_alias_send = try dispatch(allocator, "{\"id\":\"cli-alias-send\",\"method\":\"send\",\"params\":{\"channel\":\"console\",\"to\":\"alias-cli\",\"sessionId\":\"alias-cli-1\",\"message\":\"hello cli alias\"}}");
+    defer allocator.free(cli_alias_send);
+    try std.testing.expect(std.mem.indexOf(u8, cli_alias_send, "\"accepted\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, cli_alias_send, "\"channel\":\"cli\"") != null);
 }
 
 test "dispatch file.write and file.read lifecycle updates status counters" {
