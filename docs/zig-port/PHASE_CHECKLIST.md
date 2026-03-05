@@ -3,6 +3,16 @@
 Release lock: no release tag is allowed until all phases are complete and parity is measured at 100%.
 Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `127/127`.
 
+## Full-Stack Replacement Track (FS0..FS7)
+- [ ] FS0 - Scope lock + baseline freeze (`docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`, issue `#2`)
+- [ ] FS1 - Runtime/core consolidation
+- [ ] FS2 - Provider + channel completion
+- [ ] FS3 - Memory/knowledge depth
+- [ ] FS4 - Security + trust hardening
+- [ ] FS5 - Edge/WASM/marketplace depth
+- [ ] FS6 - Appliance/bare-metal maturity track
+- [ ] FS7 - Cutover + decommission gates
+
 ## Phase 1 - Foundation
 - [x] Initialize Zig workspace layout (`gateway`, `protocol`, `bridge`, config/runtime slices)
 - [x] Add build/test commands (`zig build`, `zig build test`, local syntax-check script)

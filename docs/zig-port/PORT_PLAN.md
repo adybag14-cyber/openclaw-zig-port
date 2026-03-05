@@ -9,6 +9,9 @@ Track and achieve OpenClaw Zig parity against upstream stable + beta baselines:
 
 while maintaining parity-first validation and release gating.
 
+Full-stack replacement execution reference:
+- `docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md` (FS0..FS7 scope/gates)
+
 ## Critical Points
 
 - Preserve wire compatibility for existing RPC envelopes and method names.
@@ -54,6 +57,10 @@ while maintaining parity-first validation and release gating.
 ## Current Progress Snapshot
 
 - Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `127/127`.
+- Full-stack replacement kickoff (2026-03-05):
+  - master tracking issue refreshed with FS0..FS7 execution gates.
+  - FS0 execution issue opened (`#2`) and linked from master issue.
+  - initial matrix published: `docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`.
 
 - Tracking and documentation refresh (2026-03-04):
   - Gateway hardening slice shipped:
