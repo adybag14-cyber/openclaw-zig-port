@@ -177,6 +177,54 @@ const AuthCommandMetadata = struct {
     login: ?web_login.SessionView = null,
 };
 
+const ModelCommandMetadata = struct {
+    type: []const u8,
+    target: []const u8,
+    provider: ?[]const u8 = null,
+    currentProvider: ?[]const u8 = null,
+    currentModel: ?[]const u8 = null,
+    modelRef: ?[]const u8 = null,
+    requestedProvider: ?[]const u8 = null,
+    requestedModel: ?[]const u8 = null,
+    requested: ?[]const u8 = null,
+    aliasUsed: ?[]const u8 = null,
+    matchedCatalogModel: ?bool = null,
+    customOverride: ?bool = null,
+    providers: ?[]const []const u8 = null,
+    availableModels: ?[]const []const u8 = null,
+    models: ?[]const TelegramModelDescriptor = null,
+    @"error": ?[]const u8 = null,
+};
+
+const TtsProviderMetadataEntry = struct {
+    id: []const u8,
+    name: []const u8,
+    enabled: bool,
+    available: bool,
+    requiresAuth: ?bool = null,
+    reason: ?[]const u8 = null,
+};
+
+const TtsCommandMetadata = struct {
+    type: []const u8,
+    target: []const u8,
+    action: ?[]const u8 = null,
+    enabled: ?bool = null,
+    provider: ?[]const u8 = null,
+    available: ?bool = null,
+    reason: ?[]const u8 = null,
+    providers: ?[]const TtsProviderMetadataEntry = null,
+    text: ?[]const u8 = null,
+    audioRef: ?[]const u8 = null,
+    bytes: ?usize = null,
+    outputFormat: ?[]const u8 = null,
+    realAudio: ?bool = null,
+    fallback: ?bool = null,
+    engine: ?[]const u8 = null,
+    audioSource: ?[]const u8 = null,
+    @"error": ?[]const u8 = null,
+};
+
 pub const PolledMessage = struct {
     id: u64,
     channel: []u8,
@@ -988,13 +1036,30 @@ pub const TelegramRuntime = struct {
 
     fn handleModelCommand(self: *TelegramRuntime, allocator: std.mem.Allocator, target: []const u8, args: []const []const u8) !SendOutcome {
         const model_sel = self.getTargetModel(target);
+        const trimmed_target = std.mem.trim(u8, target, " \t\r\n");
         const action = if (args.len == 0) "status" else args[0];
 
         if (std.ascii.eqlIgnoreCase(action, "status")) {
             const providers = try listTelegramModelProvidersAlloc(allocator);
             defer allocator.free(providers);
+            const available_models = try listTelegramModelIDsAlloc(allocator, "");
+            defer allocator.free(available_models);
+            const descriptors = try listTelegramModelDescriptorsAlloc(allocator, "");
+            defer allocator.free(descriptors);
             const providers_text = try std.mem.join(allocator, ", ", providers);
             defer allocator.free(providers_text);
+            const model_ref = try modelRefForDisplayAlloc(allocator, model_sel.provider, model_sel.model);
+            defer allocator.free(model_ref);
+            const metadata_json = try stringifyJsonAlloc(allocator, ModelCommandMetadata{
+                .type = "model.status",
+                .target = trimmed_target,
+                .currentProvider = model_sel.provider,
+                .currentModel = model_sel.model,
+                .modelRef = model_ref,
+                .providers = providers,
+                .availableModels = available_models,
+                .models = descriptors,
+            });
             return .{
                 .is_command = true,
                 .command_name = "model",
@@ -1004,6 +1069,7 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .metadata_json = metadata_json,
             };
         }
 
@@ -1011,8 +1077,19 @@ pub const TelegramRuntime = struct {
             const providers = try listTelegramModelProvidersAlloc(allocator);
             defer allocator.free(providers);
             if (args.len < 2) {
+                const available_models = try listTelegramModelIDsAlloc(allocator, "");
+                defer allocator.free(available_models);
+                const descriptors = try listTelegramModelDescriptorsAlloc(allocator, "");
+                defer allocator.free(descriptors);
                 const providers_text = try std.mem.join(allocator, ", ", providers);
                 defer allocator.free(providers_text);
+                const metadata_json = try stringifyJsonAlloc(allocator, ModelCommandMetadata{
+                    .type = "model.list",
+                    .target = trimmed_target,
+                    .providers = providers,
+                    .availableModels = available_models,
+                    .models = descriptors,
+                });
                 return .{
                     .is_command = true,
                     .command_name = "model",
@@ -1022,12 +1099,23 @@ pub const TelegramRuntime = struct {
                     .login_session_id = "",
                     .login_code = "",
                     .auth_status = "ok",
+                    .metadata_json = metadata_json,
                 };
             }
 
             const requested_provider = normalizeProvider(args[1]);
             const filtered = try listTelegramModelIDsAlloc(allocator, requested_provider);
             defer allocator.free(filtered);
+            const descriptors = try listTelegramModelDescriptorsAlloc(allocator, requested_provider);
+            defer allocator.free(descriptors);
+            const metadata_json = try stringifyJsonAlloc(allocator, ModelCommandMetadata{
+                .type = "model.list",
+                .target = trimmed_target,
+                .requestedProvider = requested_provider,
+                .providers = providers,
+                .availableModels = filtered,
+                .models = descriptors,
+            });
             if (filtered.len == 0) {
                 return .{
                     .is_command = true,
@@ -1038,6 +1126,7 @@ pub const TelegramRuntime = struct {
                     .login_session_id = "",
                     .login_code = "",
                     .auth_status = "invalid",
+                    .metadata_json = metadata_json,
                 };
             }
 
@@ -1052,6 +1141,7 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .metadata_json = metadata_json,
             };
         }
 
@@ -1060,6 +1150,14 @@ pub const TelegramRuntime = struct {
             try self.setTargetModel(target, next_choice.provider, next_choice.id);
             const model_ref = try modelRefForDisplayAlloc(allocator, next_choice.provider, next_choice.id);
             defer allocator.free(model_ref);
+            const metadata_json = try stringifyJsonAlloc(allocator, ModelCommandMetadata{
+                .type = "model.next",
+                .target = trimmed_target,
+                .provider = next_choice.provider,
+                .currentProvider = next_choice.provider,
+                .currentModel = next_choice.id,
+                .modelRef = model_ref,
+            });
             return .{
                 .is_command = true,
                 .command_name = "model",
@@ -1069,10 +1167,21 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .metadata_json = metadata_json,
             };
         }
 
         if (std.ascii.eqlIgnoreCase(action, "reset")) {
+            const model_ref = try modelRefForDisplayAlloc(allocator, "chatgpt", "gpt-5.2");
+            defer allocator.free(model_ref);
+            const metadata_json = try stringifyJsonAlloc(allocator, ModelCommandMetadata{
+                .type = "model.reset",
+                .target = trimmed_target,
+                .provider = "chatgpt",
+                .currentProvider = "chatgpt",
+                .currentModel = "gpt-5.2",
+                .modelRef = model_ref,
+            });
             try self.setTargetModel(target, "chatgpt", "gpt-5.2");
             return .{
                 .is_command = true,
@@ -1083,6 +1192,7 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .metadata_json = metadata_json,
             };
         }
 
@@ -1109,6 +1219,13 @@ pub const TelegramRuntime = struct {
             if (!isKnownModelProvider(requested_provider)) {
                 const providers_text = try std.mem.join(allocator, ", ", providers);
                 defer allocator.free(providers_text);
+                const metadata_json = try stringifyJsonAlloc(allocator, ModelCommandMetadata{
+                    .type = "model.invalid",
+                    .target = trimmed_target,
+                    .requestedProvider = requested_provider,
+                    .providers = providers,
+                    .@"error" = "unknown_provider",
+                });
                 return .{
                     .is_command = true,
                     .command_name = "model",
@@ -1118,6 +1235,7 @@ pub const TelegramRuntime = struct {
                     .login_session_id = "",
                     .login_code = "",
                     .auth_status = "invalid",
+                    .metadata_json = metadata_json,
                 };
             }
 
@@ -1126,6 +1244,15 @@ pub const TelegramRuntime = struct {
                 try self.setTargetModel(target, requested_provider, default_model);
                 const model_ref = try modelRefForDisplayAlloc(allocator, requested_provider, default_model);
                 defer allocator.free(model_ref);
+                const metadata_json = try stringifyJsonAlloc(allocator, ModelCommandMetadata{
+                    .type = "model.set",
+                    .target = trimmed_target,
+                    .requestedProvider = requested_provider,
+                    .currentProvider = requested_provider,
+                    .currentModel = default_model,
+                    .modelRef = model_ref,
+                    .matchedCatalogModel = true,
+                });
                 return .{
                     .is_command = true,
                     .command_name = "model",
@@ -1135,14 +1262,30 @@ pub const TelegramRuntime = struct {
                     .login_session_id = "",
                     .login_code = "",
                     .auth_status = "ok",
+                    .metadata_json = metadata_json,
                 };
             }
 
-            if (try resolveTelegramModelChoiceForProvider(allocator, requested_provider, requested_model)) |choice| {
+            if (try resolveTelegramModelChoiceForProviderDetailed(allocator, requested_provider, requested_model)) |choice| {
                 try self.setTargetModel(target, choice.provider, choice.id);
                 const selected = self.getTargetModel(target);
                 const model_ref = try modelRefForDisplayAlloc(allocator, selected.provider, selected.model);
                 defer allocator.free(model_ref);
+                const requested = try std.mem.join(allocator, " ", args);
+                defer allocator.free(requested);
+                const metadata_json = try stringifyJsonAlloc(allocator, ModelCommandMetadata{
+                    .type = "model.set",
+                    .target = trimmed_target,
+                    .requestedProvider = requested_provider,
+                    .requestedModel = requested_model,
+                    .requested = requested,
+                    .aliasUsed = choice.alias_used,
+                    .currentProvider = selected.provider,
+                    .currentModel = selected.model,
+                    .modelRef = model_ref,
+                    .matchedCatalogModel = true,
+                    .customOverride = false,
+                });
                 return .{
                     .is_command = true,
                     .command_name = "model",
@@ -1152,6 +1295,7 @@ pub const TelegramRuntime = struct {
                     .login_session_id = "",
                     .login_code = "",
                     .auth_status = "ok",
+                    .metadata_json = metadata_json,
                 };
             }
 
@@ -1160,6 +1304,20 @@ pub const TelegramRuntime = struct {
             const selected = self.getTargetModel(target);
             const model_ref = try modelRefForDisplayAlloc(allocator, selected.provider, selected.model);
             defer allocator.free(model_ref);
+            const requested = try std.mem.join(allocator, " ", args);
+            defer allocator.free(requested);
+            const metadata_json = try stringifyJsonAlloc(allocator, ModelCommandMetadata{
+                .type = "model.set",
+                .target = trimmed_target,
+                .requestedProvider = requested_provider,
+                .requestedModel = custom_model,
+                .requested = requested,
+                .currentProvider = selected.provider,
+                .currentModel = selected.model,
+                .modelRef = model_ref,
+                .matchedCatalogModel = false,
+                .customOverride = true,
+            });
             return .{
                 .is_command = true,
                 .command_name = "model",
@@ -1169,6 +1327,7 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .metadata_json = metadata_json,
             };
         }
 
@@ -1178,6 +1337,15 @@ pub const TelegramRuntime = struct {
             try self.setTargetModel(target, provider, model);
             const model_ref = try modelRefForDisplayAlloc(allocator, provider, model);
             defer allocator.free(model_ref);
+            const metadata_json = try stringifyJsonAlloc(allocator, ModelCommandMetadata{
+                .type = "model.set",
+                .target = trimmed_target,
+                .requestedProvider = provider,
+                .currentProvider = provider,
+                .currentModel = model,
+                .modelRef = model_ref,
+                .matchedCatalogModel = true,
+            });
             return .{
                 .is_command = true,
                 .command_name = "model",
@@ -1187,13 +1355,24 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .metadata_json = metadata_json,
             };
         }
 
-        if (try resolveTelegramModelChoice(allocator, action)) |choice| {
+        if (try resolveTelegramModelChoiceDetailed(allocator, action)) |choice| {
             try self.setTargetModel(target, choice.provider, choice.id);
             const model_ref = try modelRefForDisplayAlloc(allocator, choice.provider, choice.id);
             defer allocator.free(model_ref);
+            const metadata_json = try stringifyJsonAlloc(allocator, ModelCommandMetadata{
+                .type = "model.set",
+                .target = trimmed_target,
+                .requested = action,
+                .aliasUsed = choice.alias_used,
+                .provider = choice.provider,
+                .currentProvider = choice.provider,
+                .currentModel = choice.id,
+                .modelRef = model_ref,
+            });
             return .{
                 .is_command = true,
                 .command_name = "model",
@@ -1203,13 +1382,24 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .metadata_json = metadata_json,
             };
         }
 
         const available_models = try listTelegramModelIDsAlloc(allocator, "");
         defer allocator.free(available_models);
+        const providers = try listTelegramModelProvidersAlloc(allocator);
+        defer allocator.free(providers);
         const available_text = try std.mem.join(allocator, ", ", available_models);
         defer allocator.free(available_text);
+        const metadata_json = try stringifyJsonAlloc(allocator, ModelCommandMetadata{
+            .type = "model.invalid",
+            .target = trimmed_target,
+            .requestedModel = action,
+            .providers = providers,
+            .availableModels = available_models,
+            .@"error" = "unknown_model",
+        });
         return .{
             .is_command = true,
             .command_name = "model",
@@ -1219,31 +1409,49 @@ pub const TelegramRuntime = struct {
             .login_session_id = "",
             .login_code = "",
             .auth_status = "invalid",
+            .metadata_json = metadata_json,
         };
     }
 
     fn handleTtsCommand(self: *TelegramRuntime, allocator: std.mem.Allocator, target: []const u8, args: []const []const u8) !SendOutcome {
         const model_sel = self.getTargetModel(target);
-        const action = if (args.len == 0) "help" else args[0];
+        const trimmed_target = std.mem.trim(u8, target, " \t\r\n");
+        const action = if (args.len == 0) "status" else args[0];
         const rest = if (args.len > 1) args[1..] else &[_][]const u8{};
 
         if (std.ascii.eqlIgnoreCase(action, "help")) {
+            const metadata_json = try stringifyJsonAlloc(allocator, TtsCommandMetadata{
+                .type = "tts.help",
+                .target = trimmed_target,
+            });
             return .{
                 .is_command = true,
                 .command_name = "tts",
-                .reply = try allocator.dupe(u8, "TTS command usage:\n/tts status\n/tts providers\n/tts provider <openai|elevenlabs|kittentts|edge>\n/tts on\n/tts off\n/tts speak <text>\n/tts help"),
+                .reply = try allocator.dupe(u8, "TTS command usage:\n/tts status\n/tts providers\n/tts provider <openai|elevenlabs|kittentts|edge>\n/tts on\n/tts off\n/tts say <text>\n/tts speak <text>\n/tts help"),
                 .provider = model_sel.provider,
                 .model = model_sel.model,
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .metadata_json = metadata_json,
             };
         }
 
         if (std.ascii.eqlIgnoreCase(action, "status")) {
+            const provider_id = ttsProviderMetadataId(self.tts_provider);
+            const available = ttsProviderAvailable(allocator, self.tts_provider);
+            const reason = ttsProviderReason(allocator, self.tts_provider);
             const has_openai_key = ttsProviderApiKeyAvailable(allocator, "openai");
             const has_elevenlabs_key = ttsProviderApiKeyAvailable(allocator, "elevenlabs");
             const has_kittentts_bin = kittenttsBinaryAvailable(allocator);
+            const metadata_json = try stringifyJsonAlloc(allocator, TtsCommandMetadata{
+                .type = "tts.status",
+                .target = trimmed_target,
+                .enabled = self.tts_enabled,
+                .provider = provider_id,
+                .available = available,
+                .reason = reason,
+            });
             return .{
                 .is_command = true,
                 .command_name = "tts",
@@ -1263,13 +1471,21 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .metadata_json = metadata_json,
             };
         }
 
         if (std.ascii.eqlIgnoreCase(action, "providers")) {
+            const providers_catalog = try buildTtsProviderCatalogAlloc(allocator);
+            defer allocator.free(providers_catalog);
             const has_openai_key = ttsProviderApiKeyAvailable(allocator, "openai");
             const has_elevenlabs_key = ttsProviderApiKeyAvailable(allocator, "elevenlabs");
             const has_kittentts_bin = kittenttsBinaryAvailable(allocator);
+            const metadata_json = try stringifyJsonAlloc(allocator, TtsCommandMetadata{
+                .type = "tts.providers",
+                .target = trimmed_target,
+                .providers = providers_catalog,
+            });
             return .{
                 .is_command = true,
                 .command_name = "tts",
@@ -1288,12 +1504,22 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .metadata_json = metadata_json,
             };
         }
 
         if (std.ascii.eqlIgnoreCase(action, "on") or std.ascii.eqlIgnoreCase(action, "enable")) {
             self.tts_enabled = true;
             if (self.persistent) try self.persist();
+            const provider_id = ttsProviderMetadataId(self.tts_provider);
+            const metadata_json = try stringifyJsonAlloc(allocator, TtsCommandMetadata{
+                .type = "tts.enable",
+                .target = trimmed_target,
+                .enabled = true,
+                .provider = provider_id,
+                .available = ttsProviderAvailable(allocator, self.tts_provider),
+                .reason = ttsProviderReason(allocator, self.tts_provider),
+            });
             return .{
                 .is_command = true,
                 .command_name = "tts",
@@ -1303,12 +1529,22 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .metadata_json = metadata_json,
             };
         }
 
         if (std.ascii.eqlIgnoreCase(action, "off") or std.ascii.eqlIgnoreCase(action, "disable")) {
             self.tts_enabled = false;
             if (self.persistent) try self.persist();
+            const provider_id = ttsProviderMetadataId(self.tts_provider);
+            const metadata_json = try stringifyJsonAlloc(allocator, TtsCommandMetadata{
+                .type = "tts.disable",
+                .target = trimmed_target,
+                .enabled = false,
+                .provider = provider_id,
+                .available = ttsProviderAvailable(allocator, self.tts_provider),
+                .reason = ttsProviderReason(allocator, self.tts_provider),
+            });
             return .{
                 .is_command = true,
                 .command_name = "tts",
@@ -1318,12 +1554,20 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .metadata_json = metadata_json,
             };
         }
 
         if (std.ascii.eqlIgnoreCase(action, "provider")) {
-            const provider = if (rest.len > 0) normalizeTtsProvider(rest[0]) else "";
+            const requested_provider = if (rest.len > 0) std.mem.trim(u8, rest[0], " \t\r\n") else "";
+            const provider = normalizeTtsProvider(requested_provider);
             if (!isSupportedTtsProvider(provider)) {
+                const metadata_json = try stringifyJsonAlloc(allocator, TtsCommandMetadata{
+                    .type = "tts.provider",
+                    .target = trimmed_target,
+                    .provider = if (requested_provider.len > 0) ttsProviderMetadataId(requested_provider) else null,
+                    .@"error" = "missing_provider",
+                });
                 return .{
                     .is_command = true,
                     .command_name = "tts",
@@ -1333,11 +1577,22 @@ pub const TelegramRuntime = struct {
                     .login_session_id = "",
                     .login_code = "",
                     .auth_status = "invalid",
+                    .metadata_json = metadata_json,
                 };
             }
             self.allocator.free(self.tts_provider);
             self.tts_provider = try self.allocator.dupe(u8, provider);
             if (self.persistent) try self.persist();
+            const provider_id = ttsProviderMetadataId(requested_provider);
+            const available = ttsProviderAvailable(allocator, provider);
+            const metadata_json = try stringifyJsonAlloc(allocator, TtsCommandMetadata{
+                .type = "tts.provider",
+                .target = trimmed_target,
+                .enabled = self.tts_enabled,
+                .provider = provider_id,
+                .available = available,
+                .reason = ttsProviderReason(allocator, provider),
+            });
             return .{
                 .is_command = true,
                 .command_name = "tts",
@@ -1347,26 +1602,40 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .metadata_json = metadata_json,
             };
         }
 
-        if (std.ascii.eqlIgnoreCase(action, "speak")) {
+        if (std.ascii.eqlIgnoreCase(action, "speak") or std.ascii.eqlIgnoreCase(action, "say")) {
             const text = if (rest.len > 0) try std.mem.join(allocator, " ", rest) else try allocator.dupe(u8, "");
             defer allocator.free(text);
             const trimmed = std.mem.trim(u8, text, " \t\r\n");
             if (trimmed.len == 0) {
+                const metadata_json = try stringifyJsonAlloc(allocator, TtsCommandMetadata{
+                    .type = "tts.say",
+                    .target = trimmed_target,
+                    .@"error" = "missing_text",
+                });
                 return .{
                     .is_command = true,
                     .command_name = "tts",
-                    .reply = try allocator.dupe(u8, "Usage: /tts speak <text>"),
+                    .reply = try allocator.dupe(u8, "Usage: /tts say <text>"),
                     .provider = model_sel.provider,
                     .model = model_sel.model,
                     .login_session_id = "",
                     .login_code = "",
                     .auth_status = "invalid",
+                    .metadata_json = metadata_json,
                 };
             }
             if (!self.tts_enabled) {
+                const metadata_json = try stringifyJsonAlloc(allocator, TtsCommandMetadata{
+                    .type = "tts.say",
+                    .target = trimmed_target,
+                    .enabled = false,
+                    .provider = ttsProviderMetadataId(self.tts_provider),
+                    .@"error" = "tts_disabled",
+                });
                 return .{
                     .is_command = true,
                     .command_name = "tts",
@@ -1376,12 +1645,31 @@ pub const TelegramRuntime = struct {
                     .login_session_id = "",
                     .login_code = "",
                     .auth_status = "ok",
+                    .metadata_json = metadata_json,
                 };
             }
 
             const provider_used = normalizeTtsProvider(self.tts_provider);
+            const provider_id = ttsProviderMetadataId(provider_used);
             const source = resolveTtsSource(allocator, provider_used);
             const audio_base64 = try synthesizeTelegramTtsClipBase64(allocator, trimmed, provider_used, source);
+            const audio_ref = try buildTelegramTtsAudioRefAlloc(allocator, provider_used, "wav");
+            defer allocator.free(audio_ref);
+            const real_audio = !std.ascii.eqlIgnoreCase(source, "simulated");
+            const fallback = !real_audio and !std.ascii.eqlIgnoreCase(provider_id, "native");
+            const metadata_json = try stringifyJsonAlloc(allocator, TtsCommandMetadata{
+                .type = "tts.say",
+                .target = trimmed_target,
+                .text = trimmed,
+                .provider = provider_id,
+                .audioRef = audio_ref,
+                .bytes = base64DecodedLen(audio_base64),
+                .outputFormat = "wav",
+                .realAudio = real_audio,
+                .fallback = fallback,
+                .engine = provider_id,
+                .audioSource = source,
+            });
 
             return .{
                 .is_command = true,
@@ -1397,18 +1685,25 @@ pub const TelegramRuntime = struct {
                 .audio_bytes = base64DecodedLen(audio_base64),
                 .audio_provider_used = provider_used,
                 .audio_source = source,
+                .metadata_json = metadata_json,
             };
         }
 
+        const metadata_json = try stringifyJsonAlloc(allocator, TtsCommandMetadata{
+            .type = "tts.invalid",
+            .target = trimmed_target,
+            .action = action,
+        });
         return .{
             .is_command = true,
             .command_name = "tts",
-            .reply = try std.fmt.allocPrint(allocator, "Unknown /tts subcommand `{s}`.\n\nTTS command usage:\n/tts status\n/tts providers\n/tts provider <openai|elevenlabs|kittentts|edge>\n/tts on\n/tts off\n/tts speak <text>\n/tts help", .{action}),
+            .reply = try std.fmt.allocPrint(allocator, "Unknown /tts subcommand `{s}`.\n\nTTS command usage:\n/tts status\n/tts providers\n/tts provider <openai|elevenlabs|kittentts|edge>\n/tts on\n/tts off\n/tts say <text>\n/tts speak <text>\n/tts help", .{action}),
             .provider = model_sel.provider,
             .model = model_sel.model,
             .login_session_id = "",
             .login_code = "",
             .auth_status = "invalid",
+            .metadata_json = metadata_json,
         };
     }
 
@@ -3167,6 +3462,12 @@ const TelegramModelChoice = struct {
     provider: []const u8,
 };
 
+const ResolvedTelegramModelChoice = struct {
+    id: []const u8,
+    provider: []const u8,
+    alias_used: ?[]const u8 = null,
+};
+
 fn telegramModelCatalog() []const TelegramModelDescriptor {
     return &[_]TelegramModelDescriptor{
         .{ .id = "gpt-5.2", .provider = "chatgpt", .name = "GPT-5.2", .mode = "auto", .capability = "reasoning", .aliases = &.{ "auto", "default", "gpt5-2", "gpt-5-2" } },
@@ -3286,7 +3587,20 @@ fn listTelegramModelIDsAlloc(allocator: std.mem.Allocator, provider_filter_raw: 
     return ids.toOwnedSlice(allocator);
 }
 
-fn resolveTelegramModelChoice(allocator: std.mem.Allocator, model_raw: []const u8) !?TelegramModelChoice {
+fn listTelegramModelDescriptorsAlloc(allocator: std.mem.Allocator, provider_filter_raw: []const u8) ![]TelegramModelDescriptor {
+    const provider_filter = normalizeProvider(provider_filter_raw);
+    var descriptors: std.ArrayList(TelegramModelDescriptor) = .empty;
+    defer descriptors.deinit(allocator);
+
+    for (telegramModelCatalog()) |descriptor| {
+        if (provider_filter.len > 0 and !std.ascii.eqlIgnoreCase(descriptor.provider, provider_filter)) continue;
+        try descriptors.append(allocator, descriptor);
+    }
+
+    return descriptors.toOwnedSlice(allocator);
+}
+
+fn resolveTelegramModelChoiceDetailed(allocator: std.mem.Allocator, model_raw: []const u8) !?ResolvedTelegramModelChoice {
     const normalized_requested = try normalizeModelAliasAlloc(allocator, model_raw);
     defer allocator.free(normalized_requested);
     if (normalized_requested.len == 0) return null;
@@ -3297,16 +3611,17 @@ fn resolveTelegramModelChoice(allocator: std.mem.Allocator, model_raw: []const u
         }
     }
 
+    const requested = normalizeModel(model_raw);
     for (telegramModelCatalog()) |descriptor| {
         if (descriptor.mode.len > 0 and try modelAliasMatches(allocator, descriptor.mode, normalized_requested)) {
-            return .{ .id = descriptor.id, .provider = descriptor.provider };
+            return .{ .id = descriptor.id, .provider = descriptor.provider, .alias_used = requested };
         }
         if (descriptor.name.len > 0 and try modelAliasMatches(allocator, descriptor.name, normalized_requested)) {
-            return .{ .id = descriptor.id, .provider = descriptor.provider };
+            return .{ .id = descriptor.id, .provider = descriptor.provider, .alias_used = requested };
         }
         for (descriptor.aliases) |alias| {
             if (try modelAliasMatches(allocator, alias, normalized_requested)) {
-                return .{ .id = descriptor.id, .provider = descriptor.provider };
+                return .{ .id = descriptor.id, .provider = descriptor.provider, .alias_used = requested };
             }
         }
     }
@@ -3314,11 +3629,25 @@ fn resolveTelegramModelChoice(allocator: std.mem.Allocator, model_raw: []const u
     return null;
 }
 
+fn resolveTelegramModelChoice(allocator: std.mem.Allocator, model_raw: []const u8) !?TelegramModelChoice {
+    const resolved = try resolveTelegramModelChoiceDetailed(allocator, model_raw) orelse return null;
+    return .{ .id = resolved.id, .provider = resolved.provider };
+}
+
 fn resolveTelegramModelChoiceForProvider(
     allocator: std.mem.Allocator,
     provider_raw: []const u8,
     model_raw: []const u8,
 ) !?TelegramModelChoice {
+    const resolved = try resolveTelegramModelChoiceForProviderDetailed(allocator, provider_raw, model_raw) orelse return null;
+    return .{ .id = resolved.id, .provider = resolved.provider };
+}
+
+fn resolveTelegramModelChoiceForProviderDetailed(
+    allocator: std.mem.Allocator,
+    provider_raw: []const u8,
+    model_raw: []const u8,
+) !?ResolvedTelegramModelChoice {
     const provider = normalizeProvider(provider_raw);
     const normalized_requested = try normalizeModelAliasAlloc(allocator, model_raw);
     defer allocator.free(normalized_requested);
@@ -3336,14 +3665,14 @@ fn resolveTelegramModelChoiceForProvider(
             }
         }
         if (descriptor.mode.len > 0 and try modelAliasMatches(allocator, descriptor.mode, normalized_requested)) {
-            return .{ .id = descriptor.id, .provider = descriptor.provider };
+            return .{ .id = descriptor.id, .provider = descriptor.provider, .alias_used = normalizeModel(model_raw) };
         }
         if (descriptor.name.len > 0 and try modelAliasMatches(allocator, descriptor.name, normalized_requested)) {
-            return .{ .id = descriptor.id, .provider = descriptor.provider };
+            return .{ .id = descriptor.id, .provider = descriptor.provider, .alias_used = normalizeModel(model_raw) };
         }
         for (descriptor.aliases) |alias| {
             if (try modelAliasMatches(allocator, alias, normalized_requested)) {
-                return .{ .id = descriptor.id, .provider = descriptor.provider };
+                return .{ .id = descriptor.id, .provider = descriptor.provider, .alias_used = normalizeModel(model_raw) };
             }
         }
     }
@@ -3533,6 +3862,22 @@ fn normalizeTtsProvider(raw: []const u8) []const u8 {
     return trimmed;
 }
 
+fn ttsProviderMetadataId(raw: []const u8) []const u8 {
+    const provider = normalizeTtsProvider(raw);
+    if (std.ascii.eqlIgnoreCase(provider, "edge")) return "native";
+    if (std.ascii.eqlIgnoreCase(provider, "openai")) return "openai-voice";
+    return provider;
+}
+
+fn ttsProviderMetadataName(provider_raw: []const u8) []const u8 {
+    const provider = ttsProviderMetadataId(provider_raw);
+    if (std.ascii.eqlIgnoreCase(provider, "native")) return "Native Synth";
+    if (std.ascii.eqlIgnoreCase(provider, "openai-voice")) return "OpenAI Voice";
+    if (std.ascii.eqlIgnoreCase(provider, "kittentts")) return "KittenTTS";
+    if (std.ascii.eqlIgnoreCase(provider, "elevenlabs")) return "ElevenLabs";
+    return provider;
+}
+
 fn isSupportedTtsProvider(raw: []const u8) bool {
     const provider = normalizeTtsProvider(raw);
     if (provider.len == 0) return false;
@@ -3557,6 +3902,52 @@ fn envHasAnyValue(allocator: std.mem.Allocator, names: []const []const u8) bool 
         if (envHasValue(allocator, name)) return true;
     }
     return false;
+}
+
+fn ttsProviderAvailable(allocator: std.mem.Allocator, provider_raw: []const u8) bool {
+    const provider = normalizeTtsProvider(provider_raw);
+    if (std.ascii.eqlIgnoreCase(provider, "edge")) return true;
+    if (std.ascii.eqlIgnoreCase(provider, "openai")) return ttsProviderApiKeyAvailable(allocator, "openai");
+    if (std.ascii.eqlIgnoreCase(provider, "elevenlabs")) return ttsProviderApiKeyAvailable(allocator, "elevenlabs");
+    if (std.ascii.eqlIgnoreCase(provider, "kittentts")) return kittenttsBinaryAvailable(allocator);
+    return false;
+}
+
+fn ttsProviderReason(allocator: std.mem.Allocator, provider_raw: []const u8) []const u8 {
+    const provider = normalizeTtsProvider(provider_raw);
+    if (std.ascii.eqlIgnoreCase(provider, "edge")) return "built-in synthetic fallback";
+    if (std.ascii.eqlIgnoreCase(provider, "openai")) {
+        return if (ttsProviderApiKeyAvailable(allocator, "openai")) "api key available" else "api key missing";
+    }
+    if (std.ascii.eqlIgnoreCase(provider, "elevenlabs")) {
+        return if (ttsProviderApiKeyAvailable(allocator, "elevenlabs")) "api key available" else "api key missing";
+    }
+    if (std.ascii.eqlIgnoreCase(provider, "kittentts")) {
+        return if (kittenttsBinaryAvailable(allocator)) "kittentts binary available" else "kittentts binary not found";
+    }
+    return "";
+}
+
+fn buildTtsProviderCatalogAlloc(allocator: std.mem.Allocator) ![]TtsProviderMetadataEntry {
+    const provider_ids = [_][]const u8{ "native", "openai-voice", "kittentts", "elevenlabs" };
+    var providers = try allocator.alloc(TtsProviderMetadataEntry, provider_ids.len);
+    for (provider_ids, 0..) |provider_id, idx| {
+        providers[idx] = .{
+            .id = provider_id,
+            .name = ttsProviderMetadataName(provider_id),
+            .enabled = ttsProviderAvailable(allocator, provider_id),
+            .available = ttsProviderAvailable(allocator, provider_id),
+            .requiresAuth = if (std.ascii.eqlIgnoreCase(provider_id, "elevenlabs")) true else null,
+            .reason = ttsProviderReason(allocator, provider_id),
+        };
+    }
+    return providers;
+}
+
+fn buildTelegramTtsAudioRefAlloc(allocator: std.mem.Allocator, provider_raw: []const u8, output_format: []const u8) ![]u8 {
+    const provider = ttsProviderMetadataId(provider_raw);
+    const format = if (std.mem.trim(u8, output_format, " \t\r\n").len > 0) output_format else "wav";
+    return std.fmt.allocPrint(allocator, "memory://tts/{s}-{d}.{s}", .{ provider, time_util.nowMs(), format });
 }
 
 fn ttsProviderApiKeyAvailable(allocator: std.mem.Allocator, provider_raw: []const u8) bool {

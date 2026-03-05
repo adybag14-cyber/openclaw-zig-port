@@ -1,13 +1,20 @@
 # Phase Checklist
 
 Release lock: no release tag is allowed until all phases are complete and parity is measured at 100%.
-Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `171/171`.
+Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `172/172`.
 
 ## Full-Stack Replacement Track (FS0..FS7)
 - [x] FS0 - Scope lock + baseline freeze (`docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`, issue `#2`)
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram `/model` and `/tts` command receipts now expose a Go-compatible nested `metadata` object while preserving Zig's existing top-level command fields:
+      - `send` results now include `result.metadata` for `/model status|list|list <provider>|next|reset|<provider>|<model>|<provider>/<model>` and `/tts status|providers|provider|on|off|say|speak|help`.
+      - `/tts` now accepts Go-compatible `/tts say <text>` in addition to Zig's existing `/tts speak <text>` path, and a bare `/tts` now routes to `status` instead of `help`.
+      - model metadata now carries `currentProvider`, `currentModel`, `modelRef`, `requestedProvider`, `requestedModel`, `requested`, `aliasUsed`, `matchedCatalogModel`, `customOverride`, `providers`, `availableModels`, and catalog descriptor payloads.
+      - TTS metadata now carries Go-style provider IDs (`native`, `openai-voice`, `kittentts`, `elevenlabs`), provider catalog state, enable/disable status, availability/reason telemetry, and `tts.say` audio envelope fields (`audioRef`, `bytes`, `outputFormat`, `realAudio`, `fallback`, `engine`).
+      - regression coverage added:
+        - `gateway.dispatcher.test.dispatch send model and tts commands expose go-compatible metadata envelope`
     - Telegram `/auth` command receipts now expose a Go-compatible nested `metadata` object while preserving Zig's existing top-level command fields:
       - `send` results now include `result.metadata` for `/auth help|providers|bridge|link|url|start|status|wait|guest|complete|cancel`.
       - auth metadata now carries structured provider/account/scope/session/login state, provider catalogs, bridge probe/session summaries, timeout telemetry, and revoke state instead of reply-text-only semantics.

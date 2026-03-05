@@ -13021,6 +13021,147 @@ test "dispatch send auth commands expose go-compatible metadata envelope" {
     }
 }
 
+test "dispatch send model and tts commands expose go-compatible metadata envelope" {
+    const allocator = std.testing.allocator;
+
+    const model_set = try dispatch(allocator, "{\"id\":\"tg-model-set-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-2\",\"sessionId\":\"tg-meta-2\",\"message\":\"/model pro\"}}");
+    defer allocator.free(model_set);
+    try std.testing.expect(std.mem.indexOf(u8, model_set, "\"metadata\"") != null);
+    const model_set_type = try extractResultObjectStringField(allocator, model_set, "metadata", "type");
+    defer allocator.free(model_set_type);
+    try std.testing.expect(std.mem.eql(u8, model_set_type, "model.set"));
+    const model_set_current = try extractResultObjectStringField(allocator, model_set, "metadata", "currentModel");
+    defer allocator.free(model_set_current);
+    try std.testing.expect(std.mem.eql(u8, model_set_current, "gpt-5.2-pro"));
+    const model_set_alias = try extractResultObjectStringField(allocator, model_set, "metadata", "aliasUsed");
+    defer allocator.free(model_set_alias);
+    try std.testing.expect(std.mem.eql(u8, model_set_alias, "pro"));
+
+    const model_next = try dispatch(allocator, "{\"id\":\"tg-model-next-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-2\",\"sessionId\":\"tg-meta-2\",\"message\":\"/model next\"}}");
+    defer allocator.free(model_next);
+    {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, model_next, .{});
+        defer parsed.deinit();
+        const result = parsed.value.object.get("result") orelse return error.TestUnexpectedResult;
+        const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
+        const metadata_type = metadata.object.get("type") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(metadata_type == .string and std.mem.eql(u8, metadata_type.string, "model.next"));
+        const current_model = metadata.object.get("currentModel") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(current_model == .string and current_model.string.len > 0);
+    }
+
+    const model_list_provider = try dispatch(allocator, "{\"id\":\"tg-model-list-provider-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-2\",\"sessionId\":\"tg-meta-2\",\"message\":\"/model list chatgpt\"}}");
+    defer allocator.free(model_list_provider);
+    {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, model_list_provider, .{});
+        defer parsed.deinit();
+        const result = parsed.value.object.get("result") orelse return error.TestUnexpectedResult;
+        const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
+        const metadata_type = metadata.object.get("type") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(metadata_type == .string and std.mem.eql(u8, metadata_type.string, "model.list"));
+        const requested_provider = metadata.object.get("requestedProvider") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(requested_provider == .string and std.mem.eql(u8, requested_provider.string, "chatgpt"));
+        const available_models = metadata.object.get("availableModels") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(available_models == .array and available_models.array.items.len > 0);
+    }
+
+    const model_provider_scoped = try dispatch(allocator, "{\"id\":\"tg-model-provider-scoped-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-2\",\"sessionId\":\"tg-meta-2\",\"message\":\"/model chatgpt/gpt-5.2-thinking\"}}");
+    defer allocator.free(model_provider_scoped);
+    {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, model_provider_scoped, .{});
+        defer parsed.deinit();
+        const result = parsed.value.object.get("result") orelse return error.TestUnexpectedResult;
+        const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
+        const current_provider = metadata.object.get("currentProvider") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(current_provider == .string and std.mem.eql(u8, current_provider.string, "chatgpt"));
+        const current_model = metadata.object.get("currentModel") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(current_model == .string and std.mem.eql(u8, current_model.string, "gpt-5.2-thinking"));
+        const matched = metadata.object.get("matchedCatalogModel") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(matched == .bool and matched.bool);
+    }
+
+    const model_custom = try dispatch(allocator, "{\"id\":\"tg-model-custom-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-2\",\"sessionId\":\"tg-meta-2\",\"message\":\"/model chatgpt edge-experimental\"}}");
+    defer allocator.free(model_custom);
+    {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, model_custom, .{});
+        defer parsed.deinit();
+        const result = parsed.value.object.get("result") orelse return error.TestUnexpectedResult;
+        const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
+        const current_model = metadata.object.get("currentModel") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(current_model == .string and std.mem.eql(u8, current_model.string, "edge-experimental"));
+        const custom = metadata.object.get("customOverride") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(custom == .bool and custom.bool);
+    }
+
+    const model_provider_default = try dispatch(allocator, "{\"id\":\"tg-model-provider-default-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-2\",\"sessionId\":\"tg-meta-2\",\"message\":\"/model chatgpt\"}}");
+    defer allocator.free(model_provider_default);
+    {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, model_provider_default, .{});
+        defer parsed.deinit();
+        const result = parsed.value.object.get("result") orelse return error.TestUnexpectedResult;
+        const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
+        const current_provider = metadata.object.get("currentProvider") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(current_provider == .string and std.mem.eql(u8, current_provider.string, "chatgpt"));
+        const current_model = metadata.object.get("currentModel") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(current_model == .string and std.mem.eql(u8, current_model.string, "gpt-5.2"));
+    }
+
+    const tts_provider = try dispatch(allocator, "{\"id\":\"tg-tts-provider-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-2\",\"sessionId\":\"tg-meta-2\",\"message\":\"/tts provider openai-voice\"}}");
+    defer allocator.free(tts_provider);
+    const tts_provider_type = try extractResultObjectStringField(allocator, tts_provider, "metadata", "type");
+    defer allocator.free(tts_provider_type);
+    try std.testing.expect(std.mem.eql(u8, tts_provider_type, "tts.provider"));
+    const tts_provider_id = try extractResultObjectStringField(allocator, tts_provider, "metadata", "provider");
+    defer allocator.free(tts_provider_id);
+    try std.testing.expect(std.mem.eql(u8, tts_provider_id, "openai-voice"));
+
+    const tts_providers = try dispatch(allocator, "{\"id\":\"tg-tts-providers-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-2\",\"sessionId\":\"tg-meta-2\",\"message\":\"/tts providers\"}}");
+    defer allocator.free(tts_providers);
+    {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, tts_providers, .{});
+        defer parsed.deinit();
+        const result = parsed.value.object.get("result") orelse return error.TestUnexpectedResult;
+        const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
+        const metadata_type = metadata.object.get("type") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(metadata_type == .string and std.mem.eql(u8, metadata_type.string, "tts.providers"));
+        const providers = metadata.object.get("providers") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(providers == .array and providers.array.items.len > 0);
+        var found_kitten = false;
+        for (providers.array.items) |provider| {
+            if (provider != .object) continue;
+            const provider_id_value = provider.object.get("id") orelse continue;
+            if (provider_id_value == .string and std.ascii.eqlIgnoreCase(provider_id_value.string, "kittentts")) {
+                found_kitten = true;
+                break;
+            }
+        }
+        try std.testing.expect(found_kitten);
+    }
+
+    const tts_help = try dispatch(allocator, "{\"id\":\"tg-tts-help-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-2\",\"sessionId\":\"tg-meta-2\",\"message\":\"/tts help\"}}");
+    defer allocator.free(tts_help);
+    const tts_help_type = try extractResultObjectStringField(allocator, tts_help, "metadata", "type");
+    defer allocator.free(tts_help_type);
+    try std.testing.expect(std.mem.eql(u8, tts_help_type, "tts.help"));
+
+    const tts_say = try dispatch(allocator, "{\"id\":\"tg-tts-say-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-2\",\"sessionId\":\"tg-meta-2\",\"message\":\"/tts say hello from telegram\"}}");
+    defer allocator.free(tts_say);
+    {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, tts_say, .{});
+        defer parsed.deinit();
+        const result = parsed.value.object.get("result") orelse return error.TestUnexpectedResult;
+        const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
+        const metadata_type = metadata.object.get("type") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(metadata_type == .string and std.mem.eql(u8, metadata_type.string, "tts.say"));
+        const audio_ref = metadata.object.get("audioRef") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(audio_ref == .string and audio_ref.string.len > 0);
+        const bytes = metadata.object.get("bytes") orelse return error.TestUnexpectedResult;
+        try std.testing.expect((bytes == .integer and bytes.integer > 0) or (bytes == .float and bytes.float > 0));
+        const output_format = metadata.object.get("outputFormat") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(output_format == .string and output_format.string.len > 0);
+    }
+}
+
 test "dispatch channels.telegram.webhook.receive routes update through runtime and skips delivery in dry run" {
     const allocator = std.testing.allocator;
     const frame =

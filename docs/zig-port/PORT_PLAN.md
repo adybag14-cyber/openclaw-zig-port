@@ -56,8 +56,33 @@ Full-stack replacement execution reference:
 
 ## Current Progress Snapshot
 
-- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `171/171`.
+- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `172/172`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram model/TTS envelope parity expanded:
+    - `src/channels/telegram_runtime.zig` now attaches a nested `metadata` object to `/model` and `/tts` command receipts while preserving Zig's stable top-level send fields.
+    - model command metadata now carries the Go-compatible selection envelope:
+      - `currentProvider`
+      - `currentModel`
+      - `modelRef`
+      - `requestedProvider`
+      - `requestedModel`
+      - `requested`
+      - `aliasUsed`
+      - `matchedCatalogModel`
+      - `customOverride`
+      - `providers`
+      - `availableModels`
+      - `models`
+    - TTS command metadata now carries Go-compatible provider and clip envelope fields:
+      - canonical provider IDs (`native`, `openai-voice`, `kittentts`, `elevenlabs`)
+      - provider catalog availability/reason state
+      - enable/disable status
+      - `tts.say` audio fields (`audioRef`, `bytes`, `outputFormat`, `realAudio`, `fallback`, `engine`, `audioSource`)
+    - `/tts` command compatibility improved:
+      - bare `/tts` now resolves to `status`
+      - `/tts say <text>` is now accepted as a first-class alias for `/tts speak <text>`
+    - dispatcher regression coverage added:
+      - `gateway.dispatcher.test.dispatch send model and tts commands expose go-compatible metadata envelope`
   - Phase 5 Telegram auth envelope parity expanded:
     - `src/channels/telegram_runtime.zig` now attaches a nested `metadata` object to `/auth` command receipts while preserving Zig's stable top-level receipt fields (`loginSessionId`, `loginCode`, `authStatus`, `reply`, etc.).
     - metadata now carries structured auth state for `help`, `providers`, `bridge`, `link|open|url`, `start`, `status`, `wait`, `guest`, `complete`, `cancel`, and invalid-action replies.
