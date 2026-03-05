@@ -45,6 +45,7 @@ Recommended sequence:
 - validate stage before artifact matrix
 - duplicate release-tag protection
 - preview artifact publishing with parity evidence
+- zig master freshness snapshot capture + publish (`zig-master-freshness.json`)
 - release trust evidence generation and publishing (`release-manifest.json`, `sbom.spdx.json`, `provenance.intoto.json`)
 - gateway-auth + websocket smoke checks in validate stage
 - npm package dry-run validation in release validate stage

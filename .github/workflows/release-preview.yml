@@ -61,6 +61,11 @@ jobs:
       - name: Zig version
         run: zig version
 
+      - name: Zig master freshness snapshot (Codeberg with mirror fallback)
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/zig-codeberg-master-check.ps1 -OutputJsonPath zig-master-freshness.json
+
       - name: Validate npm package (dry-run)
         working-directory: npm/openclaw-zig-rpc-client
         run: npm pack --dry-run
@@ -87,6 +92,14 @@ jobs:
           path: |
             parity-go-zig.json
             parity-go-zig.md
+
+      - name: Upload Zig freshness snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zig-master-freshness
+          path: zig-master-freshness.json
+          if-no-files-found: ignore
 
       - name: Build and test baseline
         run: |
@@ -302,6 +315,13 @@ jobs:
           name: parity-methods
           path: dist
 
+      - name: Download Zig freshness snapshot
+        uses: actions/download-artifact@v4
+        with:
+          name: zig-master-freshness
+          path: dist
+        continue-on-error: true
+
       - name: Build checksum manifest
         shell: bash
         run: |
@@ -360,6 +380,9 @@ jobs:
           fi
           if [ -f dist/provenance.intoto.json ]; then
             ASSETS+=(dist/provenance.intoto.json)
+          fi
+          if [ -f dist/zig-master-freshness.json ]; then
+            ASSETS+=(dist/zig-master-freshness.json)
           fi
 
           gh release create "${{ inputs.version }}" \

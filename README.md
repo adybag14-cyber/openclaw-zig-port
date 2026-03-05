@@ -376,11 +376,13 @@ Validate python package publishability:
 `release-preview` workflow (`.github/workflows/release-preview.yml`):
 
 - upfront validate job (build + test + parity)
+- zig master freshness snapshot + artifact publication (`zig-master-freshness.json`)
 - freestanding bare-metal smoke validation
 - full preview artifact matrix build and publish
 - includes bare-metal release artifact: `openclaw-zig-<version>-x86_64-freestanding-none.elf`
 - duplicate release tag guard
 - release asset parity evidence attachment
+- release asset zig freshness evidence attachment
 - release trust evidence attachment (`release-manifest.json`, `sbom.spdx.json`, `provenance.intoto.json`)
 - npm package dry-run validation gate in validate stage
 
