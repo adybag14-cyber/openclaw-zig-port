@@ -1,6 +1,7 @@
 # Phase Checklist
 
 Release lock: no release tag is allowed until all phases are complete and parity is measured at 100%.
+Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `124/124`.
 
 ## Phase 1 - Foundation
 - [x] Initialize Zig workspace layout (`gateway`, `protocol`, `bridge`, config/runtime slices)
@@ -473,3 +474,8 @@ Phase 6 progress notes:
     - `python/openclaw-zig-rpc-client` package scaffold + tests + CLI.
     - `scripts/python-pack-check.ps1` added to local/CI/release validation gates.
     - `.github/workflows/python-release.yml` added for manual publish with artifact attach + optional PyPI push.
+  - docs snapshot drift gate added:
+    - new script: `scripts/docs-status-check.ps1` validates README/docs status tokens against parity snapshot and latest release tag metadata.
+    - wired into workflows: `zig-ci` validate stage and `docs-pages` build stage.
+    - initial CI regression (`zig-ci` run `22698812368`) fixed by switching release-tag resolution from `gh` CLI to GitHub API; fix commit `bcc0e68`.
+    - post-fix verification runs: `zig-ci` `22698898719` success and `docs-pages` `22698975595` success.

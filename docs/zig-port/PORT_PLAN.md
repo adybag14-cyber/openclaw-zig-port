@@ -423,6 +423,12 @@ while maintaining parity-first validation and release gating.
     - implemented injected environ wiring (`telegram_runtime.setEnviron`) and switched env lookup to `std.process.Environ.getAlloc(process_environ, ...)`.
     - fix commit `e204e60`; validation run `22669040232` fully green across validate + cross-target matrix.
     - docs-pages re-verified by manual dispatch run `22669207780` with build+deploy success.
+  - Docs status drift gate slice (2026-03-05):
+    - new script: `scripts/docs-status-check.ps1` added to enforce README/docs status snapshot parity with gate artifacts (`parity-go-zig.json`) and latest release metadata.
+    - wired into `zig-ci` (`validate` stage after parity gate) and `docs-pages` (before `mkdocs build --strict`) to block stale status docs from shipping.
+    - first CI attempt surfaced environment-specific exit propagation from `gh` CLI release lookup (`zig-ci` run `22698812368`).
+    - fix commit `bcc0e68` switched release-tag lookup to GitHub REST API for deterministic CI behavior.
+    - verification runs after fix: `zig-ci` `22698898719` success and `docs-pages` `22698975595` success.
   - bare-metal wake queue reason-selective drain slice shipped:
     - new opcode: `command_wake_queue_pop_reason` for selective queue draining by wake reason (`timer`, `interrupt`, `manual`) with bounded count semantics (`count=0` -> pop one).
     - new export: `oc_wake_queue_reason_count(reason)` for reason-specific telemetry without mutating queue state.
