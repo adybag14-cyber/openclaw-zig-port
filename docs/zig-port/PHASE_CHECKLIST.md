@@ -201,6 +201,10 @@ Phase 6 progress notes:
   - `edge.wasm.execute` now parses requested host hooks and enforces capability mapping (`fs.read/write`, `memory.read/write`, `network.fetch`) for both marketplace and custom modules, returning deterministic sandbox denial on violations.
   - wasm execution responses now surface trust metadata for downstream observability (`trust.verified`, `trust.verificationMode`, `trust.sha256`).
 - Implemented persistent memory store (`src/memory/store.zig`) with session/channel history handlers: `sessions.history`, `chat.history`, and `doctor.memory.status`.
+- Memory retention recovery hardening slice:
+  - `memory/store.zig` now enforces `max_entries` during load/replay, so reopening with a lower retention cap trims oldest entries deterministically.
+  - Added high-turn multi-session persistence regression test:
+    - `memory.store.test.store load enforces max entries and keeps newest multi-session history`.
 - Optimization hardening for Phase 6 shipped:
   - `memory/store.zig`: batched front-removal helper applied to overflow + trim, and `removeSession` rewritten to linear compaction while preserving order.
   - `runtime/state.zig`: pending job queue now dequeues via head offset + amortized compaction (replaces repeated front removal shifts).

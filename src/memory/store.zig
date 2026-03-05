@@ -239,6 +239,9 @@ pub const Store = struct {
                 .created_at_ms = entry.createdAtMs,
             });
         }
+        if (self.entries.items.len > self.max_entries) {
+            _ = self.removeFrontEntries(self.entries.items.len - self.max_entries);
+        }
         if (parsed.value.nextId > self.next_id) self.next_id = parsed.value.nextId;
     }
 
@@ -359,4 +362,46 @@ test "store removeSession and trim keep ordering with linear compaction" {
     defer all_after_trim.deinit(allocator);
     try std.testing.expectEqual(@as(usize, 1), all_after_trim.count);
     try std.testing.expect(std.mem.eql(u8, all_after_trim.items[0].text, "c1"));
+}
+
+test "store load enforces max entries and keeps newest multi-session history" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const io = std.Io.Threaded.global_single_threaded.io();
+    const root = try tmp.dir.realPathFileAlloc(io, ".", allocator);
+    defer allocator.free(root);
+
+    {
+        var seeded = try Store.init(allocator, root, 200);
+        defer seeded.deinit();
+        var idx: usize = 0;
+        while (idx < 120) : (idx += 1) {
+            const session_id = switch (idx % 3) {
+                0 => "sA",
+                1 => "sB",
+                else => "sC",
+            };
+            const message = try std.fmt.allocPrint(allocator, "m-{d}", .{idx + 1});
+            defer allocator.free(message);
+            try seeded.append(session_id, "webchat", "send", "user", message);
+        }
+        try std.testing.expectEqual(@as(usize, 120), seeded.count());
+    }
+
+    var capped = try Store.init(allocator, root, 50);
+    defer capped.deinit();
+    try std.testing.expectEqual(@as(usize, 50), capped.count());
+
+    var all_history = try capped.historyBySession(allocator, "", 500);
+    defer all_history.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 50), all_history.count);
+    try std.testing.expect(std.mem.eql(u8, all_history.items[0].text, "m-71"));
+    try std.testing.expect(std.mem.eql(u8, all_history.items[all_history.count - 1].text, "m-120"));
+
+    var session_a = try capped.historyBySession(allocator, "sA", 100);
+    defer session_a.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 16), session_a.count);
+    try std.testing.expect(std.mem.eql(u8, session_a.items[0].text, "m-73"));
+    try std.testing.expect(std.mem.eql(u8, session_a.items[session_a.count - 1].text, "m-118"));
 }

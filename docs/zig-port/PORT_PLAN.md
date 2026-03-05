@@ -63,6 +63,9 @@ Full-stack replacement execution reference:
   - initial matrix published: `docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`.
   - FS1 restart determinism coverage expanded:
     - compat-state persistence test now asserts `sessionChannels` mappings and replayed timestamps survive restart, preserving omitted-channel send routing without memory-history dependence.
+  - FS3 memory replay retention coverage expanded:
+    - memory store load path now enforces configured retention cap (`max_entries`) during replay.
+    - high-turn multi-session regression confirms oldest-history trimming and newest-history recall invariants after reload.
 
 - Tracking and documentation refresh (2026-03-04):
   - Gateway hardening slice shipped:
