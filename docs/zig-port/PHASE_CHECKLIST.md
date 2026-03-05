@@ -150,6 +150,10 @@ Phase 5 enhancement notes:
 - Telegram channel-status config telemetry slice:
   - `channels.status` now includes Telegram runtime streaming/typing config fields (`liveStreaming`, `streamChunkChars`, `streamChunkDelayMs`, `typingIndicators`, `typingIntervalMs`) for parity with Go status surfaces.
   - regression coverage extended to assert these fields are always present in `channels.status` responses.
+- Channels status compatibility envelope slice:
+  - `channels.status` now also emits Go-style channel registry status fields (`count`, `items[]`) while preserving the Zig summary envelope (`channels`, `webLogin`, `status`).
+  - status items now include canonical channel entries (`webchat`, `cli`, `telegram`) with compatibility fields (`connected`, `running`, `defaultTarget`, `aliases`, `lastError`).
+  - regression coverage extended to assert `count/items` and Telegram item presence.
 - Completion semantics hardening:
   - Top-level `ok/status/message` for `browser.request` now reflect live completion outcome when completion execution is requested (`status=failed` on bridge failure).
   - Assistant text extraction now supports additional response shapes: `output_text`, `output[].content[]`, and array-based `choices[].message.content`.

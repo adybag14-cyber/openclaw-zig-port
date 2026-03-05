@@ -5720,7 +5720,46 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         const summary = (try getLoginManager()).status();
         const telegram_status = (try getTelegramRuntime()).status();
         const cfg = currentConfig();
+        const compat = try getCompatState();
+        const maybe_token = try resolveTelegramBotTokenForParamsAlloc(allocator, compat, null);
+        defer if (maybe_token) |value| allocator.free(value);
+        const telegram_connected = if (maybe_token) |value| value.len > 0 else false;
+        const channel_items = [_]struct {
+            name: []const u8,
+            connected: bool,
+            running: bool,
+            defaultTarget: []const u8,
+            aliases: []const []const u8,
+            lastError: []const u8,
+        }{
+            .{
+                .name = "webchat",
+                .connected = true,
+                .running = true,
+                .defaultTarget = "",
+                .aliases = &.{"web"},
+                .lastError = "",
+            },
+            .{
+                .name = "cli",
+                .connected = true,
+                .running = true,
+                .defaultTarget = "",
+                .aliases = &.{ "console", "terminal" },
+                .lastError = "",
+            },
+            .{
+                .name = "telegram",
+                .connected = telegram_connected,
+                .running = true,
+                .defaultTarget = "",
+                .aliases = &.{ "tg", "tele" },
+                .lastError = if (telegram_connected) "" else "telegram bot token is not configured",
+            },
+        };
         return protocol.encodeResult(allocator, req.id, .{
+            .count = channel_items.len,
+            .items = channel_items,
             .channels = .{
                 .telegram = .{
                     .enabled = telegram_status.enabled,
@@ -11480,6 +11519,9 @@ test "dispatch channels.status returns channel and web login summary" {
     const allocator = std.testing.allocator;
     const out = try dispatch(allocator, "{\"id\":\"channels-status\",\"method\":\"channels.status\",\"params\":{}}");
     defer allocator.free(out);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"count\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"items\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"name\":\"telegram\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"channels\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"webLogin\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"queueDepth\"") != null);

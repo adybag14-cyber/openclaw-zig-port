@@ -304,6 +304,10 @@ Full-stack replacement execution reference:
   - Added Telegram channel-status config telemetry parity:
     - `channels.status` now reports Telegram runtime stream/typing config state (`liveStreaming`, `streamChunkChars`, `streamChunkDelayMs`, `typingIndicators`, `typingIntervalMs`).
     - dispatcher status contract tests now assert these fields to prevent future drift.
+  - Added channels.status compatibility envelope parity:
+    - `channels.status` now emits Go-style channel driver status envelope (`count`, `items[]`) while preserving existing Zig summary fields.
+    - compatibility items currently include `webchat`, `cli`, and `telegram` with `connected/running/defaultTarget/aliases/lastError`.
+    - Telegram connectivity is now inferred from resolved bot-token availability for deterministic status behavior.
   - Dispatcher `channels.status` now includes telegram queue/target/auth telemetry
   - Added auth + reply-loop smokes (`scripts/web-login-smoke-check.ps1`, `scripts/telegram-reply-loop-smoke-check.ps1`)
   - Telegram reply-loop smoke now asserts `/auth link` parity guidance includes active code/session identifiers and completion command hints.
