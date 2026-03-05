@@ -56,8 +56,16 @@ Full-stack replacement execution reference:
 
 ## Current Progress Snapshot
 
-- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `174/174`.
+- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `176/176`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram model parser parity hardened:
+    - malformed provider-scoped Telegram model commands such as `/model /edge-experimental` no longer fall through the empty-provider alias path and silently select `chatgpt/edge-experimental`.
+    - Zig now mirrors Go-style behavior by rejecting provider-scoped syntax with an empty provider segment and returning the usage reply:
+      - `Provider is required. Usage: /model <provider>/<model> or /model <provider> <model>.`
+    - `send` metadata now reports `type=model.invalid` with `error=missing_provider` for this path.
+    - regression tests added:
+      - `channels.telegram_runtime.test.telegram runtime model command rejects missing provider in provider scoped syntax`
+      - `gateway.dispatcher.test.dispatch send model command rejects missing provider in provider-scoped syntax`
   - Phase 5 Telegram model catalog parity expanded:
     - `src/channels/telegram_runtime.zig` now accepts a dispatcher-fed model catalog resolver, so Telegram `/model` commands can consume the shared compat catalog instead of a Telegram-only static table.
     - `/model status`, `/model list`, `/model list <provider>`, provider-default selection, provider-scoped resolution, alias resolution, and invalid-model/provider replies now operate on the merged compat catalog surface already used by `models.list`.

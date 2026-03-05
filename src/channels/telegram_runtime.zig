@@ -1235,24 +1235,32 @@ pub const TelegramRuntime = struct {
             };
         }
 
-        var requested_provider: []const u8 = "";
-        var requested_model: []const u8 = "";
-        var requested_model_owned: ?[]u8 = null;
-        defer if (requested_model_owned) |owned| allocator.free(owned);
-        var provider_scoped = false;
-
-        if (std.mem.indexOfScalar(u8, action, '/')) |split| {
-            requested_provider = normalizeProvider(action[0..split]);
-            requested_model = normalizeModel(action[split + 1 ..]);
-            provider_scoped = requested_provider.len > 0;
-        } else if (args.len >= 2) {
-            requested_provider = normalizeProvider(action);
-            requested_model_owned = try std.mem.join(allocator, " ", args[1..]);
-            requested_model = normalizeModel(requested_model_owned.?);
-            provider_scoped = requested_provider.len > 0;
-        }
+        var parsed_provider_args = try parseProviderScopedModelArgs(allocator, args);
+        defer parsed_provider_args.deinit(allocator);
+        const requested_provider = parsed_provider_args.provider;
+        const requested_model = parsed_provider_args.model;
+        const provider_scoped = parsed_provider_args.provider_scoped;
 
         if (provider_scoped) {
+            if (requested_provider.len == 0) {
+                const metadata_json = try stringifyJsonAlloc(allocator, ModelCommandMetadata{
+                    .type = "model.invalid",
+                    .target = trimmed_target,
+                    .@"error" = "missing_provider",
+                });
+                return .{
+                    .is_command = true,
+                    .command_name = "model",
+                    .reply = try allocator.dupe(u8, "Provider is required. Usage: `/model <provider>/<model>` or `/model <provider> <model>`."),
+                    .provider = model_sel.provider,
+                    .model = model_sel.model,
+                    .login_session_id = "",
+                    .login_code = "",
+                    .auth_status = "invalid",
+                    .metadata_json = metadata_json,
+                };
+            }
+
             const catalog = try self.resolveModelCatalogAlloc(allocator, requested_provider);
             defer allocator.free(catalog);
             const providers = try listTelegramModelProvidersFromCatalogAlloc(allocator, catalog);
@@ -1330,14 +1338,12 @@ pub const TelegramRuntime = struct {
                 const selected = self.getTargetModel(target);
                 const model_ref = try modelRefForDisplayAlloc(allocator, selected.provider, selected.model);
                 defer allocator.free(model_ref);
-                const requested = try std.mem.join(allocator, " ", args);
-                defer allocator.free(requested);
                 const metadata_json = try stringifyJsonAlloc(allocator, ModelCommandMetadata{
                     .type = "model.set",
                     .target = trimmed_target,
                     .requestedProvider = requested_provider,
                     .requestedModel = requested_model,
-                    .requested = requested,
+                    .requested = parsed_provider_args.requested,
                     .aliasUsed = choice.alias_used,
                     .currentProvider = selected.provider,
                     .currentModel = selected.model,
@@ -1363,14 +1369,12 @@ pub const TelegramRuntime = struct {
             const selected = self.getTargetModel(target);
             const model_ref = try modelRefForDisplayAlloc(allocator, selected.provider, selected.model);
             defer allocator.free(model_ref);
-            const requested = try std.mem.join(allocator, " ", args);
-            defer allocator.free(requested);
             const metadata_json = try stringifyJsonAlloc(allocator, ModelCommandMetadata{
                 .type = "model.set",
                 .target = trimmed_target,
                 .requestedProvider = requested_provider,
                 .requestedModel = custom_model,
-                .requested = requested,
+                .requested = parsed_provider_args.requested,
                 .currentProvider = selected.provider,
                 .currentModel = selected.model,
                 .modelRef = model_ref,
@@ -3511,6 +3515,17 @@ const ResolvedTelegramModelChoice = struct {
     alias_used: ?[]const u8 = null,
 };
 
+const ParsedProviderScopedModelArgs = struct {
+    provider: []const u8,
+    model: []const u8,
+    requested: ?[]const u8 = null,
+    provider_scoped: bool,
+
+    fn deinit(self: *ParsedProviderScopedModelArgs, allocator: std.mem.Allocator) void {
+        if (self.requested) |requested| allocator.free(requested);
+    }
+};
+
 fn telegramModelCatalog() []const TelegramModelDescriptor {
     return &[_]TelegramModelDescriptor{
         .{ .id = "gpt-5.2", .provider = "chatgpt", .name = "GPT-5.2", .mode = "auto", .capability = "reasoning", .aliases = &.{ "auto", "default", "gpt5-2", "gpt-5-2" } },
@@ -3569,6 +3584,65 @@ fn normalizeModelAliasAlloc(allocator: std.mem.Allocator, model_raw: []const u8)
         };
     }
     return normalized;
+}
+
+fn parseProviderScopedModelArgs(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+) !ParsedProviderScopedModelArgs {
+    if (args.len == 0) {
+        return .{
+            .provider = "",
+            .model = "",
+            .requested = null,
+            .provider_scoped = false,
+        };
+    }
+
+    const first = std.mem.trim(u8, args[0], " \t\r\n");
+    if (first.len == 0) {
+        return .{
+            .provider = "",
+            .model = "",
+            .requested = null,
+            .provider_scoped = false,
+        };
+    }
+
+    if (std.mem.indexOfScalar(u8, first, '/')) |split| {
+        const provider_raw = std.mem.trim(u8, first[0..split], " \t\r\n");
+        const provider = if (provider_raw.len == 0) "" else normalizeProvider(provider_raw);
+        const requested = if (args.len > 1) try std.mem.join(allocator, " ", args) else null;
+        const joined_model = if (args.len > 1)
+            std.mem.trim(u8, requested.?[split + 1 ..], " \t\r\n")
+        else
+            normalizeModel(first[split + 1 ..]);
+        return .{
+            .provider = provider,
+            .model = joined_model,
+            .requested = requested,
+            .provider_scoped = true,
+        };
+    }
+
+    if (args.len >= 2) {
+        const provider = normalizeProvider(first);
+        const requested = try std.mem.join(allocator, " ", args);
+        const model = std.mem.trim(u8, requested[first.len..], " \t\r\n");
+        return .{
+            .provider = provider,
+            .model = model,
+            .requested = requested,
+            .provider_scoped = true,
+        };
+    }
+
+    return .{
+        .provider = "",
+        .model = "",
+        .requested = null,
+        .provider_scoped = false,
+    };
 }
 
 fn modelAliasMatches(allocator: std.mem.Allocator, candidate: []const u8, normalized_requested: []const u8) !bool {
@@ -4234,6 +4308,21 @@ test "telegram runtime model command uses injected catalog resolver" {
     defer alias_set.deinit(allocator);
     try std.testing.expect(std.mem.eql(u8, alias_set.provider, "deepseek"));
     try std.testing.expect(std.mem.eql(u8, alias_set.model, "deepseek/deepseek-reasoner"));
+}
+
+test "telegram runtime model command rejects missing provider in provider scoped syntax" {
+    var login = web_login.LoginManager.init(std.testing.allocator, 5 * 60 * 1000);
+    defer login.deinit();
+    var runtime = TelegramRuntime.init(std.testing.allocator, &login);
+    defer runtime.deinit();
+
+    const allocator = std.testing.allocator;
+    var invalid = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-model-missing-provider\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-model\",\"sessionId\":\"sess-invalid-model\",\"message\":\"/model /edge-experimental\"}}");
+    defer invalid.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, invalid.authStatus, "invalid"));
+    try std.testing.expect(std.mem.eql(u8, invalid.provider, "chatgpt"));
+    try std.testing.expect(std.mem.eql(u8, invalid.model, "gpt-5.2"));
+    try std.testing.expect(std.mem.indexOf(u8, invalid.reply, "Provider is required. Usage: `/model <provider>/<model>` or `/model <provider> <model>`.") != null);
 }
 
 test "telegram runtime tts command lifecycle" {

@@ -1,13 +1,20 @@
 # Phase Checklist
 
 Release lock: no release tag is allowed until all phases are complete and parity is measured at 100%.
-Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `174/174`.
+Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `176/176`.
 
 ## Full-Stack Replacement Track (FS0..FS7)
 - [x] FS0 - Scope lock + baseline freeze (`docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`, issue `#2`)
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram `/model` parser parity is now hardened for malformed provider-scoped input:
+      - malformed provider-scoped commands like `/model /edge-experimental` no longer normalize through the empty-provider alias path into `chatgpt/edge-experimental`.
+      - Zig now matches Go-style behavior by returning a deterministic invalid-command usage reply when provider-scoped syntax is present but the provider segment is empty.
+      - JSON-RPC `send` metadata for this case now reports `type=model.invalid` and `error=missing_provider`.
+      - regression coverage added:
+        - `channels.telegram_runtime.test.telegram runtime model command rejects missing provider in provider scoped syntax`
+        - `gateway.dispatcher.test.dispatch send model command rejects missing provider in provider-scoped syntax`
     - Telegram `/model` now consumes a shared compat-backed catalog resolver instead of a Telegram-only static catalog when dispatcher wiring is available:
       - `/model status`, `/model list`, `/model list <provider>`, provider-default selection, provider-scoped resolution, alias resolution, and invalid-model/provider messaging now see the same merged catalog state used by `models.list`.
       - dispatcher-fed dynamic compat models are now visible to Telegram model commands, including provider-default selection for providers that exist only in compat dynamic state.

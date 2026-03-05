@@ -13239,6 +13239,20 @@ test "dispatch send model command uses compat-backed dynamic catalog for telegra
     try std.testing.expect(std.mem.eql(u8, current_model, "deepseek/deepseek-chat"));
 }
 
+test "dispatch send model command rejects missing provider in provider-scoped syntax" {
+    const allocator = std.testing.allocator;
+    const out = try dispatch(allocator, "{\"id\":\"tg-model-missing-provider-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid\",\"sessionId\":\"tg-meta-invalid\",\"message\":\"/model /edge-experimental\"}}");
+    defer allocator.free(out);
+
+    const metadata_type = try extractResultObjectStringField(allocator, out, "metadata", "type");
+    defer allocator.free(metadata_type);
+    try std.testing.expect(std.mem.eql(u8, metadata_type, "model.invalid"));
+    const metadata_error = try extractResultObjectStringField(allocator, out, "metadata", "error");
+    defer allocator.free(metadata_error);
+    try std.testing.expect(std.mem.eql(u8, metadata_error, "missing_provider"));
+    try std.testing.expect(std.mem.indexOf(u8, out, "Provider is required. Usage: `/model <provider>/<model>` or `/model <provider> <model>`.") != null);
+}
+
 test "dispatch channels.telegram.webhook.receive routes update through runtime and skips delivery in dry run" {
     const allocator = std.testing.allocator;
     const frame =
