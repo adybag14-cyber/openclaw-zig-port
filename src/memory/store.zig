@@ -228,6 +228,7 @@ pub const Store = struct {
 
         var parsed = try std.json.parseFromSlice(PersistedState, self.allocator, raw, .{ .ignore_unknown_fields = true });
         defer parsed.deinit();
+        var max_loaded_id: u64 = 0;
         for (parsed.value.entries) |entry| {
             try self.entries.append(self.allocator, .{
                 .id = try self.allocator.dupe(u8, entry.id),
@@ -238,11 +239,15 @@ pub const Store = struct {
                 .text = try self.allocator.dupe(u8, entry.text),
                 .created_at_ms = entry.createdAtMs,
             });
+            const parsed_id = parseMessageNumericSuffix(entry.id);
+            if (parsed_id > max_loaded_id) max_loaded_id = parsed_id;
         }
         if (self.entries.items.len > self.max_entries) {
             _ = self.removeFrontEntries(self.entries.items.len - self.max_entries);
         }
+        if (max_loaded_id >= self.next_id) self.next_id = max_loaded_id +| 1;
         if (parsed.value.nextId > self.next_id) self.next_id = parsed.value.nextId;
+        if (self.next_id == 0) self.next_id = 1;
     }
 
     fn persist(self: *Store) !void {
@@ -301,6 +306,15 @@ fn isMemoryScheme(path: []const u8) bool {
 
 fn nowMs() i64 {
     return time_util.nowMs();
+}
+
+fn parseMessageNumericSuffix(id_raw: []const u8) u64 {
+    const id = std.mem.trim(u8, id_raw, " \t\r\n");
+    if (id.len <= 4) return 0;
+    if (!std.ascii.startsWithIgnoreCase(id, "msg-")) return 0;
+    const digits = id[4..];
+    if (digits.len == 0) return 0;
+    return std.fmt.parseInt(u64, digits, 10) catch 0;
 }
 
 test "store append/history and persistence roundtrip" {
@@ -404,4 +418,37 @@ test "store load enforces max entries and keeps newest multi-session history" {
     try std.testing.expectEqual(@as(usize, 16), session_a.count);
     try std.testing.expect(std.mem.eql(u8, session_a.items[0].text, "m-73"));
     try std.testing.expect(std.mem.eql(u8, session_a.items[session_a.count - 1].text, "m-118"));
+}
+
+test "store load derives next id from entries when persisted nextId is stale" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const io = std.Io.Threaded.global_single_threaded.io();
+    const root = try tmp.dir.realPathFileAlloc(io, ".", allocator);
+    defer allocator.free(root);
+
+    const state_path = try std.fs.path.join(allocator, &.{ root, "memory.json" });
+    defer allocator.free(state_path);
+
+    const seeded_json =
+        \\{"nextId":1,"entries":[
+        \\{"id":"msg-5","sessionId":"s-stale","channel":"webchat","method":"send","role":"user","text":"seed-1","createdAtMs":1700000000001},
+        \\{"id":"msg-6","sessionId":"s-stale","channel":"webchat","method":"send","role":"assistant","text":"seed-2","createdAtMs":1700000000002}
+        \\]}
+    ;
+    try std.Io.Dir.cwd().writeFile(io, .{
+        .sub_path = state_path,
+        .data = seeded_json,
+    });
+
+    var store = try Store.init(allocator, root, 32);
+    defer store.deinit();
+    try std.testing.expectEqual(@as(usize, 2), store.count());
+
+    try store.append("s-stale", "webchat", "send", "user", "post-load");
+    var history = try store.historyBySession(allocator, "s-stale", 10);
+    defer history.deinit(allocator);
+    try std.testing.expectEqual(@as(usize, 3), history.count);
+    try std.testing.expect(std.mem.eql(u8, history.items[history.count - 1].id, "msg-7"));
 }

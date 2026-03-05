@@ -66,6 +66,7 @@ Full-stack replacement execution reference:
   - FS3 memory replay retention coverage expanded:
     - memory store load path now enforces configured retention cap (`max_entries`) during replay.
     - high-turn multi-session regression confirms oldest-history trimming and newest-history recall invariants after reload.
+    - replay load now derives `next_id` from restored message IDs, preventing ID collisions when persisted `nextId` metadata is stale.
 
 - Tracking and documentation refresh (2026-03-04):
   - Gateway hardening slice shipped:
