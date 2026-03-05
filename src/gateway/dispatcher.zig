@@ -13072,6 +13072,37 @@ test "dispatch send auth commands expose go-compatible metadata envelope" {
     }
 }
 
+test "dispatch send invalid auth parser replies preserve metadata envelope" {
+    const allocator = std.testing.allocator;
+
+    const bad_status = try dispatch(allocator, "{\"id\":\"tg-auth-bad-status-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth status qwen mobile --bogus\"}}");
+    defer allocator.free(bad_status);
+    const bad_status_type = try extractResultObjectStringField(allocator, bad_status, "metadata", "type");
+    defer allocator.free(bad_status_type);
+    try std.testing.expect(std.mem.eql(u8, bad_status_type, "auth.status"));
+    const bad_status_error = try extractResultObjectStringField(allocator, bad_status, "metadata", "error");
+    defer allocator.free(bad_status_error);
+    try std.testing.expect(std.mem.eql(u8, bad_status_error, "unknown_status_option"));
+
+    const bad_wait = try dispatch(allocator, "{\"id\":\"tg-auth-bad-wait-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth wait qwen mobile --timeout 0\"}}");
+    defer allocator.free(bad_wait);
+    const bad_wait_type = try extractResultObjectStringField(allocator, bad_wait, "metadata", "type");
+    defer allocator.free(bad_wait_type);
+    try std.testing.expect(std.mem.eql(u8, bad_wait_type, "auth.wait"));
+    const bad_wait_error = try extractResultObjectStringField(allocator, bad_wait, "metadata", "error");
+    defer allocator.free(bad_wait_error);
+    try std.testing.expect(std.mem.eql(u8, bad_wait_error, "invalid_timeout"));
+
+    const bad_complete = try dispatch(allocator, "{\"id\":\"tg-auth-bad-complete-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth complete qwen code123 missing extra tail\"}}");
+    defer allocator.free(bad_complete);
+    const bad_complete_type = try extractResultObjectStringField(allocator, bad_complete, "metadata", "type");
+    defer allocator.free(bad_complete_type);
+    try std.testing.expect(std.mem.eql(u8, bad_complete_type, "auth.complete"));
+    const bad_complete_error = try extractResultObjectStringField(allocator, bad_complete, "metadata", "error");
+    defer allocator.free(bad_complete_error);
+    try std.testing.expect(std.mem.eql(u8, bad_complete_error, "invalid_complete_args"));
+}
+
 test "dispatch send model and tts commands expose go-compatible metadata envelope" {
     const allocator = std.testing.allocator;
 

@@ -56,8 +56,21 @@ Full-stack replacement execution reference:
 
 ## Current Progress Snapshot
 
-- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `178/178`.
+- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `179/179`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram invalid-auth metadata parity hardened:
+    - invalid `/auth status`, `/auth wait`, and `/auth complete` parser branches now preserve the nested `metadata` envelope instead of returning bare invalid replies.
+    - structured auth failure telemetry is now preserved for:
+      - missing `session` arguments
+      - missing/invalid timeout values
+      - unknown `--*` status/wait flags
+      - malformed trailing arguments
+      - missing completion codes
+    - `/auth help` now explicitly advertises the short-form completion syntax:
+      - `/auth complete <callback_url_or_code> [session_id]`
+    - regression tests added/expanded:
+      - `channels.telegram_runtime.test.telegram runtime auth parser rejects invalid options and trailing args`
+      - `gateway.dispatcher.test.dispatch send invalid auth parser replies preserve metadata envelope`
   - Phase 5 Telegram `/set api key` parity expanded:
     - Zig Telegram runtime now supports Go-style `/set api key <provider> <key>` operator flows instead of treating `/set` as an unknown command.
     - `/set` now writes provider API keys through the existing secret-resolution path used by browser/direct-provider auth:

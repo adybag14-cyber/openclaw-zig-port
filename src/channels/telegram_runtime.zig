@@ -1098,6 +1098,47 @@ pub const TelegramRuntime = struct {
         };
     }
 
+    fn authInvalidOutcome(
+        self: *TelegramRuntime,
+        allocator: std.mem.Allocator,
+        trimmed_target: []const u8,
+        action_type: []const u8,
+        provider: []const u8,
+        account_raw: []const u8,
+        reply: []u8,
+        error_code: []const u8,
+        auth_status: []const u8,
+        login_session_id: []const u8,
+        timeout_seconds: ?u32,
+    ) !SendOutcome {
+        _ = self;
+        const account_norm = normalizeAccount(account_raw);
+        const scope = try authScopeAlloc(allocator, provider, account_norm);
+        defer allocator.free(scope);
+        const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+            .type = action_type,
+            .target = trimmed_target,
+            .provider = provider,
+            .account = account_norm,
+            .scope = scope,
+            .status = auth_status,
+            .@"error" = error_code,
+            .loginSessionId = if (std.mem.trim(u8, login_session_id, " \t\r\n").len > 0) login_session_id else null,
+            .timeoutSeconds = timeout_seconds,
+        });
+        return .{
+            .is_command = true,
+            .command_name = "auth",
+            .reply = reply,
+            .provider = provider,
+            .model = defaultModelForProvider(provider),
+            .login_session_id = login_session_id,
+            .login_code = "",
+            .auth_status = auth_status,
+            .metadata_json = metadata_json,
+        };
+    }
+
     fn handleSetCommand(self: *TelegramRuntime, allocator: std.mem.Allocator, target: []const u8, args: []const []const u8) !SendOutcome {
         const model_sel = self.getTargetModel(target);
         const trimmed_target = std.mem.trim(u8, target, " \t\r\n");
@@ -1950,7 +1991,7 @@ pub const TelegramRuntime = struct {
             return .{
                 .is_command = true,
                 .command_name = "auth",
-                .reply = try allocator.dupe(u8, "Usage: /auth [start|status|wait|link|open|url|complete|guest|cancel|providers|bridge]\nExamples:\n/auth start qwen mobile --force\n/auth url qwen mobile\n/auth wait qwen mobile --timeout 45\n/auth complete qwen <callback_url_or_code> <session_id> mobile"),
+                .reply = try allocator.dupe(u8, "Usage: /auth [start|status|wait|link|open|url|complete|guest|cancel|providers|bridge]\nExamples:\n/auth start qwen mobile --force\n/auth url qwen mobile\n/auth wait qwen mobile --timeout 45\n/auth complete qwen <callback_url_or_code> <session_id> mobile\n/auth complete <callback_url_or_code> [session_id]"),
                 .provider = default_provider,
                 .model = default_model,
                 .login_session_id = "",
@@ -2306,16 +2347,7 @@ pub const TelegramRuntime = struct {
                 if (token.len == 0) continue;
                 if (is_wait and std.ascii.eqlIgnoreCase(token, "session")) {
                     if (index + 1 >= rest.len) {
-                        return .{
-                            .is_command = true,
-                            .command_name = "auth",
-                            .reply = try allocator.dupe(u8, usage),
-                            .provider = provider,
-                            .model = defaultModelForProvider(provider),
-                            .login_session_id = "",
-                            .login_code = "",
-                            .auth_status = "invalid",
-                        };
+                        return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, usage), "invalid_wait_args", "invalid", "", timeout_secs);
                     }
                     session_token = std.mem.trim(u8, rest[index + 1], " \t\r\n");
                     index += 1;
@@ -2323,40 +2355,13 @@ pub const TelegramRuntime = struct {
                 }
                 if (std.ascii.eqlIgnoreCase(token, "--timeout")) {
                     if (index + 1 >= rest.len) {
-                        return .{
-                            .is_command = true,
-                            .command_name = "auth",
-                            .reply = try allocator.dupe(u8, "Missing timeout value. Example: `/auth wait --timeout 90`"),
-                            .provider = provider,
-                            .model = defaultModelForProvider(provider),
-                            .login_session_id = "",
-                            .login_code = "",
-                            .auth_status = "invalid",
-                        };
+                        return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Missing timeout value. Example: `/auth wait --timeout 90`"), "missing_timeout", "invalid", "", timeout_secs);
                     }
                     const parsed_timeout = std.fmt.parseInt(u32, std.mem.trim(u8, rest[index + 1], " \t\r\n"), 10) catch {
-                        return .{
-                            .is_command = true,
-                            .command_name = "auth",
-                            .reply = try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."),
-                            .provider = provider,
-                            .model = defaultModelForProvider(provider),
-                            .login_session_id = "",
-                            .login_code = "",
-                            .auth_status = "invalid",
-                        };
+                        return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."), "invalid_timeout", "invalid", "", timeout_secs);
                     };
                     if (parsed_timeout < 1 or parsed_timeout > 900) {
-                        return .{
-                            .is_command = true,
-                            .command_name = "auth",
-                            .reply = try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."),
-                            .provider = provider,
-                            .model = defaultModelForProvider(provider),
-                            .login_session_id = "",
-                            .login_code = "",
-                            .auth_status = "invalid",
-                        };
+                        return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."), "invalid_timeout", "invalid", "", timeout_secs);
                     }
                     timeout_secs = parsed_timeout;
                     explicit_timeout = true;
@@ -2366,28 +2371,10 @@ pub const TelegramRuntime = struct {
                 if (is_wait and std.ascii.startsWithIgnoreCase(token, "--timeout=")) {
                     const raw_timeout = std.mem.trim(u8, token["--timeout=".len..], " \t\r\n");
                     const parsed_timeout = std.fmt.parseInt(u32, raw_timeout, 10) catch {
-                        return .{
-                            .is_command = true,
-                            .command_name = "auth",
-                            .reply = try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."),
-                            .provider = provider,
-                            .model = defaultModelForProvider(provider),
-                            .login_session_id = "",
-                            .login_code = "",
-                            .auth_status = "invalid",
-                        };
+                        return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."), "invalid_timeout", "invalid", "", timeout_secs);
                     };
                     if (parsed_timeout < 1 or parsed_timeout > 900) {
-                        return .{
-                            .is_command = true,
-                            .command_name = "auth",
-                            .reply = try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."),
-                            .provider = provider,
-                            .model = defaultModelForProvider(provider),
-                            .login_session_id = "",
-                            .login_code = "",
-                            .auth_status = "invalid",
-                        };
+                        return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."), "invalid_timeout", "invalid", "", timeout_secs);
                     }
                     timeout_secs = parsed_timeout;
                     explicit_timeout = true;
@@ -2398,30 +2385,12 @@ pub const TelegramRuntime = struct {
                         try std.fmt.allocPrint(allocator, "Unknown wait option `{s}`.", .{token})
                     else
                         try std.fmt.allocPrint(allocator, "Unknown status option `{s}`.", .{token});
-                    return .{
-                        .is_command = true,
-                        .command_name = "auth",
-                        .reply = unknown_reply,
-                        .provider = provider,
-                        .model = defaultModelForProvider(provider),
-                        .login_session_id = "",
-                        .login_code = "",
-                        .auth_status = "invalid",
-                    };
+                    return self.authInvalidOutcome(allocator, trimmed_target, if (is_wait) "auth.wait" else "auth.status", provider, account, unknown_reply, if (is_wait) "unknown_wait_option" else "unknown_status_option", "invalid", "", if (is_wait) timeout_secs else null);
                 }
                 if (is_wait and !explicit_timeout and session_token.len == 0 and (std.mem.eql(u8, normalizeAccount(account), "default") or index == rest.len - 1)) {
                     if (std.fmt.parseInt(u32, token, 10)) |parsed_timeout| {
                         if (parsed_timeout < 1 or parsed_timeout > 900) {
-                            return .{
-                                .is_command = true,
-                                .command_name = "auth",
-                                .reply = try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."),
-                                .provider = provider,
-                                .model = defaultModelForProvider(provider),
-                                .login_session_id = "",
-                                .login_code = "",
-                                .auth_status = "invalid",
-                            };
+                            return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."), "invalid_timeout", "invalid", "", timeout_secs);
                         }
                         timeout_secs = parsed_timeout;
                         continue;
@@ -2435,16 +2404,7 @@ pub const TelegramRuntime = struct {
                     account = token;
                     continue;
                 }
-                return .{
-                    .is_command = true,
-                    .command_name = "auth",
-                    .reply = try allocator.dupe(u8, usage),
-                    .provider = provider,
-                    .model = defaultModelForProvider(provider),
-                    .login_session_id = "",
-                    .login_code = "",
-                    .auth_status = "invalid",
-                };
+                return self.authInvalidOutcome(allocator, trimmed_target, if (is_wait) "auth.wait" else "auth.status", provider, account, try allocator.dupe(u8, usage), if (is_wait) "invalid_wait_args" else "invalid_status_args", "invalid", "", if (is_wait) timeout_secs else null);
             }
 
             const bound_session = try self.getAuthBinding(allocator, target, provider, account);
@@ -2805,16 +2765,7 @@ pub const TelegramRuntime = struct {
                 const token = std.mem.trim(u8, rest[index], " \t\r\n");
                 if (token.len == 0) continue;
                 if (std.ascii.startsWithIgnoreCase(token, "--")) {
-                    return .{
-                        .is_command = true,
-                        .command_name = "auth",
-                        .reply = try std.fmt.allocPrint(allocator, "Unknown complete option `{s}`.", .{token}),
-                        .provider = provider,
-                        .model = defaultModelForProvider(provider),
-                        .login_session_id = "",
-                        .login_code = "",
-                        .auth_status = "invalid",
-                    };
+                    return self.authInvalidOutcome(allocator, trimmed_target, "auth.complete", provider, account, try std.fmt.allocPrint(allocator, "Unknown complete option `{s}`.", .{token}), "invalid_complete_args", "invalid", "", null);
                 }
                 if (code_token.len == 0) {
                     code_token = token;
@@ -2828,29 +2779,11 @@ pub const TelegramRuntime = struct {
                     account = token;
                     continue;
                 }
-                return .{
-                    .is_command = true,
-                    .command_name = "auth",
-                    .reply = try allocator.dupe(u8, "Usage: /auth complete <provider> <callback_url_or_code> [session_id] [account]"),
-                    .provider = provider,
-                    .model = defaultModelForProvider(provider),
-                    .login_session_id = "",
-                    .login_code = "",
-                    .auth_status = "invalid",
-                };
+                return self.authInvalidOutcome(allocator, trimmed_target, "auth.complete", provider, account, try allocator.dupe(u8, "Usage: /auth complete <provider> <callback_url_or_code> [session_id] [account]"), "invalid_complete_args", "invalid", "", null);
             }
 
             if (code_token.len == 0) {
-                return .{
-                    .is_command = true,
-                    .command_name = "auth",
-                    .reply = try allocator.dupe(u8, "Missing code. Usage: /auth complete <provider> <callback_url_or_code> [session_id] [account]"),
-                    .provider = default_provider,
-                    .model = default_model,
-                    .login_session_id = "",
-                    .login_code = "",
-                    .auth_status = "pending",
-                };
+                return self.authInvalidOutcome(allocator, trimmed_target, "auth.complete", provider, account, try allocator.dupe(u8, "Missing code. Usage: /auth complete <provider> <callback_url_or_code> [session_id] [account]"), "missing_code", "pending", "", null);
             }
 
             if (!isKnownProvider(rest[0])) {
@@ -5172,11 +5105,17 @@ test "telegram runtime auth parser rejects invalid options and trailing args" {
     defer bad_status.deinit(allocator);
     try std.testing.expect(std.mem.eql(u8, bad_status.authStatus, "invalid"));
     try std.testing.expect(std.mem.indexOf(u8, bad_status.reply, "Unknown status option `--bogus`") != null);
+    try std.testing.expect(bad_status.metadataJson != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_status.metadataJson.?, "\"type\":\"auth.status\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_status.metadataJson.?, "\"error\":\"unknown_status_option\"") != null);
 
     var bad_wait = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-bad-wait-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth wait qwen mobile --timeout 0\"}}");
     defer bad_wait.deinit(allocator);
     try std.testing.expect(std.mem.eql(u8, bad_wait.authStatus, "invalid"));
     try std.testing.expect(std.mem.indexOf(u8, bad_wait.reply, "Timeout must be an integer between 1 and 900 seconds.") != null);
+    try std.testing.expect(bad_wait.metadataJson != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_wait.metadataJson.?, "\"type\":\"auth.wait\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_wait.metadataJson.?, "\"error\":\"invalid_timeout\"") != null);
 
     const bad_complete_frame = try std.fmt.allocPrint(
         allocator,
@@ -5188,6 +5127,9 @@ test "telegram runtime auth parser rejects invalid options and trailing args" {
     defer bad_complete.deinit(allocator);
     try std.testing.expect(std.mem.eql(u8, bad_complete.authStatus, "invalid"));
     try std.testing.expect(std.mem.indexOf(u8, bad_complete.reply, "Usage: /auth complete") != null);
+    try std.testing.expect(bad_complete.metadataJson != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_complete.metadataJson.?, "\"type\":\"auth.complete\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_complete.metadataJson.?, "\"error\":\"invalid_complete_args\"") != null);
 
     var bad_cancel = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-bad-cancel-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth cancel qwen mobile --bogus\"}}");
     defer bad_cancel.deinit(allocator);
