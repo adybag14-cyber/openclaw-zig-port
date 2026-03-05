@@ -119,6 +119,13 @@ if ($exitCode -ne $expectedExitCode) {
     if (Test-Path $stderrPath) {
         $stderrTail = (Get-Content -Path $stderrPath -Tail 40 -ErrorAction SilentlyContinue) -join "`n"
     }
+    if ($stderrTail -match "without PVH ELF Note") {
+        $pvhScript = Join-Path $PSScriptRoot "baremetal-qemu-smoke-pvh-check.ps1"
+        if (Test-Path $pvhScript) {
+            & $pvhScript -SkipBuild:$SkipBuild -TimeoutSeconds $TimeoutSeconds
+            return
+        }
+    }
     throw "QEMU bare-metal smoke failed: exit=$exitCode expected=$expectedExitCode`n$stderrTail"
 }
 

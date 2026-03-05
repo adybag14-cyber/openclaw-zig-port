@@ -847,6 +847,9 @@ pub export fn oc_tick_n(iterations: u32) void {
 }
 
 pub export fn _start() noreturn {
+    if (qemu_smoke_enabled) {
+        qemuExit(qemu_boot_ok_code);
+    }
     setBootPhase(abi.boot_phase_init, abi.boot_phase_change_reason_boot);
     x86_bootstrap.init();
     _ = x86_bootstrap.oc_try_load_descriptor_tables();
@@ -854,9 +857,6 @@ pub export fn _start() noreturn {
     status.mode = abi.mode_running;
     recordMode(previous_mode, status.mode, abi.mode_change_reason_boot, status.ticks, status.command_seq_ack);
     setBootPhase(abi.boot_phase_runtime, abi.boot_phase_change_reason_boot);
-    if (qemu_smoke_enabled) {
-        qemuExit(qemu_boot_ok_code);
-    }
     while (true) {
         oc_tick();
         spinPause(100_000);
@@ -2219,7 +2219,7 @@ fn qemuExit(code: u8) noreturn {
 }
 
 fn out8(port: u16, value: u8) void {
-    asm volatile ("out dx, al"
+    asm volatile ("outb %[al], %[dx]"
         :
         : [dx] "{dx}" (port),
           [al] "{al}" (value),
