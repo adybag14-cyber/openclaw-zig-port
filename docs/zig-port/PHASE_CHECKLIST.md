@@ -90,6 +90,10 @@ Phase 5 enhancement notes:
 - Added browser request provider split (`engine` vs target `provider`) so `qwen|zai|inception` route through Lightpanda correctly.
 - Added guest bypass metadata and action hints (`stay_logged_out`) to browser completion and OAuth provider catalog payloads.
 - Added Telegram `/auth guest <provider>` flow plus callback URL provider inference and shared callback code extraction (`query/fragment/path`) via `web_login.extractAuthCode`.
+- Added free guest-chat alias normalization for provider-name variants:
+  - `qwen-chat-free|qwen-free` -> `qwen`
+  - `glm-5-chat-free|glm-chat-free` -> `zai`
+  - `mercury-2-chat-free|mercury-chat-free` -> `inception`
 - Expanded auth provider breadth in Telegram + OAuth catalog: `minimax`, `kimi`, and `zhipuai` (with alias normalization + default model coverage).
 - Added account-scoped Telegram auth bindings with force replacement semantics:
   - `/auth start <provider> [account] [--force]`

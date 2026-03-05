@@ -244,6 +244,7 @@ Full-stack replacement execution reference:
     - Qwen/GLM-5/Mercury-2 now expose explicit guest bypass metadata (`stay_logged_out`) through `browser.request` and OAuth provider catalog responses.
     - `/auth guest <provider>` command path added for Telegram, plus callback-URL provider inference and robust callback code extraction (`query/fragment/path`) shared with web login.
     - Browser request parsing now separates `engine` (`lightpanda`) from target `provider` so `qwen|zai|inception` no longer fail as unsupported engine values.
+    - free guest-chat provider aliases now normalize consistently across bridge, login manager, and Telegram runtime (`qwen-chat-free`, `glm-5-chat-free`, `mercury-2-chat-free` families).
   - Expanded auth provider breadth:
     - Added `minimax`, `kimi`, and `zhipuai` entries to OAuth provider catalog contracts.
     - Extended Telegram provider alias + default-model normalization to cover those providers end-to-end.
