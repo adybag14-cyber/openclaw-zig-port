@@ -11535,14 +11535,14 @@ test "dispatch covers every registered method name" {
 
 test "dispatch rejects playwright provider for browser.request" {
     const allocator = std.testing.allocator;
-    const out = try dispatch(allocator, "{\"id\":\"2\",\"method\":\"browser.request\",\"params\":{\"provider\":\"playwright\"}}");
+    const out = try dispatch(allocator, "{\"id\":\"2\",\"method\":\"browser.request\",\"params\":{\"provider\":\"playwright\",\"sessionId\":\"br-playwright\"}}");
     defer allocator.free(out);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"code\":-32602") != null);
 }
 
 test "dispatch accepts lightpanda provider" {
     const allocator = std.testing.allocator;
-    const out = try dispatch(allocator, "{\"id\":\"3\",\"method\":\"browser.request\",\"params\":{\"provider\":\"lightpanda\"}}");
+    const out = try dispatch(allocator, "{\"id\":\"3\",\"method\":\"browser.request\",\"params\":{\"provider\":\"lightpanda\",\"sessionId\":\"br-lightpanda\"}}");
     defer allocator.free(out);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"engine\":\"lightpanda\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"probe\"") != null);
@@ -11552,7 +11552,7 @@ test "dispatch accepts lightpanda provider" {
 
 test "dispatch browser.request accepts qwen target provider with guest metadata" {
     const allocator = std.testing.allocator;
-    const out = try dispatch(allocator, "{\"id\":\"3b\",\"method\":\"browser.request\",\"params\":{\"provider\":\"qwen\",\"model\":\"qwen-max\"}}");
+    const out = try dispatch(allocator, "{\"id\":\"3b\",\"method\":\"browser.request\",\"params\":{\"provider\":\"qwen\",\"model\":\"qwen-max\",\"sessionId\":\"br-qwen\"}}");
     defer allocator.free(out);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"engine\":\"lightpanda\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"provider\":\"qwen\"") != null);
@@ -11564,7 +11564,7 @@ test "dispatch browser.request supports endpoint override telemetry" {
     const allocator = std.testing.allocator;
     const out = try dispatch(
         allocator,
-        "{\"id\":\"3c\",\"method\":\"browser.request\",\"params\":{\"provider\":\"chatgpt\",\"endpoint\":\"http://127.0.0.1:1\",\"requestTimeoutMs\":3210}}",
+        "{\"id\":\"3c\",\"method\":\"browser.request\",\"params\":{\"provider\":\"chatgpt\",\"endpoint\":\"http://127.0.0.1:1\",\"requestTimeoutMs\":3210,\"sessionId\":\"br-endpoint\"}}",
     );
     defer allocator.free(out);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"endpoint\":\"http://127.0.0.1:1\"") != null);
@@ -11576,7 +11576,7 @@ test "dispatch browser.request executes completion payload path with failure tel
     const allocator = std.testing.allocator;
     const out = try dispatch(
         allocator,
-        "{\"id\":\"3d\",\"method\":\"browser.request\",\"params\":{\"provider\":\"chatgpt\",\"endpoint\":\"http://127.0.0.1:1\",\"prompt\":\"hello from zig\"}}",
+        "{\"id\":\"3d\",\"method\":\"browser.request\",\"params\":{\"provider\":\"chatgpt\",\"endpoint\":\"http://127.0.0.1:1\",\"prompt\":\"hello from zig\",\"sessionId\":\"br-completion\",\"includeMemoryContext\":false}}",
     );
     defer allocator.free(out);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"ok\":false") != null);
@@ -11593,7 +11593,7 @@ test "dispatch browser.request metadata-only direct provider reports explicit ap
     const allocator = std.testing.allocator;
     const out = try dispatch(
         allocator,
-        "{\"id\":\"3e\",\"method\":\"browser.request\",\"params\":{\"provider\":\"chatgpt\",\"directProvider\":true,\"stream\":true,\"apiKey\":\"testkey-chatgpt\"}}",
+        "{\"id\":\"3e\",\"method\":\"browser.request\",\"params\":{\"provider\":\"chatgpt\",\"directProvider\":true,\"stream\":true,\"apiKey\":\"testkey-chatgpt\",\"sessionId\":\"br-direct-chatgpt\"}}",
     );
     defer allocator.free(out);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"executionPath\":\"metadata-only\"") != null);
