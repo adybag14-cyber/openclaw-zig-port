@@ -70,6 +70,21 @@ long_mode_entry:
     movw %ax, %fs
     movw %ax, %gs
 
+    # Enable SSE/XMM before entering Zig runtime.
+    # Clear CR0.EM/CR0.TS and set CR0.MP/CR0.NE.
+    movq %cr0, %rax
+    andq $~(0x00000004), %rax
+    andq $~(0x00000008), %rax
+    orq  $0x00000022, %rax
+    movq %rax, %cr0
+
+    # Set CR4.OSFXSR and CR4.OSXMMEXCPT for SSE instructions.
+    movq %cr4, %rax
+    orq  $0x00000600, %rax
+    movq %rax, %cr4
+
+    fninit
+
     leaq stack64_top(%rip), %rsp
     andq $-16, %rsp
 

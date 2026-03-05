@@ -402,6 +402,9 @@ while maintaining parity-first validation and release gating.
   - bare-metal QEMU boot smoke expansion shipped:
     - new optional build flag: `-Dbaremetal-qemu-smoke=true` to trigger debug-exit path for deterministic boot-smoke checks.
     - new script: `scripts/baremetal-qemu-smoke-check.ps1` (uses `isa-debug-exit`; auto-skips when QEMU is unavailable).
+  - bare-metal QEMU runtime progression validation shipped:
+    - new script: `scripts/baremetal-qemu-runtime-oc-tick-check.ps1` validates `_start` and runtime tick-loop progression (`oc_tick`) on non-smoke PVH artifacts via QEMU+GDB.
+    - PVH long-mode entry now enables SSE/XMM (`CR0`/`CR4` + `fninit`) before Zig runtime entry to prevent early bootstrap traps in `mem.zeroes` paths.
   - bare-metal mailbox interrupt-control expansion shipped:
     - new command opcodes wired in runtime: `command_trigger_interrupt`, `command_reset_interrupt_counters`, `command_reinit_descriptor_tables`.
     - reset path now clears runtime interrupt counters via bootstrap export to keep command-driven diagnostics deterministic.

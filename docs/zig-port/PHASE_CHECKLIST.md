@@ -322,6 +322,8 @@ Phase 6 progress notes:
     - `oc_descriptor_tables_ready`, `oc_interrupt_stub`, `oc_trigger_interrupt`
     - `oc_interrupt_count`, `oc_last_interrupt_vector`
 - [x] `scripts/baremetal-qemu-smoke-check.ps1` added for optional boot smoke with debug-exit validation (`zig build baremetal -Dbaremetal-qemu-smoke=true`); script auto-skips when QEMU is unavailable.
+- [x] `scripts/baremetal-qemu-runtime-oc-tick-check.ps1` added for non-smoke runtime boot progression validation (`_start` -> `oc_tick`) under QEMU+GDB with PVH artifact build.
+- [x] PVH boot shim now initializes SSE/XMM before entering Zig `_start` (`CR0.EM/TS clear`, `CR0.MP/NE set`, `CR4.OSFXSR/OSXMMEXCPT set`, `fninit`) to prevent early runtime traps in bootstrap `mem.zeroes` paths.
 - [x] Bare-metal command mailbox depth expanded with interrupt control opcodes:
   - `command_trigger_interrupt`
   - `command_reset_interrupt_counters`
