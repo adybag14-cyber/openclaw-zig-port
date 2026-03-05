@@ -56,7 +56,7 @@ Full-stack replacement execution reference:
 
 ## Current Progress Snapshot
 
-- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `156/156`.
+- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `157/157`.
 - Full-stack replacement kickoff (2026-03-05):
   - master tracking issue refreshed with FS0..FS7 execution gates.
   - FS0 execution issue opened (`#2`) and linked from master issue.
@@ -107,6 +107,13 @@ Full-stack replacement execution reference:
       - direct-provider missing-key paths now report deterministic `auth` telemetry for debugging parity with Telegram auth flows.
       - regression test added:
         - `gateway.dispatcher.test.dispatch browser.request metadata-only direct provider reports explicit api-key telemetry`.
+  - Phase 5 direct-provider parity expanded:
+    - `bridge/provider_http.zig` now supports `gemini` through Google's official OpenAI-compatible chat completions endpoint (`https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`).
+    - direct-provider default model resolution now aligns Gemini requests to the existing catalog default (`gemini-2.5-pro`) when callers omit `model`.
+    - `browser.request` now reports `authMode:"api_key"` whenever `directProvider=true`, including metadata-only responses, so the surface no longer advertises browser-session auth semantics on API-key execution paths.
+    - regression tests added:
+      - `bridge.provider_http.test.direct provider gemini requires api key and reports gemini endpoint`
+      - `gateway.dispatcher.test.dispatch browser.request direct provider gemini missing key uses api-key auth semantics`
 
 - Tracking and documentation refresh (2026-03-04):
   - Gateway hardening slice shipped:

@@ -7985,7 +7985,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                 .executionPath = execution_path,
                 .directProvider = direct_provider_requested,
                 .stream = browser_params.completion_stream,
-                .authMode = completion.authMode,
+                .authMode = if (direct_provider_requested) "api_key" else completion.authMode,
                 .guestBypassSupported = completion.guestBypassSupported,
                 .popupBypassAction = completion.popupBypassAction,
                 .message = completion_message,
@@ -8038,7 +8038,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             .executionPath = "metadata-only",
             .directProvider = browser_params.direct_provider,
             .stream = browser_params.completion_stream,
-            .authMode = completion.authMode,
+            .authMode = if (browser_params.direct_provider) "api_key" else completion.authMode,
             .guestBypassSupported = completion.guestBypassSupported,
             .popupBypassAction = completion.popupBypassAction,
             .message = completion.message,
@@ -11600,6 +11600,7 @@ test "dispatch browser.request metadata-only direct provider reports explicit ap
     try std.testing.expect(std.mem.indexOf(u8, out, "\"directProvider\":true") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"stream\":true") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"provider\":\"chatgpt\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"authMode\":\"api_key\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"auth\":{\"loginSessionId\":null,\"apiKeyUsed\":true,\"apiKeySource\":\"explicit\"}") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"bridgeCompletion\":{\"requested\":false") != null);
 }
@@ -11614,6 +11615,7 @@ test "dispatch browser.request metadata-only direct provider reports explicit ap
     try std.testing.expect(std.mem.indexOf(u8, out, "\"executionPath\":\"metadata-only\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"directProvider\":true") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"provider\":\"openrouter\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"authMode\":\"api_key\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"auth\":{\"loginSessionId\":null,\"apiKeyUsed\":true,\"apiKeySource\":\"explicit\"}") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"bridgeCompletion\":{\"requested\":false") != null);
 }
@@ -11628,8 +11630,26 @@ test "dispatch browser.request metadata-only direct provider reports explicit ap
     try std.testing.expect(std.mem.indexOf(u8, out, "\"executionPath\":\"metadata-only\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"directProvider\":true") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"provider\":\"opencode\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"authMode\":\"api_key\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"auth\":{\"loginSessionId\":null,\"apiKeyUsed\":true,\"apiKeySource\":\"explicit\"}") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"bridgeCompletion\":{\"requested\":false") != null);
+}
+
+test "dispatch browser.request direct provider gemini missing key uses api-key auth semantics" {
+    const allocator = std.testing.allocator;
+    const out = try dispatch(
+        allocator,
+        "{\"id\":\"3h\",\"method\":\"browser.request\",\"params\":{\"provider\":\"gemini\",\"directProvider\":true,\"prompt\":\"hello from zig\",\"sessionId\":\"br-direct-gemini\"}}",
+    );
+    defer allocator.free(out);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"executionPath\":\"direct-provider\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"directProvider\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"provider\":\"gemini\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"authMode\":\"api_key\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"auth\":{\"loginSessionId\":null,\"apiKeyUsed\":false,\"apiKeySource\":\"none\"}") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"bridgeCompletion\":{\"requested\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"requestUrl\":\"https://generativelanguage.googleapis.com/v1beta/openai/chat/completions\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "missing API key for direct provider request") != null);
 }
 
 test "dispatch browser.request injects memory and tool context when session history exists" {
