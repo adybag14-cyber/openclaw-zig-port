@@ -116,6 +116,13 @@ pub const ToolRuntime = struct {
         self.exec_allowlist = runtime_cfg.exec_allowlist;
     }
 
+    pub fn configureStatePersistence(
+        self: *ToolRuntime,
+        state_root: []const u8,
+    ) !void {
+        try self.runtime_state.configurePersistence(state_root);
+    }
+
     pub fn execRunFromFrame(
         self: *ToolRuntime,
         allocator: std.mem.Allocator,

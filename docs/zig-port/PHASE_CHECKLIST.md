@@ -4,7 +4,7 @@ Release lock: no release tag is allowed until all phases are complete and parity
 Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `127/127`.
 
 ## Full-Stack Replacement Track (FS0..FS7)
-- [ ] FS0 - Scope lock + baseline freeze (`docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`, issue `#2`)
+- [x] FS0 - Scope lock + baseline freeze (`docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`, issue `#2`)
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
 - [ ] FS3 - Memory/knowledge depth
@@ -39,6 +39,12 @@ Historical note: milestone validation counts below are preserved as captured at 
 - [x] Implement initial tool runtime actions (`exec`, file read/write)
 - [x] Add queue/worker scaffolding for async jobs
 - [x] Add integration tests for request lifecycle
+
+FS1 runtime/core consolidation slice (active):
+- [x] Runtime state persistence + restart replay path added (`src/runtime/state.zig`):
+  - persists session snapshots and pending job queue to `runtime-state.json` under configured `state_path`.
+  - restores persisted sessions/queue on runtime bootstrap.
+  - regression test added: `runtime state persistence roundtrip restores session and pending queue`.
 
 ## Phase 4 - Security + Diagnostics
 - [x] Port core guard flow (prompt/tool policy checks)

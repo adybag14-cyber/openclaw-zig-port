@@ -7665,6 +7665,9 @@ fn getRuntime() *tool_runtime.ToolRuntime {
     if (runtime_instance == null) {
         var runtime = tool_runtime.ToolRuntime.init(std.heap.page_allocator, getRuntimeIo());
         runtime.configureRuntimePolicy(currentConfig().runtime);
+        runtime.configureStatePersistence(currentConfig().state_path) catch |err| {
+            std.log.warn("runtime persistence init failed: {s}", .{@errorName(err)});
+        };
         runtime_instance = runtime;
     }
     return &runtime_instance.?;

@@ -138,6 +138,10 @@ Full-stack replacement execution reference:
     - new runtime tests:
       - `tool runtime file sandbox blocks traversal and out-of-root writes`
       - `tool runtime exec policy denies non-allowlisted commands`
+  - FS1 runtime recovery slice shipped:
+    - runtime state persistence/replay added for tool runtime sessions + pending queue (`src/runtime/state.zig`).
+    - persisted at `<state_path>/runtime-state.json` (or explicit JSON path override) and restored during runtime bootstrap.
+    - regression test added: `runtime state persistence roundtrip restores session and pending queue`.
   - Bare-metal diagnostics depth expansion shipped:
     - new boot diagnostics ABI contract (`BaremetalBootDiagnostics`) with exported pointer + stack snapshot helper (`oc_boot_diag_ptr`, `oc_boot_diag_capture_stack`)
     - new mailbox opcodes wired in runtime: `command_set_boot_phase`, `command_reset_boot_diagnostics`, `command_capture_stack_pointer`
