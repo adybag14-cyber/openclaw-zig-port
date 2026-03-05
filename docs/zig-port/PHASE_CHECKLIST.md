@@ -1,13 +1,23 @@
 # Phase Checklist
 
 Release lock: no release tag is allowed until all phases are complete and parity is measured at 100%.
-Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `166/166`.
+Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `168/168`.
 
 ## Full-Stack Replacement Track (FS0..FS7)
 - [x] FS0 - Scope lock + baseline freeze (`docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`, issue `#2`)
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram `/auth` parity depth now covers a dynamic provider catalog and live bridge/session telemetry:
+      - `/auth providers` now renders provider catalog metadata dynamically instead of a static string, including auth mode, browser-session support, API-key posture, guest-bypass support, default model, verification URL, popup action, and alias lists.
+      - `/auth bridge <provider>` now performs a live Lightpanda probe against the configured endpoint and reports endpoint/probe URL/HTTP status/latency together with web-login session summary counts.
+      - `/auth url <provider> [account] [session_id]` is now supported as a first-class alias for phone-friendly auth flows, surfacing URL, code, session, scope, and guest-mode hints.
+      - `/auth cancel|logout` now revokes the underlying login session (status becomes `rejected`) instead of only clearing the target binding.
+      - `/auth start` now reuses only pending scoped sessions, aligning restart semantics more closely with Go parity.
+      - regression coverage added:
+        - `channels.telegram_runtime.test.telegram runtime auth bridge and providers help include guest guidance`
+        - `channels.telegram_runtime.test.telegram runtime auth url alias surfaces session details`
+        - `channels.telegram_runtime.test.telegram runtime auth cancel revokes scoped session`
     - Telegram `/model` command depth now covers provider-aware status, `list`, `list <provider>`, `next`, provider-default selection, slash-scoped catalog IDs, alias resolution (`pro`, `thinking`, provider aliases), and custom override handling while preserving the existing send/poll transport contract.
     - provider-scoped catalog lookups now recognize provider-trimmed slash-scoped model IDs such as `openrouter/qwen/qwen3-coder:free`, and custom override selections now round-trip safely without transient-buffer corruption in command results.
     - `auth.oauth.providers` now exposes a richer provider catalog aligned with Go parity, including `codex` and `opencode`, browser-session support flags, alias sets, verification URLs, and provider-scoped filtering with invalid-param rejection.

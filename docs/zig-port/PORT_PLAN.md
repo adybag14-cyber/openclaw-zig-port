@@ -56,8 +56,19 @@ Full-stack replacement execution reference:
 
 ## Current Progress Snapshot
 
-- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `166/166`.
+- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `168/168`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram auth-depth parity expanded:
+    - `/auth providers` now renders a live provider catalog instead of a hardcoded string:
+      - per-provider auth mode, browser-session support, API-key posture, guest bypass support, default model, verification URL, popup action, and aliases are now surfaced directly from Zig runtime state/profile data.
+    - `/auth bridge <provider>` now performs a live Lightpanda endpoint probe and reports bridge endpoint, probe URL, HTTP status, latency, and web-login session summary counts.
+    - `/auth url <provider> [account] [session_id]` now exists as a first-class alias for phone-friendly auth flows, returning URL, code, session, scope, and guest-mode hints.
+    - `/auth cancel|logout` now revokes the underlying login session through `web_login.logout`, so explicit status checks against the cancelled `loginSessionId` return `rejected`.
+    - `/auth start` now only reuses existing pending sessions; already-authorized scoped sessions are no longer silently reused without `--force`.
+    - regression tests added:
+      - `channels.telegram_runtime.test.telegram runtime auth bridge and providers help include guest guidance`
+      - `channels.telegram_runtime.test.telegram runtime auth url alias surfaces session details`
+      - `channels.telegram_runtime.test.telegram runtime auth cancel revokes scoped session`
   - master tracking issue refreshed with FS0..FS7 execution gates.
   - FS0 execution issue opened (`#2`) and linked from master issue.
   - initial matrix published: `docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`.

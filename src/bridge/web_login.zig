@@ -231,6 +231,17 @@ pub const LoginManager = struct {
         return session.view();
     }
 
+    pub fn logout(self: *LoginManager, session_id: []const u8) bool {
+        const index = self.findIndex(session_id) orelse return false;
+        var session = &self.sessions.items[index];
+        self.applyExpiry(session);
+        if (session.status == .expired or session.status == .rejected) return false;
+        session.status = .rejected;
+        session.authorized_at_ms = null;
+        if (self.persistent) self.persist() catch {};
+        return true;
+    }
+
     pub fn status(self: *LoginManager) SummaryView {
         var summary: SummaryView = .{
             .total = self.sessions.items.len,

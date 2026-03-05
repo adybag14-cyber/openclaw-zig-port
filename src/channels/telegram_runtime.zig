@@ -288,6 +288,7 @@ pub const TelegramRuntime = struct {
 
         const outcome = try self.handleSendMessage(allocator, target, session_id, std.mem.trim(u8, message, " \t\r\n"));
         defer allocator.free(outcome.reply);
+        defer if (outcome.owned_login_session_id) |login_session_id| allocator.free(login_session_id);
         defer if (outcome.audio_base64) |audio| allocator.free(audio);
         return self.makeSendResult(allocator, channel, target, session_id, outcome);
     }
@@ -352,6 +353,7 @@ pub const TelegramRuntime = struct {
         provider: []const u8,
         model: []const u8,
         login_session_id: []const u8,
+        owned_login_session_id: ?[]u8 = null,
         login_code: []const u8,
         auth_status: []const u8,
         bridge_used: bool = false,
@@ -1311,7 +1313,7 @@ pub const TelegramRuntime = struct {
             return .{
                 .is_command = true,
                 .command_name = "auth",
-                .reply = try allocator.dupe(u8, "Usage: /auth [start|status|wait|link|open|complete|guest|cancel|providers|bridge]\nExamples:\n/auth start qwen mobile --force\n/auth link qwen mobile\n/auth wait qwen mobile --timeout 45\n/auth complete qwen <callback_url_or_code> <session_id> mobile"),
+                .reply = try allocator.dupe(u8, "Usage: /auth [start|status|wait|link|open|url|complete|guest|cancel|providers|bridge]\nExamples:\n/auth start qwen mobile --force\n/auth url qwen mobile\n/auth wait qwen mobile --timeout 45\n/auth complete qwen <callback_url_or_code> <session_id> mobile"),
                 .provider = default_provider,
                 .model = default_model,
                 .login_session_id = "",
@@ -1320,24 +1322,10 @@ pub const TelegramRuntime = struct {
             };
         }
         if (std.ascii.eqlIgnoreCase(action, "providers")) {
-            const provider_lines =
-                \\chatgpt (mode:device_code, guest:false)
-                \\codex (mode:device_code, guest:false)
-                \\claude (mode:device_code, guest:false)
-                \\gemini (mode:device_code, guest:false)
-                \\openrouter (mode:api_key_or_oauth, guest:false)
-                \\opencode (mode:api_key_or_oauth, guest:false)
-                \\qwen (mode:guest_or_code, guest:true, popup:Stay logged out)
-                \\zai/glm-5 (mode:guest_or_code, guest:true, popup:Stay logged out)
-                \\inception/mercury-2 (mode:guest_or_code, guest:true, popup:Stay logged out)
-                \\minimax (mode:device_code, guest:false)
-                \\kimi (mode:device_code, guest:false)
-                \\zhipuai (mode:device_code, guest:false)
-            ;
             return .{
                 .is_command = true,
                 .command_name = "auth",
-                .reply = try std.fmt.allocPrint(allocator, "Auth providers:\n{s}", .{provider_lines}),
+                .reply = try self.formatAuthProvidersMessage(allocator),
                 .provider = default_provider,
                 .model = default_model,
                 .login_session_id = "",
@@ -1347,11 +1335,10 @@ pub const TelegramRuntime = struct {
         }
         if (std.ascii.eqlIgnoreCase(action, "bridge")) {
             const bridge_provider = if (rest.len > 0 and isKnownProvider(rest[0])) normalizeProvider(rest[0]) else default_provider;
-            const guidance = providerBridgeGuidance(bridge_provider);
             return .{
                 .is_command = true,
                 .command_name = "auth",
-                .reply = try std.fmt.allocPrint(allocator, "{s}", .{guidance}),
+                .reply = try self.formatBridgeStatusMessage(allocator, bridge_provider),
                 .provider = bridge_provider,
                 .model = defaultModelForProvider(bridge_provider),
                 .login_session_id = "",
@@ -1359,7 +1346,7 @@ pub const TelegramRuntime = struct {
                 .auth_status = "ok",
             };
         }
-        if (std.ascii.eqlIgnoreCase(action, "link") or std.ascii.eqlIgnoreCase(action, "open")) {
+        if (std.ascii.eqlIgnoreCase(action, "link") or std.ascii.eqlIgnoreCase(action, "open") or std.ascii.eqlIgnoreCase(action, "url")) {
             var provider = default_provider;
             var account: []const u8 = "default";
             var session_token: []const u8 = "";
@@ -1384,10 +1371,14 @@ pub const TelegramRuntime = struct {
             const bound_session = try self.getAuthBinding(allocator, target, provider, account);
             const login_session = if (std.mem.trim(u8, session_token, " \t\r\n").len > 0) session_token else bound_session;
             if (std.mem.trim(u8, login_session, " \t\r\n").len == 0) {
+                const missing_reply = if (std.ascii.eqlIgnoreCase(action, "url"))
+                    try std.fmt.allocPrint(allocator, "No active auth flow for `{s}` account `{s}`. Start with `/auth start {s} {s}`.", .{ provider, normalizeAccount(account), provider, normalizeAccount(account) })
+                else
+                    try std.fmt.allocPrint(allocator, "No active auth session for `{s}` account `{s}`. Start with `/auth start {s} {s}`.", .{ provider, normalizeAccount(account), provider, normalizeAccount(account) });
                 return .{
                     .is_command = true,
                     .command_name = "auth",
-                    .reply = try std.fmt.allocPrint(allocator, "No active auth session for `{s}` account `{s}`. Start with `/auth start {s} {s}`.", .{ provider, normalizeAccount(account), provider, normalizeAccount(account) }),
+                    .reply = missing_reply,
                     .provider = provider,
                     .model = defaultModelForProvider(provider),
                     .login_session_id = "",
@@ -1408,7 +1399,9 @@ pub const TelegramRuntime = struct {
             };
             const account_norm = normalizeAccount(account);
             const account_is_default = std.mem.eql(u8, account_norm, "default");
-            const reply = if (view.guestBypassSupported)
+            const reply = if (std.ascii.eqlIgnoreCase(action, "url"))
+                try self.formatAuthUrlMessage(allocator, provider, account_norm, view)
+            else if (view.guestBypassSupported)
                 (if (account_is_default)
                     try std.fmt.allocPrint(
                         allocator,
@@ -1493,7 +1486,7 @@ pub const TelegramRuntime = struct {
             const existing_session = try self.getAuthBinding(allocator, target, provider, account);
             if (!force and existing_session.len > 0) {
                 if (self.login_manager.get(existing_session)) |existing| {
-                    if (std.ascii.eqlIgnoreCase(existing.status, "pending") or std.ascii.eqlIgnoreCase(existing.status, "authorized")) {
+                    if (std.ascii.eqlIgnoreCase(existing.status, "pending")) {
                         const account_norm = normalizeAccount(account);
                         const account_is_default = std.mem.eql(u8, account_norm, "default");
                         const reply = if (existing.guestBypassSupported)
@@ -1868,20 +1861,46 @@ pub const TelegramRuntime = struct {
         if (std.ascii.eqlIgnoreCase(action, "cancel") or std.ascii.eqlIgnoreCase(action, "logout")) {
             var provider = default_provider;
             var account: []const u8 = "default";
+            var session_token: []const u8 = "";
             var index: usize = 0;
             if (rest.len > 0 and isKnownProvider(rest[0])) {
                 provider = normalizeProvider(rest[0]);
                 index = 1;
             }
-            if (index < rest.len) account = rest[index];
+            while (index < rest.len) : (index += 1) {
+                const token = std.mem.trim(u8, rest[index], " \t\r\n");
+                if (token.len == 0) continue;
+                if (session_token.len == 0 and looksLikeLoginSessionID(token)) {
+                    session_token = token;
+                    continue;
+                }
+                if (std.mem.eql(u8, normalizeAccount(account), "default")) {
+                    account = token;
+                }
+            }
+            const bound_session = try self.getAuthBinding(allocator, target, provider, account);
+            const login_session = if (std.mem.trim(u8, session_token, " \t\r\n").len > 0) session_token else bound_session;
+            const owned_login_session_id = if (std.mem.trim(u8, login_session, " \t\r\n").len > 0)
+                try allocator.dupe(u8, login_session)
+            else
+                null;
+            const login_session_label = if (owned_login_session_id) |value| value else login_session;
+            const logout_session = login_session_label;
+            if (std.mem.trim(u8, logout_session, " \t\r\n").len > 0) {
+                _ = self.login_manager.logout(logout_session);
+            }
             try self.clearAuthBinding(allocator, target, provider, account);
             return .{
                 .is_command = true,
                 .command_name = "auth",
-                .reply = try std.fmt.allocPrint(allocator, "Auth binding cleared for `{s}` account `{s}`.", .{ provider, normalizeAccount(account) }),
+                .reply = if (std.mem.trim(u8, login_session_label, " \t\r\n").len > 0)
+                    try std.fmt.allocPrint(allocator, "Auth session `{s}` cancelled for `{s}` account `{s}`.", .{ login_session_label, provider, normalizeAccount(account) })
+                else
+                    try std.fmt.allocPrint(allocator, "Auth binding cleared for `{s}` account `{s}`.", .{ provider, normalizeAccount(account) }),
                 .provider = provider,
                 .model = defaultModelForProvider(provider),
-                .login_session_id = "",
+                .login_session_id = if (owned_login_session_id) |value| value else "",
+                .owned_login_session_id = owned_login_session_id,
                 .login_code = "",
                 .auth_status = "cancelled",
             };
@@ -1897,6 +1916,117 @@ pub const TelegramRuntime = struct {
             .login_code = "",
             .auth_status = "invalid",
         };
+    }
+
+    fn formatAuthProvidersMessage(self: *TelegramRuntime, allocator: std.mem.Allocator) ![]u8 {
+        var out = std.ArrayList(u8).empty;
+        defer out.deinit(allocator);
+
+        try out.appendSlice(allocator, "Auth providers:");
+        for (telegramAuthProviderCatalog()) |entry| {
+            const profile = web_login.providerProfile(entry.id);
+            const api_key_configured = providerApiKeyConfigured(self, allocator, entry.id);
+            const line = try std.fmt.allocPrint(
+                allocator,
+                "\n- {s} [{s}] mode:{s}, browser:{s}, apiKey:{s}, guest:{s}, model:{s}, verification:{s}",
+                .{
+                    entry.id,
+                    entry.display_name,
+                    profile.auth_mode,
+                    if (entry.supports_browser_session) "true" else "false",
+                    if (api_key_configured) "true" else "false",
+                    if (profile.guest_bypass_supported) "true" else "false",
+                    profile.default_model,
+                    profile.verification_uri,
+                },
+            );
+            defer allocator.free(line);
+            try out.appendSlice(allocator, line);
+
+            if (profile.guest_bypass_supported and profile.popup_bypass_action.len > 0 and !std.ascii.eqlIgnoreCase(profile.popup_bypass_action, "not_applicable")) {
+                const popup_line = try std.fmt.allocPrint(allocator, ", popup:{s}", .{profile.popup_bypass_action});
+                defer allocator.free(popup_line);
+                try out.appendSlice(allocator, popup_line);
+            }
+            if (entry.aliases.len > 0) {
+                try out.appendSlice(allocator, ", aliases:");
+                for (entry.aliases, 0..) |alias, idx| {
+                    if (idx > 0) try out.appendSlice(allocator, "|");
+                    try out.appendSlice(allocator, alias);
+                }
+            }
+        }
+
+        return out.toOwnedSlice(allocator);
+    }
+
+    fn formatBridgeStatusMessage(self: *TelegramRuntime, allocator: std.mem.Allocator, provider_raw: []const u8) ![]u8 {
+        const provider = normalizeProvider(provider_raw);
+        const guidance = providerBridgeGuidance(provider);
+        const summary = self.login_manager.status();
+        const probe = try lightpanda.probeEndpoint(allocator, self.bridge_endpoint);
+        defer {
+            allocator.free(probe.endpoint);
+            allocator.free(probe.probeUrl);
+            allocator.free(probe.errorText);
+        }
+
+        return std.fmt.allocPrint(
+            allocator,
+            "Browser bridge: lightpanda\nProvider: {s}\nProbe: {s}\nEndpoint: {s}\nProbe URL: {s}\nHTTP: {d}\nLatency: {d}ms\nSessions: total={d}, pending={d}, authorized={d}, expired={d}, rejected={d}\n{s}",
+            .{
+                provider,
+                if (probe.ok) "ok" else "error",
+                probe.endpoint,
+                probe.probeUrl,
+                probe.statusCode,
+                probe.latencyMs,
+                summary.total,
+                summary.pending,
+                summary.authorized,
+                summary.expired,
+                summary.rejected,
+                guidance,
+            },
+        );
+    }
+
+    fn formatAuthUrlMessage(
+        self: *TelegramRuntime,
+        allocator: std.mem.Allocator,
+        provider_raw: []const u8,
+        account_norm: []const u8,
+        view: web_login.SessionView,
+    ) ![]u8 {
+        _ = self;
+        const provider = normalizeProvider(provider_raw);
+        const account_is_default = std.mem.eql(u8, account_norm, "default");
+        if (view.guestBypassSupported) {
+            if (account_is_default) {
+                return std.fmt.allocPrint(
+                    allocator,
+                    "Auth URL: {s}\nCode: `{s}`\nStatus: `{s}`\nSession: `{s}`\nGuest mode: supported (`{s}`)\nHint: {s}\nThen run `/auth guest {s}` or `/auth complete {s} <callback_url_or_code> {s}`.",
+                    .{ view.verificationUriComplete, view.code, view.status, view.loginSessionId, view.popupBypassAction, view.guestBypassHint, provider, provider, view.loginSessionId },
+                );
+            }
+            return std.fmt.allocPrint(
+                allocator,
+                "Auth URL: {s}\nCode: `{s}`\nStatus: `{s}`\nSession: `{s}`\nScope: `{s}/{s}`\nGuest mode: supported (`{s}`)\nHint: {s}\nThen run `/auth guest {s} {s}` or `/auth complete {s} <callback_url_or_code> {s} {s}`.",
+                .{ view.verificationUriComplete, view.code, view.status, view.loginSessionId, provider, account_norm, view.popupBypassAction, view.guestBypassHint, provider, account_norm, provider, view.loginSessionId, account_norm },
+            );
+        }
+        if (account_is_default) {
+            return std.fmt.allocPrint(
+                allocator,
+                "Auth URL: {s}\nCode: `{s}`\nStatus: `{s}`\nSession: `{s}`\nThen run `/auth complete {s} <callback_url_or_code> {s}`.",
+                .{ view.verificationUriComplete, view.code, view.status, view.loginSessionId, provider, view.loginSessionId },
+            );
+        }
+        return std.fmt.allocPrint(
+            allocator,
+            "Auth URL: {s}\nCode: `{s}`\nStatus: `{s}`\nSession: `{s}`\nScope: `{s}/{s}`\nThen run `/auth complete {s} <callback_url_or_code> {s} {s}`.",
+            .{ view.verificationUriComplete, view.code, view.status, view.loginSessionId, provider, account_norm, provider, view.loginSessionId, account_norm },
+        );
     }
 
     fn enqueue(self: *TelegramRuntime, target: []const u8, session_id: []const u8, role: []const u8, kind: []const u8, message: []const u8) !void {
@@ -2287,6 +2417,13 @@ const TelegramModelDescriptor = struct {
     aliases: []const []const u8 = &.{},
 };
 
+const TelegramAuthProviderDescriptor = struct {
+    id: []const u8,
+    display_name: []const u8,
+    aliases: []const []const u8,
+    supports_browser_session: bool,
+};
+
 const TelegramModelChoice = struct {
     id: []const u8,
     provider: []const u8,
@@ -2319,6 +2456,23 @@ fn telegramModelCatalog() []const TelegramModelDescriptor {
         .{ .id = "minimax-m2.5", .provider = "minimax", .name = "MiniMax M2.5", .mode = "auto", .capability = "general", .aliases = &.{ "minimax", "m2.5" } },
         .{ .id = "kimi-k2.5", .provider = "kimi", .name = "Kimi K2.5", .mode = "auto", .capability = "reasoning", .aliases = &.{ "kimi", "kimi-code" } },
         .{ .id = "glm-4.6", .provider = "zhipuai", .name = "GLM-4.6", .mode = "auto", .capability = "reasoning", .aliases = &.{ "zhipu", "zhipu-glm", "bigmodel-glm" } },
+    };
+}
+
+fn telegramAuthProviderCatalog() []const TelegramAuthProviderDescriptor {
+    return &[_]TelegramAuthProviderDescriptor{
+        .{ .id = "chatgpt", .display_name = "ChatGPT", .aliases = &.{ "openai", "openai-chatgpt", "chatgpt-web", "chatgpt.com" }, .supports_browser_session = true },
+        .{ .id = "codex", .display_name = "Codex", .aliases = &.{ "openai-codex", "codex-cli", "openai-codex-cli" }, .supports_browser_session = true },
+        .{ .id = "claude", .display_name = "Claude", .aliases = &.{ "anthropic", "claude-cli", "claude-code", "claude-desktop" }, .supports_browser_session = false },
+        .{ .id = "gemini", .display_name = "Gemini", .aliases = &.{ "google", "google-gemini", "google-gemini-cli", "gemini-cli" }, .supports_browser_session = false },
+        .{ .id = "qwen", .display_name = "Qwen", .aliases = &.{ "qwen-portal", "qwen-cli", "qwen-chat", "qwen35", "qwen3.5", "qwen-3.5", "copaw", "qwen-copaw", "qwen-agent" }, .supports_browser_session = true },
+        .{ .id = "minimax", .display_name = "MiniMax", .aliases = &.{ "minimax-portal", "minimax-cli" }, .supports_browser_session = false },
+        .{ .id = "kimi", .display_name = "Kimi", .aliases = &.{ "kimi-code", "kimi-coding", "kimi-for-coding" }, .supports_browser_session = true },
+        .{ .id = "opencode", .display_name = "OpenCode", .aliases = &.{ "opencode-zen", "opencode-ai", "opencode-go", "opencode_free", "opencodefree" }, .supports_browser_session = false },
+        .{ .id = "zhipuai", .display_name = "Zhipu AI", .aliases = &.{ "zhipu", "zhipu-ai", "bigmodel", "bigmodel-cn", "zhipuai-coding", "zhipu-coding" }, .supports_browser_session = false },
+        .{ .id = "openrouter", .display_name = "OpenRouter", .aliases = &.{"openrouter-ai"}, .supports_browser_session = true },
+        .{ .id = "zai", .display_name = "Z.ai", .aliases = &.{ "z.ai", "z-ai", "zaiweb", "zai-web", "glm", "glm5", "glm-5" }, .supports_browser_session = true },
+        .{ .id = "inception", .display_name = "Inception", .aliases = &.{ "inception-labs", "inceptionlabs", "mercury", "mercury2", "mercury-2" }, .supports_browser_session = true },
     };
 }
 
@@ -3217,14 +3371,28 @@ test "telegram runtime auth bridge and providers help include guest guidance" {
     var runtime = TelegramRuntime.init(std.testing.allocator, &login);
     defer runtime.deinit();
 
+    var resolver_ctx: TestProviderApiKeyContext = .{
+        .provider = "qwen",
+        .api_key = "qwen-secret",
+    };
+    runtime.setProviderApiKeyResolver(@ptrCast(&resolver_ctx), testProviderApiKeyResolver);
+    std.testing.allocator.free(runtime.bridge_endpoint);
+    runtime.bridge_endpoint = try std.testing.allocator.dupe(u8, "http://127.0.0.1:1");
+
     const allocator = std.testing.allocator;
+    var start = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-auth-start-bridge\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-help\",\"sessionId\":\"sess-help\",\"message\":\"/auth start qwen mobile\"}}");
+    defer start.deinit(allocator);
+
     var providers = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-auth-providers\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-help\",\"sessionId\":\"sess-help\",\"message\":\"/auth providers\"}}");
     defer providers.deinit(allocator);
-    try std.testing.expect(std.mem.indexOf(u8, providers.reply, "qwen (mode:guest_or_code") != null);
-    try std.testing.expect(std.mem.indexOf(u8, providers.reply, "zai/glm-5") != null);
+    try std.testing.expect(std.mem.indexOf(u8, providers.reply, "qwen [Qwen] mode:guest_or_code") != null);
+    try std.testing.expect(std.mem.indexOf(u8, providers.reply, "apiKey:true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, providers.reply, "aliases:z.ai|z-ai|zaiweb|zai-web|glm|glm5|glm-5") != null);
 
     var bridge_qwen = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-auth-bridge-qwen\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-help\",\"sessionId\":\"sess-help\",\"message\":\"/auth bridge qwen\"}}");
     defer bridge_qwen.deinit(allocator);
+    try std.testing.expect(std.mem.indexOf(u8, bridge_qwen.reply, "Probe: error") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bridge_qwen.reply, "Sessions: total=1, pending=1") != null);
     try std.testing.expect(std.mem.indexOf(u8, bridge_qwen.reply, "Stay logged out") != null);
     try std.testing.expect(std.mem.indexOf(u8, bridge_qwen.reply, "/auth guest qwen") != null);
 }
@@ -3268,6 +3436,56 @@ test "telegram runtime auth open alias surfaces chatgpt completion command" {
     try std.testing.expect(std.mem.indexOf(u8, open.reply, "Auth link for `chatgpt`.") != null);
     try std.testing.expect(std.mem.indexOf(u8, open.reply, "/auth complete chatgpt <callback_url_or_code>") != null);
     try std.testing.expect(std.mem.indexOf(u8, open.reply, start.loginCode) != null);
+}
+
+test "telegram runtime auth url alias surfaces session details" {
+    var login = web_login.LoginManager.init(std.testing.allocator, 5 * 60 * 1000);
+    defer login.deinit();
+    var runtime = TelegramRuntime.init(std.testing.allocator, &login);
+    defer runtime.deinit();
+
+    const allocator = std.testing.allocator;
+    var start = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-start-url-qwen\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-url\",\"sessionId\":\"sess-url\",\"message\":\"/auth start qwen mobile\"}}");
+    defer start.deinit(allocator);
+    try std.testing.expect(start.loginSessionId.len > 0);
+    try std.testing.expect(start.loginCode.len > 0);
+
+    var url = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-url-qwen\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-url\",\"sessionId\":\"sess-url\",\"message\":\"/auth url qwen mobile\"}}");
+    defer url.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, url.authStatus, "pending"));
+    try std.testing.expect(std.mem.indexOf(u8, url.reply, "Auth URL: https://chat.qwen.ai/?openclaw_code=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, url.reply, "Scope: `qwen/mobile`") != null);
+    try std.testing.expect(std.mem.indexOf(u8, url.reply, "Guest mode: supported (`stay_logged_out`)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, url.reply, start.loginCode) != null);
+}
+
+test "telegram runtime auth cancel revokes scoped session" {
+    var login = web_login.LoginManager.init(std.testing.allocator, 5 * 60 * 1000);
+    defer login.deinit();
+    var runtime = TelegramRuntime.init(std.testing.allocator, &login);
+    defer runtime.deinit();
+
+    const allocator = std.testing.allocator;
+    var start = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-start-cancel-qwen\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-cancel\",\"sessionId\":\"sess-cancel\",\"message\":\"/auth start qwen mobile\"}}");
+    defer start.deinit(allocator);
+    try std.testing.expect(start.loginSessionId.len > 0);
+
+    var cancel = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-cancel-qwen\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-cancel\",\"sessionId\":\"sess-cancel\",\"message\":\"/auth cancel qwen mobile\"}}");
+    defer cancel.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, cancel.authStatus, "cancelled"));
+    try std.testing.expect(std.mem.eql(u8, cancel.loginSessionId, start.loginSessionId));
+    try std.testing.expect(std.mem.indexOf(u8, cancel.reply, "Auth session `web-login-") != null);
+
+    const status_frame = try std.fmt.allocPrint(
+        allocator,
+        "{{\"id\":\"tg-status-cancel-qwen\",\"method\":\"send\",\"params\":{{\"channel\":\"telegram\",\"to\":\"room-cancel\",\"sessionId\":\"sess-cancel\",\"message\":\"/auth status qwen {s} mobile\"}}}}",
+        .{start.loginSessionId},
+    );
+    defer allocator.free(status_frame);
+    var status = try runtime.sendFromFrame(allocator, status_frame);
+    defer status.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, status.authStatus, "rejected"));
+    try std.testing.expect(std.mem.indexOf(u8, status.reply, "Auth status: `rejected`") != null);
 }
 
 test "telegram runtime wait supports positional timeout with account" {
