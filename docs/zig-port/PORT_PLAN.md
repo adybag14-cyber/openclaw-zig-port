@@ -56,8 +56,15 @@ Full-stack replacement execution reference:
 
 ## Current Progress Snapshot
 
-- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `183/183`.
+- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `184/184`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram missing-status cleanup parity hardened:
+    - missing `/auth status` replies now use the Go-style `Auth session expired or missing. Run \`/auth start <provider>\` again.` wording instead of `Auth session not found.`.
+    - when `/auth status` resolves through a scoped binding whose backing login session no longer exists, Zig now clears that stale binding immediately.
+    - the missing-session status metadata no longer emits Zig-only `error=session_not_found`.
+    - ownership in the missing-session `/auth status` and `/auth url` cleanup branches is now hardened so login-session IDs are duplicated before binding cleanup when needed, preventing use-after-free on reply/metadata serialization.
+    - regression test added:
+      - `channels.telegram_runtime.test.telegram runtime auth status clears stale binding when session is missing`
   - Phase 5 Telegram pending-status UX parity hardened:
     - pending `/auth status` replies now include the live verification URL plus the concrete completion command, instead of only returning `Auth status: <pending>`.
     - account-scoped bindings keep the exact scoped completion form (`/auth complete <provider> <code> <account>`), while default scope keeps the shorter Go-style completion command.

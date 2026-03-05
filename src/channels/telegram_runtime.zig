@@ -2082,6 +2082,12 @@ pub const TelegramRuntime = struct {
             }
 
             const view = self.login_manager.get(login_session) orelse {
+                const should_clear_binding = std.ascii.eqlIgnoreCase(action, "url") and std.mem.trim(u8, session_token, " \t\r\n").len == 0;
+                const owned_login_session_id = if (should_clear_binding and std.mem.trim(u8, login_session, " \t\r\n").len > 0)
+                    try allocator.dupe(u8, login_session)
+                else
+                    null;
+                const login_session_value = if (owned_login_session_id) |value| value else login_session;
                 if (std.ascii.eqlIgnoreCase(action, "url")) {
                     try self.clearAuthBinding(allocator, target, provider, account);
                 }
@@ -2094,7 +2100,7 @@ pub const TelegramRuntime = struct {
                     .account = normalizeAccount(account),
                     .scope = scope,
                     .status = "missing",
-                    .loginSessionId = login_session,
+                    .loginSessionId = login_session_value,
                 });
                 return .{
                     .is_command = true,
@@ -2105,7 +2111,8 @@ pub const TelegramRuntime = struct {
                         try allocator.dupe(u8, "Auth session not found."),
                     .provider = provider,
                     .model = defaultModelForProvider(provider),
-                    .login_session_id = login_session,
+                    .login_session_id = login_session_value,
+                    .owned_login_session_id = owned_login_session_id,
                     .login_code = "",
                     .auth_status = "missing",
                     .metadata_json = metadata_json,
@@ -2531,6 +2538,15 @@ pub const TelegramRuntime = struct {
             }
 
             const view = self.login_manager.get(login_session) orelse {
+                const should_clear_binding = std.mem.trim(u8, session_token, " \t\r\n").len == 0;
+                const owned_login_session_id = if (should_clear_binding and std.mem.trim(u8, login_session, " \t\r\n").len > 0)
+                    try allocator.dupe(u8, login_session)
+                else
+                    null;
+                const login_session_value = if (owned_login_session_id) |value| value else login_session;
+                if (should_clear_binding) {
+                    try self.clearAuthBinding(allocator, target, provider, account);
+                }
                 const account_norm = normalizeAccount(account);
                 const scope = try authScopeAlloc(allocator, provider, account_norm);
                 defer allocator.free(scope);
@@ -2541,16 +2557,16 @@ pub const TelegramRuntime = struct {
                     .account = account_norm,
                     .scope = scope,
                     .status = "missing",
-                    .@"error" = "session_not_found",
-                    .loginSessionId = login_session,
+                    .loginSessionId = login_session_value,
                 });
                 return .{
                     .is_command = true,
                     .command_name = "auth",
-                    .reply = try allocator.dupe(u8, "Auth session not found."),
+                    .reply = try allocator.dupe(u8, "Auth session expired or missing. Run `/auth start <provider>` again."),
                     .provider = provider,
                     .model = defaultModelForProvider(provider),
-                    .login_session_id = login_session,
+                    .login_session_id = login_session_value,
+                    .owned_login_session_id = owned_login_session_id,
                     .login_code = "",
                     .auth_status = "missing",
                     .metadata_json = metadata_json,
@@ -5084,7 +5100,29 @@ test "telegram runtime auth url clears stale binding when session is missing" {
     try std.testing.expect(std.mem.indexOf(u8, url.metadataJson.?, "\"status\":\"missing\"") != null);
 
     const cleared = try runtime.getAuthBinding(allocator, "room-url-missing", "qwen", "mobile");
-    defer if (cleared.len > 0) allocator.free(cleared);
+    try std.testing.expect(cleared.len == 0);
+}
+
+test "telegram runtime auth status clears stale binding when session is missing" {
+    var login = web_login.LoginManager.init(std.testing.allocator, 5 * 60 * 1000);
+    defer login.deinit();
+    var runtime = TelegramRuntime.init(std.testing.allocator, &login);
+    defer runtime.deinit();
+
+    const allocator = std.testing.allocator;
+    try runtime.setAuthBinding("room-status-missing", "qwen", "mobile", "web-login-stale");
+
+    var status = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-status-missing\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-status-missing\",\"sessionId\":\"sess-status-missing\",\"message\":\"/auth status qwen mobile\"}}");
+    defer status.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, status.authStatus, "missing"));
+    try std.testing.expect(std.mem.indexOf(u8, status.reply, "Auth session expired or missing. Run `/auth start <provider>` again.") != null);
+    try std.testing.expect(status.metadataJson != null);
+    try std.testing.expect(std.mem.indexOf(u8, status.metadataJson.?, "\"type\":\"auth.status\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, status.metadataJson.?, "\"status\":\"missing\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, status.metadataJson.?, "\"loginSessionId\":\"web-login-stale\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, status.metadataJson.?, "\"error\":") == null);
+
+    const cleared = try runtime.getAuthBinding(allocator, "room-status-missing", "qwen", "mobile");
     try std.testing.expect(cleared.len == 0);
 }
 

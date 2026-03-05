@@ -1,13 +1,20 @@
 # Phase Checklist
 
 Release lock: no release tag is allowed until all phases are complete and parity is measured at 100%.
-Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `183/183`.
+Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `184/184`.
 
 ## Full-Stack Replacement Track (FS0..FS7)
 - [x] FS0 - Scope lock + baseline freeze (`docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`, issue `#2`)
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram missing `/auth status` now matches Go more closely and no longer leaves dead scoped bindings behind:
+      - missing status replies now use the Go-style `Auth session expired or missing. Run \`/auth start <provider>\` again.` wording instead of Zig's older `Auth session not found.` reply.
+      - when `/auth status` resolves through the scoped binding and the backing login session is gone, Zig now clears that stale binding immediately.
+      - the missing-session status metadata now carries `status=missing` plus `loginSessionId` without the extra Zig-only `error=session_not_found` field.
+      - ownership in the missing-session `/auth status` and `/auth url` cleanup branches is now hardened so reply/metadata serialization no longer reuses freed login-session storage after binding cleanup.
+      - regression coverage added:
+        - `channels.telegram_runtime.test.telegram runtime auth status clears stale binding when session is missing`
     - Telegram pending `/auth status` replies now include the live URL and concrete completion step:
       - pending status replies now append `Open: <verificationUriComplete>` and the Go-style next-step command instead of only returning `Auth status: ...`.
       - account-scoped status replies preserve the exact scoped completion form (`/auth complete <provider> <code> <account>`), while default scope keeps the shorter Go-style command.
