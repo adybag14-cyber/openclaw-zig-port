@@ -8299,6 +8299,7 @@ fn getTelegramRuntime() !*telegram_runtime.TelegramRuntime {
     const compat = try getCompatState();
     telegram_runtime_instance.?.setMemoryStore(try getMemoryStore());
     telegram_runtime_instance.?.setProviderApiKeyResolver(@ptrCast(compat), resolveTelegramProviderApiKeyAlloc);
+    telegram_runtime_instance.?.setProviderApiKeySetter(@ptrCast(compat), storeTelegramProviderApiKey);
     telegram_runtime_instance.?.setModelCatalogResolver(@ptrCast(compat), resolveTelegramModelCatalogAlloc);
     try telegram_runtime_instance.?.setBridgeConfig(cfg.lightpanda_endpoint, cfg.lightpanda_timeout_ms);
     return &telegram_runtime_instance.?;
@@ -9942,6 +9943,26 @@ fn resolveTelegramProviderApiKeyAlloc(
 ) anyerror!?[]u8 {
     const compat: *CompatState = @ptrCast(@alignCast(ctx));
     return resolveBrowserProviderApiKeyAlloc(allocator, compat, provider_raw);
+}
+
+fn storeTelegramProviderApiKey(
+    _: *anyopaque,
+    allocator: std.mem.Allocator,
+    provider_raw: []const u8,
+    api_key_raw: []const u8,
+) anyerror!bool {
+    const provider_trimmed = std.mem.trim(u8, provider_raw, " \t\r\n");
+    const api_key = std.mem.trim(u8, api_key_raw, " \t\r\n");
+    if (provider_trimmed.len == 0 or api_key.len == 0) return false;
+
+    const provider = lightpanda.normalizeProvider(provider_trimmed) catch web_login.normalizeProviderAlias(provider_trimmed);
+    if (provider.len == 0) return false;
+
+    const target_id = try std.fmt.allocPrint(allocator, "talk.providers.{s}.apiKey", .{provider});
+    defer allocator.free(target_id);
+    const store = try getSecretStore();
+    try store.setSecret(target_id, api_key);
+    return true;
 }
 
 fn resolveTelegramModelCatalogAlloc(
@@ -13251,6 +13272,34 @@ test "dispatch send model command rejects missing provider in provider-scoped sy
     defer allocator.free(metadata_error);
     try std.testing.expect(std.mem.eql(u8, metadata_error, "missing_provider"));
     try std.testing.expect(std.mem.indexOf(u8, out, "Provider is required. Usage: `/model <provider>/<model>` or `/model <provider> <model>`.") != null);
+}
+
+test "dispatch send set api key command stores provider secret for telegram runtime" {
+    const allocator = std.testing.allocator;
+    var cfg = config.defaults();
+    cfg.state_path = "memory://dispatcher-telegram-set-api-key";
+    setConfig(cfg);
+    defer setConfig(config.defaults());
+
+    const store = try getSecretStore();
+    _ = try store.deleteSecret("talk.providers.openrouter.apiKey");
+
+    const set_out = try dispatch(allocator, "{\"id\":\"tg-set-api-key\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-set\",\"sessionId\":\"tg-set\",\"message\":\"/set api key openrouter openrouter_test_key_123\"}}");
+    defer allocator.free(set_out);
+
+    const metadata_type = try extractResultObjectStringField(allocator, set_out, "metadata", "type");
+    defer allocator.free(metadata_type);
+    try std.testing.expect(std.mem.eql(u8, metadata_type, "set.api_key"));
+    const metadata_provider = try extractResultObjectStringField(allocator, set_out, "metadata", "provider");
+    defer allocator.free(metadata_provider);
+    try std.testing.expect(std.mem.eql(u8, metadata_provider, "openrouter"));
+    try std.testing.expect(std.mem.indexOf(u8, set_out, "\"stored\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, set_out, "Provider API key saved for `openrouter`") != null);
+
+    const stored = try store.resolveTargetAlloc(allocator, "talk.providers.openrouter.apiKey");
+    defer if (stored) |value| allocator.free(value);
+    try std.testing.expect(stored != null);
+    try std.testing.expect(std.mem.eql(u8, stored.?, "openrouter_test_key_123"));
 }
 
 test "dispatch channels.telegram.webhook.receive routes update through runtime and skips delivery in dry run" {

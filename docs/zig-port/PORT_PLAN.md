@@ -56,8 +56,19 @@ Full-stack replacement execution reference:
 
 ## Current Progress Snapshot
 
-- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `176/176`.
+- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `178/178`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram `/set api key` parity expanded:
+    - Zig Telegram runtime now supports Go-style `/set api key <provider> <key>` operator flows instead of treating `/set` as an unknown command.
+    - `/set` now writes provider API keys through the existing secret-resolution path used by browser/direct-provider auth:
+      - dispatcher wires Telegram runtime to a setter backed by `SecretStore`
+      - stored keys land under canonical secret targets such as `talk.providers.<provider>.apiKey`
+      - subsequent `/auth providers` and provider API-key fallback resolution see the same stored key immediately
+    - command replies now include Go-compatible `set.api_key` / `set.invalid` metadata, including masked key telemetry and deterministic usage/store-failure errors.
+    - command help/unknown-command text now includes `/set` in the supported Telegram operator surface.
+    - regression tests added:
+      - `channels.telegram_runtime.test.telegram runtime set api key command stores provider secret and updates auth providers reply`
+      - `gateway.dispatcher.test.dispatch send set api key command stores provider secret for telegram runtime`
   - Phase 5 Telegram model parser parity hardened:
     - malformed provider-scoped Telegram model commands such as `/model /edge-experimental` no longer fall through the empty-provider alias path and silently select `chatgpt/edge-experimental`.
     - Zig now mirrors Go-style behavior by rejecting provider-scoped syntax with an empty provider segment and returning the usage reply:

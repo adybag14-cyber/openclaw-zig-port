@@ -1,13 +1,21 @@
 # Phase Checklist
 
 Release lock: no release tag is allowed until all phases are complete and parity is measured at 100%.
-Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `176/176`.
+Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `178/178`.
 
 ## Full-Stack Replacement Track (FS0..FS7)
 - [x] FS0 - Scope lock + baseline freeze (`docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`, issue `#2`)
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram `/set api key` parity is now implemented end-to-end:
+      - Zig Telegram runtime now supports `/set api key <provider> <key>` and no longer rejects `/set` as an unknown command.
+      - provider API keys are now stored through the dispatcher-backed secret store under canonical provider targets, so Telegram operator flows and browser/direct-provider fallback share the same credential path.
+      - `send` metadata now reports `type=set.api_key` with masked key telemetry on success and `type=set.invalid` / `error=missing_provider_or_key|store_failed|invalid_key_format` on failure paths.
+      - help/unknown-command replies now include `/set` in the supported Telegram command surface.
+      - regression coverage added:
+        - `channels.telegram_runtime.test.telegram runtime set api key command stores provider secret and updates auth providers reply`
+        - `gateway.dispatcher.test.dispatch send set api key command stores provider secret for telegram runtime`
     - Telegram `/model` parser parity is now hardened for malformed provider-scoped input:
       - malformed provider-scoped commands like `/model /edge-experimental` no longer normalize through the empty-provider alias path into `chatgpt/edge-experimental`.
       - Zig now matches Go-style behavior by returning a deterministic invalid-command usage reply when provider-scoped syntax is present but the provider segment is empty.

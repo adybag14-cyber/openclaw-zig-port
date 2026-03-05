@@ -22,6 +22,13 @@ pub const ProviderApiKeyResolver = *const fn (
     provider: []const u8,
 ) anyerror!?[]u8;
 
+pub const ProviderApiKeySetter = *const fn (
+    ctx: *anyopaque,
+    allocator: std.mem.Allocator,
+    provider: []const u8,
+    api_key: []const u8,
+) anyerror!bool;
+
 pub const ModelCatalogResolver = *const fn (
     ctx: *anyopaque,
     allocator: std.mem.Allocator,
@@ -231,6 +238,15 @@ const TtsCommandMetadata = struct {
     @"error": ?[]const u8 = null,
 };
 
+const SetCommandMetadata = struct {
+    type: []const u8,
+    target: []const u8,
+    provider: ?[]const u8 = null,
+    stored: ?bool = null,
+    keyMasked: ?[]const u8 = null,
+    @"error": ?[]const u8 = null,
+};
+
 pub const PolledMessage = struct {
     id: u64,
     channel: []u8,
@@ -335,6 +351,8 @@ pub const TelegramRuntime = struct {
     persistent: bool,
     provider_api_key_resolver_ctx: ?*anyopaque,
     provider_api_key_resolver: ?ProviderApiKeyResolver,
+    provider_api_key_setter_ctx: ?*anyopaque,
+    provider_api_key_setter: ?ProviderApiKeySetter,
     model_catalog_resolver_ctx: ?*anyopaque,
     model_catalog_resolver: ?ModelCatalogResolver,
 
@@ -356,6 +374,8 @@ pub const TelegramRuntime = struct {
             .persistent = false,
             .provider_api_key_resolver_ctx = null,
             .provider_api_key_resolver = null,
+            .provider_api_key_setter_ctx = null,
+            .provider_api_key_setter = null,
             .model_catalog_resolver_ctx = null,
             .model_catalog_resolver = null,
         };
@@ -420,6 +440,15 @@ pub const TelegramRuntime = struct {
     ) void {
         self.provider_api_key_resolver_ctx = ctx;
         self.provider_api_key_resolver = resolver;
+    }
+
+    pub fn setProviderApiKeySetter(
+        self: *TelegramRuntime,
+        ctx: ?*anyopaque,
+        setter: ?ProviderApiKeySetter,
+    ) void {
+        self.provider_api_key_setter_ctx = ctx;
+        self.provider_api_key_setter = setter;
     }
 
     pub fn setModelCatalogResolver(
@@ -1025,7 +1054,7 @@ pub const TelegramRuntime = struct {
         var it = std.mem.tokenizeAny(u8, raw_message, " \t\r\n");
         while (it.next()) |token| try tokens.append(allocator, token);
         if (tokens.items.len == 0) {
-            return .{ .is_command = true, .command_name = "help", .reply = try allocator.dupe(u8, "Commands: /model, /auth, /tts, /start, /help"), .provider = "chatgpt", .model = "gpt-5.2", .login_session_id = "", .login_code = "", .auth_status = "ok" };
+            return .{ .is_command = true, .command_name = "help", .reply = try allocator.dupe(u8, "Commands: /model, /auth, /set, /tts, /start, /help"), .provider = "chatgpt", .model = "gpt-5.2", .login_session_id = "", .login_code = "", .auth_status = "ok" };
         }
 
         var command = tokens.items[0];
@@ -1037,7 +1066,7 @@ pub const TelegramRuntime = struct {
             return .{
                 .is_command = true,
                 .command_name = "help",
-                .reply = try allocator.dupe(u8, "Commands: /model, /auth, /tts, /start, /help"),
+                .reply = try allocator.dupe(u8, "Commands: /model, /auth, /set, /tts, /start, /help"),
                 .provider = self.getTargetModel(target).provider,
                 .model = self.getTargetModel(target).model,
                 .login_session_id = "",
@@ -1051,18 +1080,169 @@ pub const TelegramRuntime = struct {
         if (std.ascii.eqlIgnoreCase(command, "auth")) {
             return self.handleAuthCommand(allocator, target, args);
         }
+        if (std.ascii.eqlIgnoreCase(command, "set")) {
+            return self.handleSetCommand(allocator, target, args);
+        }
         if (std.ascii.eqlIgnoreCase(command, "tts")) {
             return self.handleTtsCommand(allocator, target, args);
         }
         return .{
             .is_command = true,
             .command_name = "unknown",
-            .reply = try std.fmt.allocPrint(allocator, "Unknown command `{s}`. Supported: /model, /auth, /tts, /start, /help", .{command}),
+            .reply = try std.fmt.allocPrint(allocator, "Unknown command `{s}`. Supported: /model, /auth, /set, /tts, /start, /help", .{command}),
             .provider = self.getTargetModel(target).provider,
             .model = self.getTargetModel(target).model,
             .login_session_id = "",
             .login_code = "",
             .auth_status = "ok",
+        };
+    }
+
+    fn handleSetCommand(self: *TelegramRuntime, allocator: std.mem.Allocator, target: []const u8, args: []const []const u8) !SendOutcome {
+        const model_sel = self.getTargetModel(target);
+        const trimmed_target = std.mem.trim(u8, target, " \t\r\n");
+
+        if (args.len < 4 or !std.ascii.eqlIgnoreCase(args[0], "api") or !std.ascii.eqlIgnoreCase(args[1], "key")) {
+            const metadata_json = try stringifyJsonAlloc(allocator, SetCommandMetadata{
+                .type = "set.invalid",
+                .target = trimmed_target,
+            });
+            return .{
+                .is_command = true,
+                .command_name = "set",
+                .reply = try allocator.dupe(u8, "Usage: `/set api key <provider> <key>`"),
+                .provider = model_sel.provider,
+                .model = model_sel.model,
+                .login_session_id = "",
+                .login_code = "",
+                .auth_status = "invalid",
+                .metadata_json = metadata_json,
+            };
+        }
+
+        const requested_provider = std.mem.trim(u8, args[2], " \t\r\n");
+        const api_key_joined = try std.mem.join(allocator, " ", args[3..]);
+        defer allocator.free(api_key_joined);
+        const api_key = std.mem.trim(u8, api_key_joined, " \t\r\n");
+        if (requested_provider.len == 0 or api_key.len == 0) {
+            const metadata_json = try stringifyJsonAlloc(allocator, SetCommandMetadata{
+                .type = "set.invalid",
+                .target = trimmed_target,
+                .@"error" = "missing_provider_or_key",
+            });
+            return .{
+                .is_command = true,
+                .command_name = "set",
+                .reply = try allocator.dupe(u8, "Usage: `/set api key <provider> <key>`"),
+                .provider = model_sel.provider,
+                .model = model_sel.model,
+                .login_session_id = "",
+                .login_code = "",
+                .auth_status = "invalid",
+                .metadata_json = metadata_json,
+            };
+        }
+
+        if (std.mem.indexOfScalar(u8, api_key, '\n') != null or std.mem.indexOfScalar(u8, api_key, '\r') != null) {
+            const provider = normalizeProvider(requested_provider);
+            const metadata_json = try stringifyJsonAlloc(allocator, SetCommandMetadata{
+                .type = "set.api_key",
+                .target = trimmed_target,
+                .provider = provider,
+                .@"error" = "invalid_key_format",
+            });
+            return .{
+                .is_command = true,
+                .command_name = "set",
+                .reply = try allocator.dupe(u8, "API key must be a single line."),
+                .provider = model_sel.provider,
+                .model = model_sel.model,
+                .login_session_id = "",
+                .login_code = "",
+                .auth_status = "invalid",
+                .metadata_json = metadata_json,
+            };
+        }
+
+        const provider = normalizeProvider(requested_provider);
+        const setter = self.provider_api_key_setter orelse {
+            const metadata_json = try stringifyJsonAlloc(allocator, SetCommandMetadata{
+                .type = "set.api_key",
+                .target = trimmed_target,
+                .provider = provider,
+                .@"error" = "store_failed",
+            });
+            return .{
+                .is_command = true,
+                .command_name = "set",
+                .reply = try allocator.dupe(u8, "Failed to store API key."),
+                .provider = model_sel.provider,
+                .model = model_sel.model,
+                .login_session_id = "",
+                .login_code = "",
+                .auth_status = "invalid",
+                .metadata_json = metadata_json,
+            };
+        };
+        const setter_ctx = self.provider_api_key_setter_ctx orelse {
+            const metadata_json = try stringifyJsonAlloc(allocator, SetCommandMetadata{
+                .type = "set.api_key",
+                .target = trimmed_target,
+                .provider = provider,
+                .@"error" = "store_failed",
+            });
+            return .{
+                .is_command = true,
+                .command_name = "set",
+                .reply = try allocator.dupe(u8, "Failed to store API key."),
+                .provider = model_sel.provider,
+                .model = model_sel.model,
+                .login_session_id = "",
+                .login_code = "",
+                .auth_status = "invalid",
+                .metadata_json = metadata_json,
+            };
+        };
+        const stored = try setter(setter_ctx, allocator, provider, api_key);
+        if (!stored) {
+            const metadata_json = try stringifyJsonAlloc(allocator, SetCommandMetadata{
+                .type = "set.api_key",
+                .target = trimmed_target,
+                .provider = provider,
+                .@"error" = "store_failed",
+            });
+            return .{
+                .is_command = true,
+                .command_name = "set",
+                .reply = try allocator.dupe(u8, "Failed to store API key."),
+                .provider = model_sel.provider,
+                .model = model_sel.model,
+                .login_session_id = "",
+                .login_code = "",
+                .auth_status = "invalid",
+                .metadata_json = metadata_json,
+            };
+        }
+
+        const key_masked = try maskSecretAlloc(allocator, api_key);
+        defer allocator.free(key_masked);
+        const metadata_json = try stringifyJsonAlloc(allocator, SetCommandMetadata{
+            .type = "set.api_key",
+            .target = trimmed_target,
+            .provider = provider,
+            .stored = true,
+            .keyMasked = key_masked,
+        });
+        return .{
+            .is_command = true,
+            .command_name = "set",
+            .reply = try std.fmt.allocPrint(allocator, "Provider API key saved for `{s}`. You can now set a model with `/model {s}/<model>`.", .{ provider, provider }),
+            .provider = provider,
+            .model = model_sel.model,
+            .login_session_id = "",
+            .login_code = "",
+            .auth_status = "ok",
+            .metadata_json = metadata_json,
         };
     }
 
@@ -3488,6 +3668,22 @@ fn normalizeModel(model_raw: []const u8) []const u8 {
     return std.mem.trim(u8, model_raw, " \t\r\n");
 }
 
+fn maskSecretAlloc(allocator: std.mem.Allocator, value_raw: []const u8) ![]u8 {
+    const trimmed = std.mem.trim(u8, value_raw, " \t\r\n");
+    if (trimmed.len == 0) return allocator.dupe(u8, "");
+    if (trimmed.len <= 6) {
+        const masked = try allocator.alloc(u8, trimmed.len);
+        @memset(masked, '*');
+        return masked;
+    }
+
+    var out = try allocator.alloc(u8, trimmed.len);
+    @memcpy(out[0..3], trimmed[0..3]);
+    @memset(out[3 .. trimmed.len - 3], '*');
+    @memcpy(out[trimmed.len - 3 ..], trimmed[trimmed.len - 3 ..]);
+    return out;
+}
+
 pub const TelegramModelDescriptor = struct {
     id: []const u8,
     provider: []const u8,
@@ -4446,6 +4642,19 @@ const TestProviderApiKeyContext = struct {
     api_key: []const u8,
 };
 
+const TestProviderApiKeyStoreContext = struct {
+    allocator: std.mem.Allocator,
+    provider: ?[]u8 = null,
+    api_key: ?[]u8 = null,
+
+    fn deinit(self: *TestProviderApiKeyStoreContext) void {
+        if (self.provider) |value| self.allocator.free(value);
+        if (self.api_key) |value| self.allocator.free(value);
+        self.provider = null;
+        self.api_key = null;
+    }
+};
+
 const TestModelCatalogContext = struct {
     descriptors: []const TelegramModelDescriptor,
 };
@@ -4468,6 +4677,71 @@ fn testModelCatalogResolver(
 ) ![]TelegramModelDescriptor {
     const typed: *const TestModelCatalogContext = @ptrCast(@alignCast(ctx));
     return allocator.dupe(TelegramModelDescriptor, typed.descriptors);
+}
+
+fn testProviderApiKeySetter(
+    ctx: *anyopaque,
+    _: std.mem.Allocator,
+    provider_raw: []const u8,
+    api_key_raw: []const u8,
+) !bool {
+    const typed: *TestProviderApiKeyStoreContext = @ptrCast(@alignCast(ctx));
+    const provider = normalizeProvider(provider_raw);
+    const api_key = std.mem.trim(u8, api_key_raw, " \t\r\n");
+    if (provider.len == 0 or api_key.len == 0) return false;
+
+    const provider_copy = try typed.allocator.dupe(u8, provider);
+    errdefer typed.allocator.free(provider_copy);
+    const api_key_copy = try typed.allocator.dupe(u8, api_key);
+    errdefer typed.allocator.free(api_key_copy);
+
+    if (typed.provider) |value| typed.allocator.free(value);
+    if (typed.api_key) |value| typed.allocator.free(value);
+    typed.provider = provider_copy;
+    typed.api_key = api_key_copy;
+    return true;
+}
+
+fn testStoredProviderApiKeyResolver(
+    ctx: *anyopaque,
+    allocator: std.mem.Allocator,
+    provider_raw: []const u8,
+) !?[]u8 {
+    const typed: *const TestProviderApiKeyStoreContext = @ptrCast(@alignCast(ctx));
+    const provider = typed.provider orelse return null;
+    const api_key = typed.api_key orelse return null;
+    if (!std.ascii.eqlIgnoreCase(normalizeProvider(provider_raw), provider)) return null;
+    return @as(?[]u8, try allocator.dupe(u8, api_key));
+}
+
+test "telegram runtime set api key command stores provider secret and updates auth providers reply" {
+    var login = web_login.LoginManager.init(std.testing.allocator, 5 * 60 * 1000);
+    defer login.deinit();
+    var runtime = TelegramRuntime.init(std.testing.allocator, &login);
+    defer runtime.deinit();
+
+    var store_ctx: TestProviderApiKeyStoreContext = .{ .allocator = std.testing.allocator };
+    defer store_ctx.deinit();
+    runtime.setProviderApiKeySetter(@ptrCast(&store_ctx), testProviderApiKeySetter);
+    runtime.setProviderApiKeyResolver(@ptrCast(&store_ctx), testStoredProviderApiKeyResolver);
+
+    const allocator = std.testing.allocator;
+    var set_result = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-set-key\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-set\",\"sessionId\":\"sess-set\",\"message\":\"/set api key openrouter openrouter_test_key_123\"}}");
+    defer set_result.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, set_result.commandName, "set"));
+    try std.testing.expect(std.mem.eql(u8, set_result.provider, "openrouter"));
+    try std.testing.expect(std.mem.indexOf(u8, set_result.reply, "Provider API key saved for `openrouter`") != null);
+    const set_metadata = set_result.metadataJson orelse return error.TestUnexpectedResult;
+    try std.testing.expect(std.mem.indexOf(u8, set_metadata, "\"type\":\"set.api_key\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, set_metadata, "\"provider\":\"openrouter\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, set_metadata, "\"stored\":true") != null);
+    try std.testing.expect(std.mem.eql(u8, store_ctx.provider.?, "openrouter"));
+    try std.testing.expect(std.mem.eql(u8, store_ctx.api_key.?, "openrouter_test_key_123"));
+
+    var providers = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-set-key-providers\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-set\",\"sessionId\":\"sess-set\",\"message\":\"/auth providers\"}}");
+    defer providers.deinit(allocator);
+    try std.testing.expect(std.mem.indexOf(u8, providers.reply, "- openrouter [OpenRouter]") != null);
+    try std.testing.expect(std.mem.indexOf(u8, providers.reply, "apiKey:true") != null);
 }
 
 test "telegram runtime uses provider api key when no authorized browser session exists" {
