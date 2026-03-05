@@ -3983,6 +3983,141 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         });
     }
 
+    if (std.ascii.eqlIgnoreCase(req.method, "system.boot.attest.verify")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const compat = try getCompatState();
+        const now_ms = time_util.nowMs();
+
+        const statement = std.mem.trim(
+            u8,
+            firstParamString(params, "statement", firstParamString(params, "attestation", "")),
+            " \t\r\n",
+        );
+        const provided_digest = std.mem.trim(
+            u8,
+            firstParamString(params, "statementDigest", firstParamString(params, "digest", "")),
+            " \t\r\n",
+        );
+        const provided_signature = std.mem.trim(
+            u8,
+            firstParamString(params, "signature", firstParamString(params, "sig", "")),
+            " \t\r\n",
+        );
+        const expected_nonce = std.mem.trim(
+            u8,
+            firstParamString(params, "nonce", firstParamString(params, "challenge", "")),
+            " \t\r\n",
+        );
+        const max_age_ms = std.math.clamp(
+            firstParamInt(params, "maxAgeMs", compat.boot_verification_max_age_ms),
+            1,
+            7 * 24 * 60 * 60 * 1000,
+        );
+        const require_signature = firstParamBool(params, "requireSignature", false);
+
+        if (statement.len == 0 and provided_digest.len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "system.boot.attest.verify requires statement or statementDigest",
+            });
+        }
+
+        var computed_digest_buf: [64]u8 = undefined;
+        var computed_digest: []const u8 = "";
+        if (statement.len > 0) {
+            computed_digest_buf = computeSha256Hex(statement);
+            computed_digest = computed_digest_buf[0..];
+        }
+
+        var digest_valid = true;
+        if (provided_digest.len > 0 and computed_digest.len > 0) {
+            digest_valid = std.ascii.eqlIgnoreCase(provided_digest, computed_digest);
+        }
+
+        var nonce_match = true;
+        var nonce_observed: []const u8 = "";
+        if (expected_nonce.len > 0) {
+            if (statement.len == 0) {
+                nonce_match = false;
+            } else {
+                nonce_observed = attestationField(statement, "nonce") orelse "";
+                nonce_match = nonce_observed.len > 0 and std.mem.eql(u8, nonce_observed, expected_nonce);
+            }
+        }
+
+        var timestamp_valid = true;
+        var age_ms: i64 = -1;
+        if (statement.len > 0) {
+            if (attestationField(statement, "timestamp")) |timestamp_raw| {
+                if (std.fmt.parseInt(i64, timestamp_raw, 10)) |ts| {
+                    if (now_ms >= ts) {
+                        age_ms = now_ms - ts;
+                    } else {
+                        age_ms = 0;
+                    }
+                    timestamp_valid = age_ms <= max_age_ms;
+                } else |_| {
+                    timestamp_valid = false;
+                }
+            }
+        }
+
+        const attest_key = try envLookupAlloc(allocator, "OPENCLAW_ZIG_BOOT_ATTEST_KEY");
+        defer if (attest_key) |value| allocator.free(value);
+        var key_configured = false;
+        var signature_checked = false;
+        var signature_valid = false;
+        var expected_signature: []u8 = &[_]u8{};
+        defer if (expected_signature.len > 0) allocator.free(expected_signature);
+
+        if (provided_signature.len > 0 or require_signature) {
+            signature_checked = true;
+            if (attest_key) |raw_key| {
+                const key = std.mem.trim(u8, raw_key, " \t\r\n");
+                key_configured = key.len > 0;
+                if (key.len > 0) {
+                    const digest_for_sig = if (provided_digest.len > 0) provided_digest else computed_digest;
+                    if (digest_for_sig.len > 0) {
+                        expected_signature = try computeWasmModuleSignatureHexAlloc(allocator, digest_for_sig, key);
+                        signature_valid = provided_signature.len > 0 and std.ascii.eqlIgnoreCase(provided_signature, expected_signature);
+                    }
+                }
+            }
+        }
+
+        const unsigned_allowed = !require_signature and provided_signature.len == 0;
+        const valid = digest_valid and nonce_match and timestamp_valid and (if (signature_checked) signature_valid else unsigned_allowed);
+        const evt = try compat.addEvent(if (valid) "system.boot.attestation.verified" else "system.boot.attestation.invalid");
+
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = valid,
+            .valid = valid,
+            .digestValid = digest_valid,
+            .nonceMatch = nonce_match,
+            .timestampValid = timestamp_valid,
+            .ageMs = age_ms,
+            .maxAgeMs = max_age_ms,
+            .signatureChecked = signature_checked,
+            .signatureValid = signature_valid,
+            .requireSignature = require_signature,
+            .unsignedAccepted = unsigned_allowed,
+            .keyConfigured = key_configured,
+            .providedDigest = provided_digest,
+            .computedDigest = computed_digest,
+            .providedSignature = provided_signature,
+            .expectedSignature = if (expected_signature.len > 0) expected_signature else "",
+            .expectedNonce = expected_nonce,
+            .observedNonce = nonce_observed,
+            .event = .{
+                .id = evt.id,
+                .kind = evt.kind,
+                .createdAtMs = evt.created_at_ms,
+            },
+        });
+    }
+
     if (std.ascii.eqlIgnoreCase(req.method, "system.boot.policy.get")) {
         const compat = try getCompatState();
         const now_ms = time_util.nowMs();
@@ -7674,6 +7809,7 @@ fn shouldEnforceGuard(method: []const u8) bool {
     if (std.ascii.eqlIgnoreCase(method, "system.boot.status")) return false;
     if (std.ascii.eqlIgnoreCase(method, "system.boot.verify")) return false;
     if (std.ascii.eqlIgnoreCase(method, "system.boot.attest")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "system.boot.attest.verify")) return false;
     if (std.ascii.eqlIgnoreCase(method, "system.boot.policy.get")) return false;
     if (std.ascii.eqlIgnoreCase(method, "system.boot.policy.set")) return false;
     if (std.ascii.eqlIgnoreCase(method, "system.rollback.plan")) return false;
@@ -8448,6 +8584,20 @@ fn computeSha256Hex(input: []const u8) [64]u8 {
     var digest: [32]u8 = undefined;
     hasher.final(&digest);
     return std.fmt.bytesToHex(digest, .lower);
+}
+
+fn attestationField(statement: []const u8, key: []const u8) ?[]const u8 {
+    var it = std.mem.splitScalar(u8, statement, ';');
+    while (it.next()) |segment_raw| {
+        const segment = std.mem.trim(u8, segment_raw, " \t\r\n");
+        if (segment.len == 0) continue;
+        const eq = std.mem.indexOfScalar(u8, segment, '=') orelse continue;
+        const candidate = std.mem.trim(u8, segment[0..eq], " \t\r\n");
+        if (!std.ascii.eqlIgnoreCase(candidate, key)) continue;
+        const value = std.mem.trim(u8, segment[eq + 1 ..], " \t\r\n");
+        return value;
+    }
+    return null;
 }
 
 fn normalizeBootSlot(raw: []const u8, fallback: []const u8) []const u8 {
@@ -10834,6 +10984,11 @@ test "dispatch compat talk tts models and control methods return contracts" {
     try std.testing.expect(std.mem.indexOf(u8, boot_attest, "\"statementDigest\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, boot_attest, "\"nonce\":\"compat-nonce-1\"") != null);
 
+    const boot_attest_verify = try dispatch(allocator, "{\"id\":\"compat-boot-attest-verify\",\"method\":\"system.boot.attest.verify\",\"params\":{\"statement\":\"v=1;nonce=compat-nonce-1;timestamp=9999999999999\",\"nonce\":\"compat-nonce-1\",\"maxAgeMs\":604800000}}");
+    defer allocator.free(boot_attest_verify);
+    try std.testing.expect(std.mem.indexOf(u8, boot_attest_verify, "\"valid\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, boot_attest_verify, "\"nonceMatch\":true") != null);
+
     const boot_policy_set = try dispatch(allocator, "{\"id\":\"compat-boot-policy-set\",\"method\":\"system.boot.policy.set\",\"params\":{\"policy\":\"signature-required\",\"enforceUpdateGate\":true,\"verificationMaxAgeMs\":300000,\"requiredSigner\":\"sigstore\"}}");
     defer allocator.free(boot_policy_set);
     try std.testing.expect(std.mem.indexOf(u8, boot_policy_set, "\"enforceUpdateGate\":true") != null);
@@ -10911,6 +11066,14 @@ test "dispatch update.run enforces secure boot gate when configured" {
     defer allocator.free(allowed_update);
     try std.testing.expect(std.mem.indexOf(u8, allowed_update, "\"ok\":true") != null);
     try std.testing.expect(std.mem.indexOf(u8, allowed_update, "\"status\":\"completed\"") != null);
+}
+
+test "dispatch system.boot.attest.verify detects nonce mismatch" {
+    const allocator = std.testing.allocator;
+    const output = try dispatch(allocator, "{\"id\":\"attest-verify-mismatch\",\"method\":\"system.boot.attest.verify\",\"params\":{\"statement\":\"v=1;nonce=abc;timestamp=9999999999999\",\"nonce\":\"xyz\",\"maxAgeMs\":604800000}}");
+    defer allocator.free(output);
+    try std.testing.expect(std.mem.indexOf(u8, output, "\"valid\":false") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "\"nonceMatch\":false") != null);
 }
 
 test "dispatch system.rollback.cancel settles to idle when no pending rollback exists" {
