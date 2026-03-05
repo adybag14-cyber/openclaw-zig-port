@@ -12,10 +12,10 @@ Master tracking:
 |---|---|---|---|
 | OpenClaw Zig Port | Commit | `caaedd9` | Locked |
 | OpenClaw Zig Port | Release | `v0.2.0-zig-edge.25` | Locked |
-| OpenClaw Go Port | Release/Commit | `TBD` | Pending |
-| OpenClaw Rust Port | Release/Commit | `TBD` | Pending |
-| Original OpenClaw Stable | Release | `TBD` | Pending |
-| Original OpenClaw Beta | Pre-release | `TBD` | Pending |
+| OpenClaw Go Port | Release/Commit | `v2.14.0-go @ 3614cf457cf26220e486d7f3dc8df09353b38a32` | Locked |
+| OpenClaw Rust Port | Release/Commit | `v1.7.15 @ b2abb0d1fa747e371a53ea0890ffd80e4e29ea79` | Locked |
+| Original OpenClaw Stable | Release/Commit | `v2026.3.2 @ 85377a28175695c224f6589eb5c1460841ecd65c` | Locked |
+| Original OpenClaw Beta | Pre-release/Commit | `v2026.3.2-beta.1 @ eb8a8840d65fd082bdb4712d132fb7d262e24732` | Locked |
 
 ## Domain Contract Matrix
 
@@ -63,7 +63,7 @@ Any intentional behavior changes must be:
 
 ## FS0 Checklist
 
-- [ ] Fill all `TBD` baseline references with exact tags/SHAs.
+- [x] Fill all `TBD` baseline references with exact tags/SHAs.
 - [ ] Finalize parity policy for each domain row.
 - [ ] Map each domain row to exact tests/workflows and evidence links.
 - [ ] Attach matrix evidence to issue `#2` and roll up to issue `#1`.
