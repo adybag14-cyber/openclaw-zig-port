@@ -281,6 +281,11 @@ Full-stack replacement execution reference:
     - new webhook ingress method: `channels.telegram.webhook.receive` (accepts Telegram update payloads, routes through runtime command handling, records memory history, and optionally delivers reply via Bot API).
     - new direct delivery method: `channels.telegram.bot.send` (sends chat text to Telegram Bot API with dry-run + token fallback support).
     - new parser/delivery module: `src/channels/telegram_bot_api.zig`.
+  - Added Telegram typing-action delivery depth:
+    - `src/channels/telegram_bot_api.zig` now includes `sendChatAction` with deterministic error telemetry.
+    - `channels.telegram.webhook.receive` now issues pre-reply typing actions when delivery is enabled (configurable via `typingAction`, defaults to `typing`).
+    - `channels.telegram.bot.send` now supports optional typing hints (`typingAction`/`typing`) and returns typing telemetry alongside delivery telemetry.
+    - Added dispatcher + bot API tests for typing action contract/error paths.
   - Dispatcher `channels.status` now includes telegram queue/target/auth telemetry
   - Added auth + reply-loop smokes (`scripts/web-login-smoke-check.ps1`, `scripts/telegram-reply-loop-smoke-check.ps1`)
   - Telegram reply-loop smoke now asserts `/auth link` parity guidance includes active code/session identifiers and completion command hints.

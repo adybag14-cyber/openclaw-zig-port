@@ -118,6 +118,11 @@ Phase 5 enhancement notes:
   - `channels.telegram.webhook.receive` now accepts Telegram update payloads, routes update text through runtime command handlers, and can optionally deliver replies through Bot API `sendMessage`.
   - `channels.telegram.bot.send` adds direct Bot API send path with `dryRun`/`deliver` controls and token fallback resolution.
   - `src/channels/telegram_bot_api.zig` introduces Telegram update parsing, runtime frame builders, and Bot API delivery telemetry.
+- Telegram channel typing-depth parity slice:
+  - added Bot API typing-action support via `sendChatAction` in `src/channels/telegram_bot_api.zig`.
+  - `channels.telegram.webhook.receive` now emits optional typing action (`typingAction`, default `typing`) before reply delivery when `deliver=true`.
+  - `channels.telegram.bot.send` now supports optional typing action hints (`typingAction`/`typing`) with structured typing telemetry in the RPC response.
+  - regression tests added for typing action error path and bot-send typing contract surface.
 - Completion semantics hardening:
   - Top-level `ok/status/message` for `browser.request` now reflect live completion outcome when completion execution is requested (`status=failed` on bridge failure).
   - Assistant text extraction now supports additional response shapes: `output_text`, `output[].content[]`, and array-based `choices[].message.content`.

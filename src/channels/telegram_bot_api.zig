@@ -234,6 +234,128 @@ pub fn sendMessage(
     };
 }
 
+pub fn sendChatAction(
+    allocator: std.mem.Allocator,
+    bot_token_raw: []const u8,
+    chat_id: i64,
+    action_raw: []const u8,
+    request_timeout_ms: u32,
+) !BotDeliveryResult {
+    const bot_token = std.mem.trim(u8, bot_token_raw, " \t\r\n");
+    const action = std.mem.trim(u8, action_raw, " \t\r\n");
+
+    if (bot_token.len == 0) {
+        return .{
+            .attempted = false,
+            .ok = false,
+            .statusCode = 0,
+            .requestUrl = try allocator.dupe(u8, ""),
+            .errorText = try allocator.dupe(u8, "missing bot token"),
+            .messageId = null,
+            .responseBytes = 0,
+            .latencyMs = 0,
+            .requestTimeoutMs = request_timeout_ms,
+        };
+    }
+    if (action.len == 0) {
+        return .{
+            .attempted = false,
+            .ok = false,
+            .statusCode = 0,
+            .requestUrl = try allocator.dupe(u8, ""),
+            .errorText = try allocator.dupe(u8, "missing action"),
+            .messageId = null,
+            .responseBytes = 0,
+            .latencyMs = 0,
+            .requestTimeoutMs = request_timeout_ms,
+        };
+    }
+
+    const request_url = try std.fmt.allocPrint(allocator, "https://api.telegram.org/bot{s}/sendChatAction", .{bot_token});
+    errdefer allocator.free(request_url);
+
+    const Payload = struct {
+        chat_id: i64,
+        action: []const u8,
+    };
+
+    var request_body: std.Io.Writer.Allocating = .init(allocator);
+    defer request_body.deinit();
+    try std.json.Stringify.value(Payload{ .chat_id = chat_id, .action = action }, .{}, &request_body.writer);
+    const request_payload = try request_body.toOwnedSlice();
+    defer allocator.free(request_payload);
+
+    var fetch_response = pal.net.post(
+        allocator,
+        request_url,
+        request_payload,
+        &.{.{ .name = "content-type", .value = "application/json" }},
+    ) catch |err| {
+        return .{
+            .attempted = true,
+            .ok = false,
+            .statusCode = 0,
+            .requestUrl = request_url,
+            .errorText = try std.fmt.allocPrint(allocator, "telegram sendChatAction request failed: {s}", .{@errorName(err)}),
+            .messageId = null,
+            .responseBytes = 0,
+            .latencyMs = 0,
+            .requestTimeoutMs = request_timeout_ms,
+        };
+    };
+    defer fetch_response.deinit(allocator);
+
+    const status_code = fetch_response.status_code;
+    const response_payload = fetch_response.body;
+
+    if (status_code < 200 or status_code >= 300) {
+        return .{
+            .attempted = true,
+            .ok = false,
+            .statusCode = status_code,
+            .requestUrl = request_url,
+            .errorText = try allocErrorSnippet(allocator, response_payload, status_code),
+            .messageId = null,
+            .responseBytes = response_payload.len,
+            .latencyMs = fetch_response.latency_ms,
+            .requestTimeoutMs = request_timeout_ms,
+        };
+    }
+
+    var parsed = std.json.parseFromSlice(std.json.Value, allocator, response_payload, .{}) catch |err| {
+        return .{
+            .attempted = true,
+            .ok = false,
+            .statusCode = status_code,
+            .requestUrl = request_url,
+            .errorText = try std.fmt.allocPrint(allocator, "invalid telegram sendChatAction JSON: {s}", .{@errorName(err)}),
+            .messageId = null,
+            .responseBytes = response_payload.len,
+            .latencyMs = fetch_response.latency_ms,
+            .requestTimeoutMs = request_timeout_ms,
+        };
+    };
+    defer parsed.deinit();
+
+    const ok = boolFromMap(parsed.value, "ok") orelse false;
+    const error_text = if (!ok)
+        (stringFromMap(parsed.value, "description") orelse "telegram sendChatAction returned ok=false")
+    else
+        "";
+
+    return .{
+        .attempted = true,
+        .ok = ok,
+        .statusCode = status_code,
+        .requestUrl = request_url,
+        .errorText = try allocator.dupe(u8, error_text),
+        .messageId = null,
+        .responseBytes = response_payload.len,
+        .latencyMs = fetch_response.latency_ms,
+        .requestTimeoutMs = request_timeout_ms,
+    };
+}
+
 fn parseMessageLike(
     allocator: std.mem.Allocator,
     update_id: i64,
@@ -391,6 +513,15 @@ test "build runtime send frame produces send method payload" {
 test "sendMessage returns deterministic error when bot token missing" {
     const allocator = std.testing.allocator;
     var result = try sendMessage(allocator, "", 12345, "hello", null, 3000);
+    defer result.deinit(allocator);
+    try std.testing.expect(!result.attempted);
+    try std.testing.expect(!result.ok);
+    try std.testing.expect(std.mem.indexOf(u8, result.errorText, "missing bot token") != null);
+}
+
+test "sendChatAction returns deterministic error when bot token missing" {
+    const allocator = std.testing.allocator;
+    var result = try sendChatAction(allocator, "", 12345, "typing", 3000);
     defer result.deinit(allocator);
     try std.testing.expect(!result.attempted);
     try std.testing.expect(!result.ok);

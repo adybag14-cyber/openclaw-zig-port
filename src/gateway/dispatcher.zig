@@ -5817,10 +5817,33 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             if (params.get("timeoutMs")) |value| out = parseTimeout(value, out);
             break :blk out;
         };
+        const typing_action = firstParamString(params, "typingAction", "typing");
 
         const compat = try getCompatState();
         const maybe_token = try resolveTelegramBotTokenForParamsAlloc(allocator, compat, params);
         defer if (maybe_token) |value| allocator.free(value);
+
+        var typing = if (deliver)
+            try telegram_bot_api.sendChatAction(
+                allocator,
+                maybe_token orelse "",
+                incoming.chat_id,
+                typing_action,
+                timeout_ms,
+            )
+        else
+            telegram_bot_api.BotDeliveryResult{
+                .attempted = false,
+                .ok = true,
+                .statusCode = 0,
+                .requestUrl = try allocator.dupe(u8, ""),
+                .errorText = try allocator.dupe(u8, "typing skipped"),
+                .messageId = null,
+                .responseBytes = 0,
+                .latencyMs = 0,
+                .requestTimeoutMs = timeout_ms,
+            };
+        defer typing.deinit(allocator);
 
         var delivery = if (deliver)
             try telegram_bot_api.sendMessage(
@@ -5854,6 +5877,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             .messageId = incoming.message_id,
             .text = incoming.text,
             .send = send_result,
+            .typing = typing,
             .delivery = delivery,
         });
     }
@@ -5899,10 +5923,33 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             }
             break :blk out;
         };
+        const typing_action = firstParamString(params, "typingAction", firstParamString(params, "typing", ""));
 
         const compat = try getCompatState();
         const maybe_token = try resolveTelegramBotTokenForParamsAlloc(allocator, compat, params);
         defer if (maybe_token) |value| allocator.free(value);
+
+        var typing = if (deliver and typing_action.len > 0)
+            try telegram_bot_api.sendChatAction(
+                allocator,
+                maybe_token orelse "",
+                chat_id,
+                typing_action,
+                timeout_ms,
+            )
+        else
+            telegram_bot_api.BotDeliveryResult{
+                .attempted = false,
+                .ok = true,
+                .statusCode = 0,
+                .requestUrl = try allocator.dupe(u8, ""),
+                .errorText = try allocator.dupe(u8, if (typing_action.len > 0) "typing skipped" else "typing action not requested"),
+                .messageId = null,
+                .responseBytes = 0,
+                .latencyMs = 0,
+                .requestTimeoutMs = timeout_ms,
+            };
+        defer typing.deinit(allocator);
 
         var delivery = if (deliver)
             try telegram_bot_api.sendMessage(
@@ -5931,6 +5978,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             .channel = "telegram",
             .chatId = chat_id,
             .message = message,
+            .typing = typing,
             .delivery = delivery,
             .status = if (delivery.ok) "ok" else "delivery_failed",
         });
@@ -11302,6 +11350,19 @@ test "dispatch channels.telegram.bot.send supports dryRun without token" {
     try std.testing.expect(std.mem.indexOf(u8, out, "\"status\":\"ok\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"delivery\":{\"attempted\":false") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "delivery skipped") != null);
+}
+
+test "dispatch channels.telegram.bot.send typing action reports missing token when enabled" {
+    const allocator = std.testing.allocator;
+    const out = try dispatch(
+        allocator,
+        "{\"id\":\"tg-bot-send-typing\",\"method\":\"channels.telegram.bot.send\",\"params\":{\"chatId\":12345,\"message\":\"hello typing\",\"typingAction\":\"typing\"}}",
+    );
+    defer allocator.free(out);
+
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"typing\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"status\":\"delivery_failed\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "missing bot token") != null);
 }
 
 test "dispatch memory history handlers return persisted send activity" {
