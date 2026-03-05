@@ -215,7 +215,7 @@ Phase 6 progress notes:
 ## Latest Validation Snapshot
 - [x] `zig build`
 - [x] `zig build test`
-- [x] `zig build test --summary all` -> `121/121` passing (includes gateway auth/rate-limit hardening tests, runtime file/exec policy hardening tests, config-hash diagnostics coverage, bind-policy token enforcement checks, secure-boot policy/update-gate enforcement coverage, boot attestation + attestation-verify + rollback-cancel coverage, TTS/completion execution-path coverage, PAL extraction coverage, secure secret-store backend coverage, and bare-metal ABI v2 contract tests)
+- [x] `zig build test --summary all` -> `122/122` passing (includes gateway auth/rate-limit hardening tests, runtime file/exec policy hardening tests, config-hash diagnostics coverage, bind-policy token enforcement checks, secure-boot policy/update-gate enforcement coverage, boot attestation + attestation-verify + rollback-cancel coverage, TTS/completion execution-path coverage, PAL extraction coverage, secure secret-store backend coverage, and bare-metal ABI v2 contract tests)
 - [x] Runtime policy hardening slice shipped:
   - `file.read` / `file.write` optional sandbox enforcement with traversal + symlink denial paths:
     - `OPENCLAW_ZIG_RUNTIME_FILE_SANDBOX_ENABLED`
@@ -226,7 +226,7 @@ Phase 6 progress notes:
   - new runtime tests:
     - `runtime.tool_runtime.test.tool runtime file sandbox blocks traversal and out-of-root writes`
     - `runtime.tool_runtime.test.tool runtime exec policy denies non-allowlisted commands`
-- [x] `scripts/generate-rpc-reference.ps1` (regenerates `docs/rpc-reference.md` from `src/gateway/registry.zig`, currently `160` methods)
+- [x] `scripts/generate-rpc-reference.ps1` (regenerates `docs/rpc-reference.md` from `src/gateway/registry.zig`, currently `169` methods)
 - [x] `scripts/npm-pack-check.ps1` (validates npm package dry-run for `npm/openclaw-zig-rpc-client`)
 - [x] `scripts/python-pack-check.ps1` (validates python client package tests + wheel/sdist + twine checks for `python/openclaw-zig-rpc-client`)
 - [x] `scripts/generate-release-evidence.ps1` (generates release trust artifacts from packaged assets: `release-manifest.json`, `sbom.spdx.json`, `provenance.intoto.json`)
@@ -273,8 +273,13 @@ Phase 6 progress notes:
   - new export telemetry: `oc_wake_queue_age_buckets(quantum_ticks)` (`current_tick`, `quantum_ticks`, `stale_count`, `stale_older_than_quantum_count`, `future_count`)
   - ABI contract extended with `BaremetalWakeQueueAgeBuckets`
   - regression coverage added for age-bucket field correctness under mixed stale/future wake entries
+- [x] Bare-metal interrupt mask control slice shipped:
+  - new mailbox opcodes: `command_interrupt_mask_set` (`arg0=vector`, `arg1=masked 0|1`) and `command_interrupt_mask_clear_all`
+  - new x86 bootstrap exports: `oc_interrupt_mask_ptr`, `oc_interrupt_mask_is_set`, `oc_interrupt_masked_count`, `oc_interrupt_mask_ignored_count`, `oc_interrupt_mask_set`, `oc_interrupt_mask_clear_all`
+  - runtime behavior: masked non-exception interrupts are ignored while exception vectors remain non-maskable
+  - regression coverage added for masked wake suppression, ignored-interrupt telemetry, and mask command argument validation
 - [x] `scripts/zig-codeberg-master-check.ps1` (reports local vs remote master hash)
-- [x] Multi-baseline method diff check: `Go(latest)=134`, `Original(latest)=94`, `OriginalBeta(latest)=94`, `Union=135`, `Zig=160`, `missing_in_zig=0`, `union_extras=25`
+- [x] Multi-baseline method diff check: `Go(latest)=134`, `Original(latest)=94`, `OriginalBeta(latest)=94`, `Union=135`, `Zig=169`, `missing_in_zig=0`, `union_extras=34`
 - [x] Multi-baseline gateway event diff check: `OriginalEvents(latest)=19`, `OriginalBetaEvents(latest)=19`, `UnionEvents=19`, `ZigEvents=19`, `union_events_missing_in_zig=0`
 - [x] Rust-vs-Zig method diff check: `Rust=124`, `Zig=143`, `missing_in_zig=0`, `zig_extras=19`
 - [x] Smoke scripts now run against built binary (`zig-out/bin/openclaw-zig.exe`) with readiness loops + early-exit diagnostics:

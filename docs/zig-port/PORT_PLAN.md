@@ -449,6 +449,11 @@ while maintaining parity-first validation and release gating.
     - new export: `oc_wake_queue_age_buckets(quantum_ticks)` for compact age diagnostics (`current_tick`, `quantum_ticks`, `stale_count`, `stale_older_than_quantum_count`, `future_count`).
     - ABI contract extended with `BaremetalWakeQueueAgeBuckets` size/layout checks.
     - validated with `zig build test --summary all` (`118/118`) and `scripts/baremetal-smoke-check.ps1`.
+  - bare-metal interrupt mask control slice shipped:
+    - new mailbox opcodes: `command_interrupt_mask_set` (`arg0=vector`, `arg1=masked 0|1`) and `command_interrupt_mask_clear_all`.
+    - new x86 bootstrap exports: `oc_interrupt_mask_ptr`, `oc_interrupt_mask_is_set`, `oc_interrupt_masked_count`, `oc_interrupt_mask_ignored_count`, `oc_interrupt_mask_set`, `oc_interrupt_mask_clear_all`.
+    - runtime now suppresses masked non-exception vectors while preserving exception delivery semantics for vectors `<32`.
+    - validated with `zig build test --summary all` (`122/122`) and `scripts/baremetal-smoke-check.ps1`.
   - Week-3 control-plane completion slice shipped:
     - gateway now exposes `GET /ui` for minimal bootstrap control operations (`status`, `doctor`, `logs.tail`, `node.pair.list`) through a token-aware browser panel.
     - node-pair protocol handling consolidated across payload variants: request aliases (`node_id/deviceId`) and action aliases (`pair_id/nodePairId/id` + optional `status|decision`) now normalize into the same state transitions and response schema.

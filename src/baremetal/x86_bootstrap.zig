@@ -77,6 +77,9 @@ var descriptor_tables_loaded: bool = false;
 var last_interrupt_vector: u8 = 0;
 var interrupt_counter: u64 = 0;
 var interrupt_vector_counts: [interrupt_vector_table_size]u64 = std.mem.zeroes([interrupt_vector_table_size]u64);
+var interrupt_mask: [interrupt_vector_table_size]u8 = std.mem.zeroes([interrupt_vector_table_size]u8);
+var interrupt_masked_count: u32 = 0;
+var masked_interrupt_ignored_count: u64 = 0;
 var last_exception_vector: u8 = 0;
 var exception_counter: u64 = 0;
 var last_exception_code: u64 = 0;
@@ -122,8 +125,11 @@ const exception_vector_limit: u8 = 32;
 pub fn init() void {
     @memset(&gdt, std.mem.zeroes(GdtEntry));
     @memset(&idt, std.mem.zeroes(IdtEntry));
+    @memset(&interrupt_mask, 0);
     @memset(&exception_history, std.mem.zeroes(ExceptionEvent));
     @memset(&interrupt_history, std.mem.zeroes(InterruptEvent));
+    interrupt_masked_count = 0;
+    masked_interrupt_ignored_count = 0;
 
     gdt[1] = makeGdtEntry(0, 0xFFFFF, 0x9A, 0xA0);
     gdt[2] = makeGdtEntry(0, 0xFFFFF, 0x92, 0xA0);
@@ -218,6 +224,34 @@ pub export fn oc_interrupt_vector_counts_ptr() *const [interrupt_vector_table_si
 
 pub export fn oc_interrupt_vector_count(vector: u8) u64 {
     return interrupt_vector_counts[vector];
+}
+
+pub export fn oc_interrupt_mask_ptr() *const [interrupt_vector_table_size]u8 {
+    return &interrupt_mask;
+}
+
+pub export fn oc_interrupt_mask_is_set(vector: u8) bool {
+    return interrupt_mask[vector] != 0;
+}
+
+pub export fn oc_interrupt_masked_count() u32 {
+    return interrupt_masked_count;
+}
+
+pub export fn oc_interrupt_mask_ignored_count() u64 {
+    return masked_interrupt_ignored_count;
+}
+
+pub export fn oc_interrupt_mask_set(vector: u8, masked: bool) void {
+    interrupt_mask[vector] = if (masked) 1 else 0;
+    recountInterruptMaskedCount();
+    refreshInterruptState();
+}
+
+pub export fn oc_interrupt_mask_clear_all() void {
+    @memset(&interrupt_mask, 0);
+    interrupt_masked_count = 0;
+    refreshInterruptState();
 }
 
 pub export fn oc_last_exception_vector() u8 {
@@ -341,6 +375,7 @@ pub export fn oc_interrupt_state_ptr() *const InterruptState {
 pub export fn oc_reset_interrupt_counters() void {
     last_interrupt_vector = 0;
     interrupt_counter = 0;
+    masked_interrupt_ignored_count = 0;
     refreshInterruptState();
 }
 
@@ -401,6 +436,11 @@ pub export fn oc_exception_stub(vector: u8, code: u64) void {
 }
 
 pub export fn oc_interrupt_stub(vector: u8) void {
+    if (vector >= exception_vector_limit and interrupt_mask[vector] != 0) {
+        masked_interrupt_ignored_count +%= 1;
+        refreshInterruptState();
+        return;
+    }
     last_interrupt_vector = vector;
     interrupt_counter +%= 1;
     interrupt_vector_counts[vector] +%= 1;
@@ -456,6 +496,14 @@ fn recordException(vector: u8, code: u64) void {
     } else {
         exception_history_overflow +%= 1;
     }
+}
+
+fn recountInterruptMaskedCount() void {
+    var count: u32 = 0;
+    for (&interrupt_mask) |value| {
+        if (value != 0) count +%= 1;
+    }
+    interrupt_masked_count = count;
 }
 
 fn refreshInterruptState() void {
@@ -610,4 +658,36 @@ test "x86 bootstrap vector counters track per-vector hits and reset" {
     try std.testing.expectEqual(@as(u64, 0), oc_interrupt_vector_count(14));
     try std.testing.expectEqual(@as(u64, 0), oc_exception_vector_count(10));
     try std.testing.expectEqual(@as(u64, 0), oc_exception_vector_count(14));
+}
+
+test "x86 bootstrap interrupt mask blocks masked non-exception vectors" {
+    init();
+    oc_interrupt_mask_clear_all();
+    oc_reset_interrupt_counters();
+    oc_reset_exception_counters();
+    oc_reset_vector_counters();
+
+    const before = oc_interrupt_count();
+    oc_interrupt_mask_set(200, true);
+    try std.testing.expect(oc_interrupt_mask_is_set(200));
+    try std.testing.expectEqual(@as(u32, 1), oc_interrupt_masked_count());
+
+    oc_trigger_interrupt(200);
+    try std.testing.expectEqual(before, oc_interrupt_count());
+    try std.testing.expectEqual(@as(u64, 1), oc_interrupt_mask_ignored_count());
+    try std.testing.expectEqual(@as(u64, 0), oc_interrupt_vector_count(200));
+
+    oc_trigger_interrupt(13);
+    try std.testing.expectEqual(before + 1, oc_interrupt_count());
+    try std.testing.expectEqual(@as(u64, 1), oc_exception_count());
+    try std.testing.expectEqual(@as(u64, 1), oc_interrupt_vector_count(13));
+
+    oc_interrupt_mask_set(200, false);
+    try std.testing.expect(!oc_interrupt_mask_is_set(200));
+    try std.testing.expectEqual(@as(u32, 0), oc_interrupt_masked_count());
+
+    oc_trigger_interrupt(200);
+    try std.testing.expectEqual(before + 2, oc_interrupt_count());
+    try std.testing.expectEqual(@as(u64, 1), oc_interrupt_mask_ignored_count());
+    try std.testing.expectEqual(@as(u64, 1), oc_interrupt_vector_count(200));
 }

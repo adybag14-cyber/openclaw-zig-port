@@ -45,6 +45,7 @@ pub const feature_syscall_table_export: u32 = 1 << 25;
 pub const feature_timer_export: u32 = 1 << 26;
 pub const feature_wake_queue_export: u32 = 1 << 27;
 pub const feature_syscall_abi_v2: u32 = 1 << 28;
+pub const feature_interrupt_mask_export: u32 = 1 << 29;
 
 pub const kernel_abi_multiboot2: u32 = 1 << 0;
 pub const kernel_abi_command_mailbox: u32 = 1 << 1;
@@ -72,6 +73,7 @@ pub const kernel_abi_syscall_table: u32 = 1 << 22;
 pub const kernel_abi_timer: u32 = 1 << 23;
 pub const kernel_abi_wake_queue: u32 = 1 << 24;
 pub const kernel_abi_syscall_abi_v2: u32 = 1 << 25;
+pub const kernel_abi_interrupt_mask: u32 = 1 << 26;
 
 pub const command_nop: u16 = 0;
 pub const command_set_health_code: u16 = 1;
@@ -136,6 +138,8 @@ pub const command_wake_queue_pop_reason: u16 = 59;
 pub const command_wake_queue_pop_vector: u16 = 60;
 pub const command_wake_queue_pop_before_tick: u16 = 61;
 pub const command_wake_queue_pop_reason_vector: u16 = 62;
+pub const command_interrupt_mask_set: u16 = 63;
+pub const command_interrupt_mask_clear_all: u16 = 64;
 
 pub const mode_change_reason_boot: u8 = 0;
 pub const mode_change_reason_command: u8 = 1;
@@ -460,7 +464,8 @@ pub fn defaultFeatureFlags() u32 {
         feature_syscall_table_export |
         feature_timer_export |
         feature_wake_queue_export |
-        feature_syscall_abi_v2;
+        feature_syscall_abi_v2 |
+        feature_interrupt_mask_export;
 }
 
 pub fn defaultAbiFlags() u32 {
@@ -489,7 +494,8 @@ pub fn defaultAbiFlags() u32 {
         kernel_abi_syscall_table |
         kernel_abi_timer |
         kernel_abi_wake_queue |
-        kernel_abi_syscall_abi_v2;
+        kernel_abi_syscall_abi_v2 |
+        kernel_abi_interrupt_mask;
 }
 
 pub fn modeIsValid(mode: u8) bool {

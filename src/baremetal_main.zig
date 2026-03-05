@@ -1238,6 +1238,15 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
             if (!wakeQueuePopReasonVector(reason, vector, @as(u32, @truncate(arg1)))) return abi.result_not_found;
             return abi.result_ok;
         },
+        abi.command_interrupt_mask_set => {
+            if (arg0 > std.math.maxInt(u8) or arg1 > 1) return abi.result_invalid_argument;
+            x86_bootstrap.oc_interrupt_mask_set(@as(u8, @truncate(arg0)), arg1 == 1);
+            return abi.result_ok;
+        },
+        abi.command_interrupt_mask_clear_all => {
+            x86_bootstrap.oc_interrupt_mask_clear_all();
+            return abi.result_ok;
+        },
         abi.command_scheduler_wake_task => {
             if (arg0 == 0 or arg0 > std.math.maxInt(u32)) return abi.result_invalid_argument;
             if (!schedulerWakeTask(@as(u32, @truncate(arg0)), abi.wake_reason_manual, 0, 0, status.ticks)) {
@@ -3459,6 +3468,80 @@ test "baremetal task wait interrupt command honors vector filters and any mode" 
     _ = oc_submit_command(abi.command_task_wait_interrupt, task_vec_id, @as(u64, abi.wait_interrupt_any_vector) + 1);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+}
+
+test "baremetal interrupt mask commands gate non-exception interrupt wakeups" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    status.tick_batch_hint = 1;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_scheduler_reset();
+    oc_timer_reset();
+    oc_wake_queue_clear();
+    x86_bootstrap.oc_reset_interrupt_counters();
+    x86_bootstrap.oc_interrupt_mask_clear_all();
+
+    _ = oc_submit_command(abi.command_scheduler_disable, 0, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_task_create, 5, 0);
+    oc_tick();
+    const task_id = oc_scheduler_task(0).task_id;
+
+    _ = oc_submit_command(abi.command_task_wait_interrupt, task_id, abi.wait_interrupt_any_vector);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+
+    _ = oc_submit_command(abi.command_interrupt_mask_set, 200, 1);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expect(x86_bootstrap.oc_interrupt_mask_is_set(200));
+    try std.testing.expectEqual(@as(u32, 1), x86_bootstrap.oc_interrupt_masked_count());
+
+    _ = oc_submit_command(abi.command_trigger_interrupt, 200, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u64, 1), x86_bootstrap.oc_interrupt_mask_ignored_count());
+
+    _ = oc_submit_command(abi.command_trigger_interrupt, 13, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+    try std.testing.expectEqual(task_id, oc_wake_queue_event(0).task_id);
+    try std.testing.expectEqual(@as(u8, 13), oc_wake_queue_event(0).vector);
+    try std.testing.expectEqual(@as(u64, 1), x86_bootstrap.oc_interrupt_mask_ignored_count());
+
+    _ = oc_submit_command(abi.command_interrupt_mask_set, 200, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expect(!x86_bootstrap.oc_interrupt_mask_is_set(200));
+
+    _ = oc_submit_command(abi.command_interrupt_mask_set, 300, 1);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+
+    _ = oc_submit_command(abi.command_interrupt_mask_set, 200, 2);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+
+    _ = oc_submit_command(abi.command_interrupt_mask_set, 201, 1);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 1), x86_bootstrap.oc_interrupt_masked_count());
+
+    _ = oc_submit_command(abi.command_interrupt_mask_clear_all, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 0), x86_bootstrap.oc_interrupt_masked_count());
+    try std.testing.expect(!x86_bootstrap.oc_interrupt_mask_is_set(201));
 }
 
 test "baremetal interrupt wait with timeout wakes on timer when no interrupt arrives" {
