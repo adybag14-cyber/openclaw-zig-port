@@ -1,9 +1,13 @@
 const std = @import("std");
 const lightpanda = @import("../bridge/lightpanda.zig");
 const web_login = @import("../bridge/web_login.zig");
+const memory_store = @import("../memory/store.zig");
 const time_util = @import("../util/time.zig");
 
 var process_environ: std.process.Environ = std.process.Environ.empty;
+const telegram_context_history_limit: usize = 24;
+const telegram_context_recall_limit: usize = 6;
+const telegram_context_message_max_chars: usize = 1200;
 
 pub const RuntimeError = error{
     InvalidParamsFrame,
@@ -156,6 +160,7 @@ pub const TelegramRuntime = struct {
     bridge_endpoint: []u8,
     bridge_timeout_ms: u32,
     next_update_id: u64,
+    memory_store_ref: ?*memory_store.Store,
     state_path: ?[]u8,
     persistent: bool,
 
@@ -172,6 +177,7 @@ pub const TelegramRuntime = struct {
             .bridge_endpoint = allocator.dupe(u8, "http://127.0.0.1:9222") catch @panic("oom"),
             .bridge_timeout_ms = 15_000,
             .next_update_id = 1,
+            .memory_store_ref = null,
             .state_path = null,
             .persistent = false,
         };
@@ -223,6 +229,10 @@ pub const TelegramRuntime = struct {
         }
         self.bridge_timeout_ms = std.math.clamp(if (timeout_ms == 0) @as(u32, 15_000) else timeout_ms, @as(u32, 500), @as(u32, 120_000));
         if (self.persistent) try self.persist();
+    }
+
+    pub fn setMemoryStore(self: *TelegramRuntime, store: *memory_store.Store) void {
+        self.memory_store_ref = store;
     }
 
     pub fn status(self: *TelegramRuntime) StatusView {
@@ -374,7 +384,7 @@ pub const TelegramRuntime = struct {
         var bridge_used = false;
         const reply = blk: {
             if (authorized) {
-                if (try self.tryGenerateBridgeReply(allocator, provider, model, login_session, message)) |generated| {
+                if (try self.tryGenerateBridgeReply(allocator, provider, model, login_session, session_id, message)) |generated| {
                     bridge_used = true;
                     break :blk generated;
                 }
@@ -474,6 +484,7 @@ pub const TelegramRuntime = struct {
         provider: []const u8,
         model: []const u8,
         login_session_id: []const u8,
+        session_id: []const u8,
         message: []const u8,
     ) !?[]u8 {
         const trimmed_message = std.mem.trim(u8, message, " \t\r\n");
@@ -490,14 +501,45 @@ pub const TelegramRuntime = struct {
             completion_messages.deinit(allocator);
         }
 
-        const role_copy = try allocator.dupe(u8, "user");
-        errdefer allocator.free(role_copy);
-        const content_copy = try allocator.dupe(u8, trimmed_message);
-        errdefer allocator.free(content_copy);
-        try completion_messages.append(allocator, .{
-            .role = role_copy,
-            .content = content_copy,
-        });
+        try appendCompletionMessage(
+            allocator,
+            &completion_messages,
+            "system",
+            "You are OpenClaw Zig running in Telegram with runtime tool capabilities. Do not claim there are no tools or no memory unless context explicitly indicates a failure. Tools include: tools.catalog, exec.run, file.read, file.write, send, poll, sessions.history, chat.history, doctor.memory.status, tts.convert, web.login.start, web.login.wait, web.login.complete, web.login.status.",
+        );
+
+        if (self.memory_store_ref) |store| {
+            if (store.recallSynthesis(allocator, trimmed_message, telegram_context_recall_limit)) |recall| {
+                defer {
+                    var recall_mut = recall;
+                    recall_mut.deinit(allocator);
+                }
+                if (recall.countSemantic > 0 or recall.countNeighbors > 0) {
+                    const recall_context = try buildTelegramRecallContextMessage(allocator, recall);
+                    defer allocator.free(recall_context);
+                    if (std.mem.trim(u8, recall_context, " \t\r\n").len > 0) {
+                        try appendCompletionMessage(allocator, &completion_messages, "system", recall_context);
+                    }
+                }
+            } else |_| {}
+
+            if (store.historyBySession(allocator, session_id, telegram_context_history_limit)) |history| {
+                defer {
+                    var history_mut = history;
+                    history_mut.deinit(allocator);
+                }
+                for (history.items) |entry| {
+                    const role = std.mem.trim(u8, entry.role, " \t\r\n");
+                    const content = trimPromptText(entry.text, telegram_context_message_max_chars);
+                    if (!isAllowedCompletionRole(role) or content.len == 0) continue;
+                    try appendCompletionMessage(allocator, &completion_messages, role, content);
+                }
+            } else |_| {}
+        }
+
+        if (!completionMessagesEndWithUser(completion_messages.items, trimmed_message)) {
+            try appendCompletionMessage(allocator, &completion_messages, "user", trimmed_message);
+        }
 
         var execution = lightpanda.executeCompletion(
             allocator,
@@ -517,6 +559,89 @@ pub const TelegramRuntime = struct {
         const assistant_text = std.mem.trim(u8, execution.assistantText, " \t\r\n");
         if (assistant_text.len == 0) return null;
         return try allocator.dupe(u8, assistant_text);
+    }
+
+    fn appendCompletionMessage(
+        allocator: std.mem.Allocator,
+        completion_messages: *std.ArrayList(lightpanda.CompletionMessage),
+        role_raw: []const u8,
+        content_raw: []const u8,
+    ) !void {
+        const role = std.mem.trim(u8, role_raw, " \t\r\n");
+        const content = std.mem.trim(u8, content_raw, " \t\r\n");
+        if (role.len == 0 or content.len == 0) return;
+        const role_copy = try allocator.dupe(u8, role);
+        errdefer allocator.free(role_copy);
+        const content_copy = try allocator.dupe(u8, content);
+        errdefer allocator.free(content_copy);
+        try completion_messages.append(allocator, .{
+            .role = role_copy,
+            .content = content_copy,
+        });
+    }
+
+    fn isAllowedCompletionRole(role_raw: []const u8) bool {
+        const role = std.mem.trim(u8, role_raw, " \t\r\n");
+        if (role.len == 0) return false;
+        return std.ascii.eqlIgnoreCase(role, "user") or
+            std.ascii.eqlIgnoreCase(role, "assistant") or
+            std.ascii.eqlIgnoreCase(role, "system") or
+            std.ascii.eqlIgnoreCase(role, "tool");
+    }
+
+    fn trimPromptText(text_raw: []const u8, limit: usize) []const u8 {
+        const text = std.mem.trim(u8, text_raw, " \t\r\n");
+        if (text.len == 0 or limit == 0 or text.len <= limit) return text;
+        return text[0..limit];
+    }
+
+    fn completionMessagesEndWithUser(messages: []const lightpanda.CompletionMessage, user_message_raw: []const u8) bool {
+        if (messages.len == 0) return false;
+        const last = messages[messages.len - 1];
+        if (!std.ascii.eqlIgnoreCase(std.mem.trim(u8, last.role, " \t\r\n"), "user")) return false;
+        const last_content = std.mem.trim(u8, last.content, " \t\r\n");
+        const user_message = std.mem.trim(u8, user_message_raw, " \t\r\n");
+        return std.mem.eql(u8, last_content, user_message);
+    }
+
+    fn buildTelegramRecallContextMessage(
+        allocator: std.mem.Allocator,
+        recall: memory_store.RecallSynthesis,
+    ) ![]u8 {
+        var out = std.ArrayList(u8).empty;
+        defer out.deinit(allocator);
+
+        const query = std.mem.trim(u8, recall.query, " \t\r\n");
+        if (query.len > 0) {
+            const query_line = try std.fmt.allocPrint(allocator, "Long-term memory recall query: {s}\n", .{trimPromptText(query, 320)});
+            defer allocator.free(query_line);
+            try out.appendSlice(allocator, query_line);
+        }
+
+        if (recall.semantic.items.len > 0) {
+            try out.appendSlice(allocator, "Semantic recall hits:\n");
+            for (recall.semantic.items, 0..) |entry, idx| {
+                if (idx >= telegram_context_recall_limit) break;
+                const role = if (std.mem.trim(u8, entry.role, " \t\r\n").len > 0) entry.role else "memory";
+                const snippet = trimPromptText(entry.text, 220);
+                if (snippet.len == 0) continue;
+                const line = try std.fmt.allocPrint(allocator, "- semantic[{d}] ({s}): {s}\n", .{ idx + 1, role, snippet });
+                defer allocator.free(line);
+                try out.appendSlice(allocator, line);
+            }
+        }
+
+        if (recall.neighbors.items.len > 0) {
+            try out.appendSlice(allocator, "Graph neighbors:\n");
+            for (recall.neighbors.items, 0..) |edge, idx| {
+                if (idx >= telegram_context_recall_limit) break;
+                const line = try std.fmt.allocPrint(allocator, "- graph[{d}]: {s} -> {s} ({d})\n", .{ idx + 1, edge.from, edge.to, edge.weight });
+                defer allocator.free(line);
+                try out.appendSlice(allocator, line);
+            }
+        }
+
+        return out.toOwnedSlice(allocator);
     }
 
     fn handleCommand(

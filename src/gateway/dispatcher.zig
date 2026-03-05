@@ -8184,6 +8184,7 @@ fn getTelegramRuntime() !*telegram_runtime.TelegramRuntime {
         telegram_runtime_instance = tg_runtime;
     }
     const cfg = currentConfig();
+    telegram_runtime_instance.?.setMemoryStore(try getMemoryStore());
     try telegram_runtime_instance.?.setBridgeConfig(cfg.lightpanda_endpoint, cfg.lightpanda_timeout_ms);
     return &telegram_runtime_instance.?;
 }

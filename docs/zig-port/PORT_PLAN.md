@@ -72,6 +72,10 @@ Full-stack replacement execution reference:
     - memory stats now report vector and graph telemetry (`vectors`, `graphNodes`, `graphEdges`) plus unlimited-retention posture (`unlimited`, `maxEntries=0`).
     - runtime memory retention is now config-driven through `runtime.memory_max_entries` (`OPENCLAW_ZIG_RUNTIME_MEMORY_MAX_ENTRIES`), including unlimited mode for `<=0`.
     - browser completion context injection now includes memory recap + semantic/graph recall hints to reduce false \"no tools/no memory\" model responses.
+  - Phase 5 Telegram bridge context depth expanded:
+    - dispatcher now wires Telegram runtime to the shared memory store (`getTelegramRuntime -> setMemoryStore(getMemoryStore())`) so runtime bridge completions can consume persisted session memory context.
+    - Telegram `tryGenerateBridgeReply` now injects a runtime tool-capability system prompt plus memory recall context (semantic + graph synthesis) and recent session history into Lightpanda completion messages.
+    - Telegram completion message builder now enforces role filtering and last-user dedupe to avoid duplicated user turns in bridge payloads.
 
 - Tracking and documentation refresh (2026-03-04):
   - Gateway hardening slice shipped:

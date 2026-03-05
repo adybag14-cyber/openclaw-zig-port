@@ -180,6 +180,10 @@ Phase 5 enhancement notes:
   - Telegram runtime now attempts real Lightpanda completion for authorized non-command chat messages using active provider/model/login-session context.
   - fallback behavior is preserved (`runtime_echo`) when bridge completion is unavailable or returns empty output.
   - `send` response payload now includes `replySource` telemetry (`bridge_completion`, `runtime_echo`, `auth_required`, `command`) for transport-safe reply provenance checks.
+- Telegram bridge context-depth hardening:
+  - dispatcher now wires Telegram runtime to shared memory store (`getTelegramRuntime -> setMemoryStore(getMemoryStore())`) so bridge completions can consume persisted memory.
+  - Telegram `tryGenerateBridgeReply` now injects runtime tool capability context, semantic/graph recall synthesis, and recent session history into Lightpanda completion messages.
+  - completion payload assembly now applies role filtering and last-user dedupe to prevent duplicate user turns in bridge requests.
 
 ## Phase 6 - Memory + Edge
 - [x] Port memory persistence primitives
