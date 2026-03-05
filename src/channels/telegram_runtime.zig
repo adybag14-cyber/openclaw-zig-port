@@ -49,6 +49,7 @@ pub const SendResult = struct {
     audioBytes: usize,
     audioProviderUsed: []u8,
     audioSource: []u8,
+    metadataJson: ?[]u8 = null,
     queueDepth: usize,
 
     pub fn deinit(self: *SendResult, allocator: std.mem.Allocator) void {
@@ -67,7 +68,113 @@ pub const SendResult = struct {
         allocator.free(self.audioBase64);
         allocator.free(self.audioProviderUsed);
         allocator.free(self.audioSource);
+        if (self.metadataJson) |metadata_json| allocator.free(metadata_json);
     }
+
+    pub fn jsonStringify(self: *const SendResult, jw: anytype) !void {
+        try jw.beginObject();
+        try jw.objectField("status");
+        try jw.write(self.status);
+        try jw.objectField("accepted");
+        try jw.write(self.accepted);
+        try jw.objectField("channel");
+        try jw.write(self.channel);
+        try jw.objectField("to");
+        try jw.write(self.to);
+        try jw.objectField("sessionId");
+        try jw.write(self.sessionId);
+        try jw.objectField("command");
+        try jw.write(self.command);
+        try jw.objectField("commandName");
+        try jw.write(self.commandName);
+        try jw.objectField("reply");
+        try jw.write(self.reply);
+        try jw.objectField("replySource");
+        try jw.write(self.replySource);
+        try jw.objectField("providerFailover");
+        try jw.write(self.providerFailover);
+        try jw.objectField("providerApiKeyUsed");
+        try jw.write(self.providerApiKeyUsed);
+        try jw.objectField("provider");
+        try jw.write(self.provider);
+        try jw.objectField("model");
+        try jw.write(self.model);
+        try jw.objectField("loginSessionId");
+        try jw.write(self.loginSessionId);
+        try jw.objectField("loginCode");
+        try jw.write(self.loginCode);
+        try jw.objectField("authStatus");
+        try jw.write(self.authStatus);
+        try jw.objectField("audioAvailable");
+        try jw.write(self.audioAvailable);
+        try jw.objectField("audioFormat");
+        try jw.write(self.audioFormat);
+        try jw.objectField("audioBase64");
+        try jw.write(self.audioBase64);
+        try jw.objectField("audioBytes");
+        try jw.write(self.audioBytes);
+        try jw.objectField("audioProviderUsed");
+        try jw.write(self.audioProviderUsed);
+        try jw.objectField("audioSource");
+        try jw.write(self.audioSource);
+        if (self.metadataJson) |metadata_json| {
+            try jw.objectField("metadata");
+            try jw.beginWriteRaw();
+            defer jw.endWriteRaw();
+            try jw.writer.writeAll(metadata_json);
+        }
+        try jw.objectField("queueDepth");
+        try jw.write(self.queueDepth);
+        try jw.endObject();
+    }
+};
+
+const AuthProviderMetadataEntry = struct {
+    id: []const u8,
+    displayName: []const u8,
+    aliases: []const []const u8,
+    supportsBrowserSession: bool,
+    apiKeyConfigured: bool,
+    authMode: []const u8,
+    defaultModel: []const u8,
+    verificationUri: []const u8,
+    guestBypassSupported: bool,
+    popupBypassAction: []const u8,
+    guestBypassHint: []const u8,
+};
+
+const AuthBridgeMetadata = struct {
+    status: []const u8,
+    endpoint: []const u8,
+    probeUrl: []const u8,
+    statusCode: u16,
+    latencyMs: i64,
+    @"error": []const u8,
+    sessions: web_login.SummaryView,
+    guidance: []const u8,
+};
+
+const AuthCommandMetadata = struct {
+    type: []const u8,
+    target: []const u8,
+    provider: ?[]const u8 = null,
+    account: ?[]const u8 = null,
+    scope: ?[]const u8 = null,
+    resolvedScope: ?[]const u8 = null,
+    status: ?[]const u8 = null,
+    @"error": ?[]const u8 = null,
+    loginSessionId: ?[]const u8 = null,
+    code: ?[]const u8 = null,
+    verificationUri: ?[]const u8 = null,
+    verificationUriComplete: ?[]const u8 = null,
+    model: ?[]const u8 = null,
+    force: ?bool = null,
+    timeoutSeconds: ?u32 = null,
+    expiresInSeconds: ?u32 = null,
+    revoked: ?bool = null,
+    providers: ?[]const AuthProviderMetadataEntry = null,
+    bridge: ?AuthBridgeMetadata = null,
+    login: ?web_login.SessionView = null,
 };
 
 pub const PolledMessage = struct {
@@ -290,6 +397,7 @@ pub const TelegramRuntime = struct {
         defer allocator.free(outcome.reply);
         defer if (outcome.owned_login_session_id) |login_session_id| allocator.free(login_session_id);
         defer if (outcome.audio_base64) |audio| allocator.free(audio);
+        defer if (outcome.metadata_json) |metadata_json| allocator.free(metadata_json);
         return self.makeSendResult(allocator, channel, target, session_id, outcome);
     }
 
@@ -364,6 +472,7 @@ pub const TelegramRuntime = struct {
         audio_bytes: usize = 0,
         audio_provider_used: []const u8 = "",
         audio_source: []const u8 = "",
+        metadata_json: ?[]u8 = null,
     };
 
     fn handleSendMessage(
@@ -520,6 +629,7 @@ pub const TelegramRuntime = struct {
             .audioBytes = outcome.audio_bytes,
             .audioProviderUsed = try allocator.dupe(u8, outcome.audio_provider_used),
             .audioSource = try allocator.dupe(u8, outcome.audio_source),
+            .metadataJson = if (outcome.metadata_json) |metadata_json| try allocator.dupe(u8, metadata_json) else null,
             .queueDepth = self.queue.items.len,
         };
     }
@@ -1306,10 +1416,15 @@ pub const TelegramRuntime = struct {
         const model_sel = self.getTargetModel(target);
         const default_provider = normalizeProvider(model_sel.provider);
         const default_model = normalizeModel(model_sel.model);
+        const trimmed_target = std.mem.trim(u8, target, " \t\r\n");
         const action = if (args.len == 0) "start" else args[0];
         const rest = if (args.len > 1) args[1..] else &[_][]const u8{};
 
         if (std.ascii.eqlIgnoreCase(action, "help")) {
+            const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                .type = "auth.help",
+                .target = trimmed_target,
+            });
             return .{
                 .is_command = true,
                 .command_name = "auth",
@@ -1319,9 +1434,11 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .metadata_json = metadata_json,
             };
         }
         if (std.ascii.eqlIgnoreCase(action, "providers")) {
+            const metadata_json = try self.buildAuthProvidersMetadataJson(allocator, trimmed_target);
             return .{
                 .is_command = true,
                 .command_name = "auth",
@@ -1331,10 +1448,12 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .metadata_json = metadata_json,
             };
         }
         if (std.ascii.eqlIgnoreCase(action, "bridge")) {
             const bridge_provider = if (rest.len > 0 and isKnownProvider(rest[0])) normalizeProvider(rest[0]) else default_provider;
+            const metadata_json = try self.buildAuthBridgeMetadataJson(allocator, trimmed_target, bridge_provider);
             return .{
                 .is_command = true,
                 .command_name = "auth",
@@ -1344,6 +1463,7 @@ pub const TelegramRuntime = struct {
                 .login_session_id = "",
                 .login_code = "",
                 .auth_status = "ok",
+                .metadata_json = metadata_json,
             };
         }
         if (std.ascii.eqlIgnoreCase(action, "link") or std.ascii.eqlIgnoreCase(action, "open") or std.ascii.eqlIgnoreCase(action, "url")) {
@@ -1375,6 +1495,16 @@ pub const TelegramRuntime = struct {
                     try std.fmt.allocPrint(allocator, "No active auth flow for `{s}` account `{s}`. Start with `/auth start {s} {s}`.", .{ provider, normalizeAccount(account), provider, normalizeAccount(account) })
                 else
                     try std.fmt.allocPrint(allocator, "No active auth session for `{s}` account `{s}`. Start with `/auth start {s} {s}`.", .{ provider, normalizeAccount(account), provider, normalizeAccount(account) });
+                const scope = try authScopeAlloc(allocator, provider, account);
+                defer allocator.free(scope);
+                const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                    .type = if (std.ascii.eqlIgnoreCase(action, "url")) "auth.url" else "auth.link",
+                    .target = trimmed_target,
+                    .provider = provider,
+                    .account = normalizeAccount(account),
+                    .scope = scope,
+                    .status = "none",
+                });
                 return .{
                     .is_command = true,
                     .command_name = "auth",
@@ -1384,18 +1514,33 @@ pub const TelegramRuntime = struct {
                     .login_session_id = "",
                     .login_code = "",
                     .auth_status = "pending",
+                    .metadata_json = metadata_json,
                 };
             }
 
-            const view = self.login_manager.get(login_session) orelse return .{
-                .is_command = true,
-                .command_name = "auth",
-                .reply = try allocator.dupe(u8, "Auth session not found."),
-                .provider = provider,
-                .model = defaultModelForProvider(provider),
-                .login_session_id = login_session,
-                .login_code = "",
-                .auth_status = "missing",
+            const view = self.login_manager.get(login_session) orelse {
+                const scope = try authScopeAlloc(allocator, provider, account);
+                defer allocator.free(scope);
+                const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                    .type = if (std.ascii.eqlIgnoreCase(action, "url")) "auth.url" else "auth.link",
+                    .target = trimmed_target,
+                    .provider = provider,
+                    .account = normalizeAccount(account),
+                    .scope = scope,
+                    .status = "missing",
+                    .loginSessionId = login_session,
+                });
+                return .{
+                    .is_command = true,
+                    .command_name = "auth",
+                    .reply = try allocator.dupe(u8, "Auth session not found."),
+                    .provider = provider,
+                    .model = defaultModelForProvider(provider),
+                    .login_session_id = login_session,
+                    .login_code = "",
+                    .auth_status = "missing",
+                    .metadata_json = metadata_json,
+                };
             };
             const account_norm = normalizeAccount(account);
             const account_is_default = std.mem.eql(u8, account_norm, "default");
@@ -1427,6 +1572,21 @@ pub const TelegramRuntime = struct {
                         "Auth link for `{s}` account `{s}`.\nStatus: `{s}`\nSession: `{s}`\nOpen: {s}\nCode: `{s}`\nThen run `/auth complete {s} <callback_url_or_code> {s} {s}`.",
                         .{ provider, account_norm, view.status, view.loginSessionId, view.verificationUriComplete, view.code, provider, view.loginSessionId, account_norm },
                     ));
+            const scope = try authScopeAlloc(allocator, provider, account_norm);
+            defer allocator.free(scope);
+            const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                .type = if (std.ascii.eqlIgnoreCase(action, "url")) "auth.url" else "auth.link",
+                .target = trimmed_target,
+                .provider = provider,
+                .account = account_norm,
+                .scope = scope,
+                .status = view.status,
+                .loginSessionId = view.loginSessionId,
+                .code = view.code,
+                .verificationUri = view.verificationUri,
+                .verificationUriComplete = view.verificationUriComplete,
+                .login = view,
+            });
             return .{
                 .is_command = true,
                 .command_name = "auth",
@@ -1436,6 +1596,7 @@ pub const TelegramRuntime = struct {
                 .login_session_id = view.loginSessionId,
                 .login_code = view.code,
                 .auth_status = view.status,
+                .metadata_json = metadata_json,
             };
         }
         if (std.ascii.eqlIgnoreCase(action, "start")) {
@@ -1455,6 +1616,18 @@ pub const TelegramRuntime = struct {
                     continue;
                 }
                 if (std.ascii.startsWithIgnoreCase(token, "--")) {
+                    const scope = try authScopeAlloc(allocator, provider, account);
+                    defer allocator.free(scope);
+                    const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                        .type = "auth.start",
+                        .target = trimmed_target,
+                        .provider = provider,
+                        .account = normalizeAccount(account),
+                        .scope = scope,
+                        .resolvedScope = scope,
+                        .status = "invalid",
+                        .@"error" = "invalid_start_args",
+                    });
                     return .{
                         .is_command = true,
                         .command_name = "auth",
@@ -1464,12 +1637,25 @@ pub const TelegramRuntime = struct {
                         .login_session_id = "",
                         .login_code = "",
                         .auth_status = "invalid",
+                        .metadata_json = metadata_json,
                     };
                 }
                 if (std.mem.eql(u8, account, "default")) {
                     account = token;
                     continue;
                 }
+                const scope = try authScopeAlloc(allocator, provider, account);
+                defer allocator.free(scope);
+                const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                    .type = "auth.start",
+                    .target = trimmed_target,
+                    .provider = provider,
+                    .account = normalizeAccount(account),
+                    .scope = scope,
+                    .resolvedScope = scope,
+                    .status = "invalid",
+                    .@"error" = "invalid_start_args",
+                });
                 return .{
                     .is_command = true,
                     .command_name = "auth",
@@ -1479,6 +1665,7 @@ pub const TelegramRuntime = struct {
                     .login_session_id = "",
                     .login_code = "",
                     .auth_status = "invalid",
+                    .metadata_json = metadata_json,
                 };
             }
 
@@ -1499,6 +1686,24 @@ pub const TelegramRuntime = struct {
                                 try std.fmt.allocPrint(allocator, "Auth already {s} for `{s}`.\nOpen: {s}\nThen run `/auth complete {s} <callback_url_or_code>`.\nUse `--force` to replace session.", .{ existing.status, provider, existing.verificationUriComplete, provider })
                             else
                                 try std.fmt.allocPrint(allocator, "Auth already {s} for `{s}` account `{s}`.\nOpen: {s}\nThen run `/auth complete {s} <callback_url_or_code> {s}`.\nUse `--force` to replace session.", .{ existing.status, provider, account_norm, existing.verificationUriComplete, provider, account_norm }));
+                        const scope = try authScopeAlloc(allocator, provider, account_norm);
+                        defer allocator.free(scope);
+                        const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                            .type = "auth.start",
+                            .target = trimmed_target,
+                            .provider = provider,
+                            .account = account_norm,
+                            .scope = scope,
+                            .resolvedScope = scope,
+                            .status = existing.status,
+                            .loginSessionId = existing.loginSessionId,
+                            .code = existing.code,
+                            .verificationUri = existing.verificationUri,
+                            .verificationUriComplete = existing.verificationUriComplete,
+                            .model = existing.model,
+                            .force = force,
+                            .login = existing,
+                        });
                         return .{
                             .is_command = true,
                             .command_name = "auth",
@@ -1508,6 +1713,7 @@ pub const TelegramRuntime = struct {
                             .login_session_id = existing.loginSessionId,
                             .login_code = existing.code,
                             .auth_status = existing.status,
+                            .metadata_json = metadata_json,
                         };
                     }
                 }
@@ -1527,6 +1733,24 @@ pub const TelegramRuntime = struct {
                     try std.fmt.allocPrint(allocator, "Auth started for `{s}`.\nOpen: {s}\nThen run `/auth complete {s} <callback_url_or_code>`", .{ provider, started.verificationUriComplete, provider })
                 else
                     try std.fmt.allocPrint(allocator, "Auth started for `{s}` account `{s}`.\nOpen: {s}\nThen run `/auth complete {s} <callback_url_or_code> {s}`", .{ provider, account_norm, started.verificationUriComplete, provider, account_norm }));
+            const scope = try authScopeAlloc(allocator, provider, account_norm);
+            defer allocator.free(scope);
+            const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                .type = "auth.start",
+                .target = trimmed_target,
+                .provider = provider,
+                .account = account_norm,
+                .scope = scope,
+                .resolvedScope = scope,
+                .status = started.status,
+                .loginSessionId = started.loginSessionId,
+                .code = started.code,
+                .verificationUri = started.verificationUri,
+                .verificationUriComplete = started.verificationUriComplete,
+                .model = model,
+                .force = force,
+                .login = started,
+            });
             return .{
                 .is_command = true,
                 .command_name = "auth",
@@ -1536,6 +1760,7 @@ pub const TelegramRuntime = struct {
                 .login_session_id = started.loginSessionId,
                 .login_code = started.code,
                 .auth_status = started.status,
+                .metadata_json = metadata_json,
             };
         }
         if (std.ascii.eqlIgnoreCase(action, "status") or std.ascii.eqlIgnoreCase(action, "wait")) {
@@ -1703,6 +1928,19 @@ pub const TelegramRuntime = struct {
             const bound_session = try self.getAuthBinding(allocator, target, provider, account);
             const login_session = if (std.mem.trim(u8, session_token, " \t\r\n").len > 0) session_token else bound_session;
             if (std.mem.trim(u8, login_session, " \t\r\n").len == 0) {
+                const account_norm = normalizeAccount(account);
+                const scope = try authScopeAlloc(allocator, provider, account_norm);
+                defer allocator.free(scope);
+                const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                    .type = if (is_wait) "auth.wait" else "auth.status",
+                    .target = trimmed_target,
+                    .provider = provider,
+                    .account = account_norm,
+                    .scope = scope,
+                    .status = "none",
+                    .@"error" = "missing_session",
+                    .timeoutSeconds = if (is_wait) timeout_secs else null,
+                });
                 return .{
                     .is_command = true,
                     .command_name = "auth",
@@ -1712,34 +1950,85 @@ pub const TelegramRuntime = struct {
                     .login_session_id = "",
                     .login_code = "",
                     .auth_status = "pending",
+                    .metadata_json = metadata_json,
                 };
             }
 
             if (std.ascii.eqlIgnoreCase(action, "wait")) {
                 const timeout_ms: u32 = timeout_secs * 1000;
                 const waited = self.login_manager.wait(login_session, timeout_ms) catch |err| switch (err) {
-                    error.SessionNotFound => return .{
-                        .is_command = true,
-                        .command_name = "auth",
-                        .reply = try allocator.dupe(u8, "Auth wait failed: session not found."),
-                        .provider = provider,
-                        .model = defaultModelForProvider(provider),
-                        .login_session_id = login_session,
-                        .login_code = "",
-                        .auth_status = "missing",
+                    error.SessionNotFound => {
+                        const account_norm = normalizeAccount(account);
+                        const scope = try authScopeAlloc(allocator, provider, account_norm);
+                        defer allocator.free(scope);
+                        const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                            .type = "auth.wait",
+                            .target = trimmed_target,
+                            .provider = provider,
+                            .account = account_norm,
+                            .scope = scope,
+                            .status = "missing",
+                            .@"error" = "session_not_found",
+                            .loginSessionId = login_session,
+                            .timeoutSeconds = timeout_secs,
+                        });
+                        return .{
+                            .is_command = true,
+                            .command_name = "auth",
+                            .reply = try allocator.dupe(u8, "Auth wait failed: session not found."),
+                            .provider = provider,
+                            .model = defaultModelForProvider(provider),
+                            .login_session_id = login_session,
+                            .login_code = "",
+                            .auth_status = "missing",
+                            .metadata_json = metadata_json,
+                        };
                     },
-                    error.SessionExpired => return .{
-                        .is_command = true,
-                        .command_name = "auth",
-                        .reply = try allocator.dupe(u8, "Auth wait failed: session expired."),
-                        .provider = provider,
-                        .model = defaultModelForProvider(provider),
-                        .login_session_id = login_session,
-                        .login_code = "",
-                        .auth_status = "expired",
+                    error.SessionExpired => {
+                        const account_norm = normalizeAccount(account);
+                        const scope = try authScopeAlloc(allocator, provider, account_norm);
+                        defer allocator.free(scope);
+                        const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                            .type = "auth.wait",
+                            .target = trimmed_target,
+                            .provider = provider,
+                            .account = account_norm,
+                            .scope = scope,
+                            .status = "expired",
+                            .@"error" = "session_expired",
+                            .loginSessionId = login_session,
+                            .timeoutSeconds = timeout_secs,
+                        });
+                        return .{
+                            .is_command = true,
+                            .command_name = "auth",
+                            .reply = try allocator.dupe(u8, "Auth wait failed: session expired."),
+                            .provider = provider,
+                            .model = defaultModelForProvider(provider),
+                            .login_session_id = login_session,
+                            .login_code = "",
+                            .auth_status = "expired",
+                            .metadata_json = metadata_json,
+                        };
                     },
                     error.InvalidCode => unreachable,
                 };
+                const account_norm = normalizeAccount(account);
+                const scope = try authScopeAlloc(allocator, provider, account_norm);
+                defer allocator.free(scope);
+                const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                    .type = "auth.wait",
+                    .target = trimmed_target,
+                    .provider = provider,
+                    .account = account_norm,
+                    .scope = scope,
+                    .status = waited.status,
+                    .loginSessionId = waited.loginSessionId,
+                    .code = waited.code,
+                    .timeoutSeconds = timeout_secs,
+                    .expiresInSeconds = authExpiresInSeconds(waited.expiresAtMs),
+                    .login = waited,
+                });
                 return .{
                     .is_command = true,
                     .command_name = "auth",
@@ -1749,19 +2038,51 @@ pub const TelegramRuntime = struct {
                     .login_session_id = waited.loginSessionId,
                     .login_code = waited.code,
                     .auth_status = waited.status,
+                    .metadata_json = metadata_json,
                 };
             }
 
-            const view = self.login_manager.get(login_session) orelse return .{
-                .is_command = true,
-                .command_name = "auth",
-                .reply = try allocator.dupe(u8, "Auth session not found."),
-                .provider = provider,
-                .model = defaultModelForProvider(provider),
-                .login_session_id = login_session,
-                .login_code = "",
-                .auth_status = "missing",
+            const view = self.login_manager.get(login_session) orelse {
+                const account_norm = normalizeAccount(account);
+                const scope = try authScopeAlloc(allocator, provider, account_norm);
+                defer allocator.free(scope);
+                const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                    .type = "auth.status",
+                    .target = trimmed_target,
+                    .provider = provider,
+                    .account = account_norm,
+                    .scope = scope,
+                    .status = "missing",
+                    .@"error" = "session_not_found",
+                    .loginSessionId = login_session,
+                });
+                return .{
+                    .is_command = true,
+                    .command_name = "auth",
+                    .reply = try allocator.dupe(u8, "Auth session not found."),
+                    .provider = provider,
+                    .model = defaultModelForProvider(provider),
+                    .login_session_id = login_session,
+                    .login_code = "",
+                    .auth_status = "missing",
+                    .metadata_json = metadata_json,
+                };
             };
+            const account_norm = normalizeAccount(account);
+            const scope = try authScopeAlloc(allocator, provider, account_norm);
+            defer allocator.free(scope);
+            const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                .type = "auth.status",
+                .target = trimmed_target,
+                .provider = provider,
+                .account = account_norm,
+                .scope = scope,
+                .status = view.status,
+                .loginSessionId = view.loginSessionId,
+                .code = view.code,
+                .expiresInSeconds = authExpiresInSeconds(view.expiresAtMs),
+                .login = view,
+            });
             return .{
                 .is_command = true,
                 .command_name = "auth",
@@ -1771,6 +2092,7 @@ pub const TelegramRuntime = struct {
                 .login_session_id = view.loginSessionId,
                 .login_code = view.code,
                 .auth_status = view.status,
+                .metadata_json = metadata_json,
             };
         }
         if (std.ascii.eqlIgnoreCase(action, "guest")) {
@@ -1794,6 +2116,18 @@ pub const TelegramRuntime = struct {
             const bound_session = try self.getAuthBinding(allocator, target, provider, account);
             const login_session = if (std.mem.trim(u8, session_token, " \t\r\n").len > 0) session_token else bound_session;
             if (std.mem.trim(u8, login_session, " \t\r\n").len == 0) {
+                const account_norm = normalizeAccount(account);
+                const scope = try authScopeAlloc(allocator, provider, account_norm);
+                defer allocator.free(scope);
+                const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                    .type = "auth.guest",
+                    .target = trimmed_target,
+                    .provider = provider,
+                    .account = account_norm,
+                    .scope = scope,
+                    .status = "none",
+                    .@"error" = "missing_session",
+                });
                 return .{
                     .is_command = true,
                     .command_name = "auth",
@@ -1803,41 +2137,103 @@ pub const TelegramRuntime = struct {
                     .login_session_id = "",
                     .login_code = "",
                     .auth_status = "pending",
+                    .metadata_json = metadata_json,
                 };
             }
             const completed = self.login_manager.complete(login_session, "") catch |err| switch (err) {
-                error.InvalidCode => return .{
-                    .is_command = true,
-                    .command_name = "auth",
-                    .reply = try std.fmt.allocPrint(allocator, "Guest completion is not supported for `{s}`. Use `/auth complete {s} <code_or_url>`.", .{ provider, provider }),
-                    .provider = provider,
-                    .model = defaultModelForProvider(provider),
-                    .login_session_id = login_session,
-                    .login_code = "",
-                    .auth_status = "rejected",
+                error.InvalidCode => {
+                    const account_norm = normalizeAccount(account);
+                    const scope = try authScopeAlloc(allocator, provider, account_norm);
+                    defer allocator.free(scope);
+                    const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                        .type = "auth.guest",
+                        .target = trimmed_target,
+                        .provider = provider,
+                        .account = account_norm,
+                        .scope = scope,
+                        .status = "rejected",
+                        .@"error" = "invalid_code",
+                        .loginSessionId = login_session,
+                    });
+                    return .{
+                        .is_command = true,
+                        .command_name = "auth",
+                        .reply = try std.fmt.allocPrint(allocator, "Guest completion is not supported for `{s}`. Use `/auth complete {s} <code_or_url>`.", .{ provider, provider }),
+                        .provider = provider,
+                        .model = defaultModelForProvider(provider),
+                        .login_session_id = login_session,
+                        .login_code = "",
+                        .auth_status = "rejected",
+                        .metadata_json = metadata_json,
+                    };
                 },
-                error.SessionExpired => return .{
-                    .is_command = true,
-                    .command_name = "auth",
-                    .reply = try allocator.dupe(u8, "Auth failed: session expired."),
-                    .provider = provider,
-                    .model = defaultModelForProvider(provider),
-                    .login_session_id = login_session,
-                    .login_code = "",
-                    .auth_status = "expired",
+                error.SessionExpired => {
+                    const account_norm = normalizeAccount(account);
+                    const scope = try authScopeAlloc(allocator, provider, account_norm);
+                    defer allocator.free(scope);
+                    const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                        .type = "auth.guest",
+                        .target = trimmed_target,
+                        .provider = provider,
+                        .account = account_norm,
+                        .scope = scope,
+                        .status = "expired",
+                        .@"error" = "session_expired",
+                        .loginSessionId = login_session,
+                    });
+                    return .{
+                        .is_command = true,
+                        .command_name = "auth",
+                        .reply = try allocator.dupe(u8, "Auth failed: session expired."),
+                        .provider = provider,
+                        .model = defaultModelForProvider(provider),
+                        .login_session_id = login_session,
+                        .login_code = "",
+                        .auth_status = "expired",
+                        .metadata_json = metadata_json,
+                    };
                 },
-                error.SessionNotFound => return .{
-                    .is_command = true,
-                    .command_name = "auth",
-                    .reply = try allocator.dupe(u8, "Auth failed: session not found."),
-                    .provider = provider,
-                    .model = defaultModelForProvider(provider),
-                    .login_session_id = login_session,
-                    .login_code = "",
-                    .auth_status = "missing",
+                error.SessionNotFound => {
+                    const account_norm = normalizeAccount(account);
+                    const scope = try authScopeAlloc(allocator, provider, account_norm);
+                    defer allocator.free(scope);
+                    const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                        .type = "auth.guest",
+                        .target = trimmed_target,
+                        .provider = provider,
+                        .account = account_norm,
+                        .scope = scope,
+                        .status = "missing",
+                        .@"error" = "session_not_found",
+                        .loginSessionId = login_session,
+                    });
+                    return .{
+                        .is_command = true,
+                        .command_name = "auth",
+                        .reply = try allocator.dupe(u8, "Auth failed: session not found."),
+                        .provider = provider,
+                        .model = defaultModelForProvider(provider),
+                        .login_session_id = login_session,
+                        .login_code = "",
+                        .auth_status = "missing",
+                        .metadata_json = metadata_json,
+                    };
                 },
             };
             try self.setAuthBinding(target, provider, account, completed.loginSessionId);
+            const account_norm = normalizeAccount(account);
+            const scope = try authScopeAlloc(allocator, provider, account_norm);
+            defer allocator.free(scope);
+            const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                .type = "auth.guest",
+                .target = trimmed_target,
+                .provider = provider,
+                .account = account_norm,
+                .scope = scope,
+                .status = completed.status,
+                .loginSessionId = completed.loginSessionId,
+                .login = completed,
+            });
             return .{
                 .is_command = true,
                 .command_name = "auth",
@@ -1847,10 +2243,18 @@ pub const TelegramRuntime = struct {
                 .login_session_id = completed.loginSessionId,
                 .login_code = "",
                 .auth_status = completed.status,
+                .metadata_json = metadata_json,
             };
         }
         if (std.ascii.eqlIgnoreCase(action, "complete")) {
             if (rest.len == 0) {
+                const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                    .type = "auth.complete",
+                    .target = trimmed_target,
+                    .provider = default_provider,
+                    .status = "pending",
+                    .@"error" = "missing_code",
+                });
                 return .{
                     .is_command = true,
                     .command_name = "auth",
@@ -1860,6 +2264,7 @@ pub const TelegramRuntime = struct {
                     .login_session_id = "",
                     .login_code = "",
                     .auth_status = "pending",
+                    .metadata_json = metadata_json,
                 };
             }
 
@@ -1935,6 +2340,18 @@ pub const TelegramRuntime = struct {
             const bound_session = try self.getAuthBinding(allocator, target, provider, account);
             const login_session = if (std.mem.trim(u8, session_token, " \t\r\n").len > 0) session_token else bound_session;
             if (std.mem.trim(u8, login_session, " \t\r\n").len == 0) {
+                const account_norm = normalizeAccount(account);
+                const scope = try authScopeAlloc(allocator, provider, account_norm);
+                defer allocator.free(scope);
+                const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                    .type = "auth.complete",
+                    .target = trimmed_target,
+                    .provider = provider,
+                    .account = account_norm,
+                    .scope = scope,
+                    .status = "none",
+                    .@"error" = "missing_session",
+                });
                 return .{
                     .is_command = true,
                     .command_name = "auth",
@@ -1944,46 +2361,109 @@ pub const TelegramRuntime = struct {
                     .login_session_id = "",
                     .login_code = "",
                     .auth_status = "pending",
+                    .metadata_json = metadata_json,
                 };
             }
 
             const code = web_login.extractAuthCode(code_token);
             const completed = self.login_manager.complete(login_session, code) catch |err| switch (err) {
-                error.InvalidCode => return .{
-                    .is_command = true,
-                    .command_name = "auth",
-                    .reply = if (web_login.supportsGuestBypass(provider))
-                        try std.fmt.allocPrint(allocator, "Auth failed: invalid code. For `{s}` you can also run `/auth guest {s}` after choosing 'Stay logged out'.", .{ provider, provider })
-                    else
-                        try allocator.dupe(u8, "Auth failed: invalid code."),
-                    .provider = provider,
-                    .model = defaultModelForProvider(provider),
-                    .login_session_id = login_session,
-                    .login_code = "",
-                    .auth_status = "rejected",
+                error.InvalidCode => {
+                    const account_norm = normalizeAccount(account);
+                    const scope = try authScopeAlloc(allocator, provider, account_norm);
+                    defer allocator.free(scope);
+                    const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                        .type = "auth.complete",
+                        .target = trimmed_target,
+                        .provider = provider,
+                        .account = account_norm,
+                        .scope = scope,
+                        .status = "rejected",
+                        .@"error" = "invalid_code",
+                        .loginSessionId = login_session,
+                    });
+                    return .{
+                        .is_command = true,
+                        .command_name = "auth",
+                        .reply = if (web_login.supportsGuestBypass(provider))
+                            try std.fmt.allocPrint(allocator, "Auth failed: invalid code. For `{s}` you can also run `/auth guest {s}` after choosing 'Stay logged out'.", .{ provider, provider })
+                        else
+                            try allocator.dupe(u8, "Auth failed: invalid code."),
+                        .provider = provider,
+                        .model = defaultModelForProvider(provider),
+                        .login_session_id = login_session,
+                        .login_code = "",
+                        .auth_status = "rejected",
+                        .metadata_json = metadata_json,
+                    };
                 },
-                error.SessionExpired => return .{
-                    .is_command = true,
-                    .command_name = "auth",
-                    .reply = try allocator.dupe(u8, "Auth failed: session expired."),
-                    .provider = provider,
-                    .model = defaultModelForProvider(provider),
-                    .login_session_id = login_session,
-                    .login_code = "",
-                    .auth_status = "expired",
+                error.SessionExpired => {
+                    const account_norm = normalizeAccount(account);
+                    const scope = try authScopeAlloc(allocator, provider, account_norm);
+                    defer allocator.free(scope);
+                    const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                        .type = "auth.complete",
+                        .target = trimmed_target,
+                        .provider = provider,
+                        .account = account_norm,
+                        .scope = scope,
+                        .status = "expired",
+                        .@"error" = "session_expired",
+                        .loginSessionId = login_session,
+                    });
+                    return .{
+                        .is_command = true,
+                        .command_name = "auth",
+                        .reply = try allocator.dupe(u8, "Auth failed: session expired."),
+                        .provider = provider,
+                        .model = defaultModelForProvider(provider),
+                        .login_session_id = login_session,
+                        .login_code = "",
+                        .auth_status = "expired",
+                        .metadata_json = metadata_json,
+                    };
                 },
-                error.SessionNotFound => return .{
-                    .is_command = true,
-                    .command_name = "auth",
-                    .reply = try allocator.dupe(u8, "Auth failed: session not found."),
-                    .provider = provider,
-                    .model = defaultModelForProvider(provider),
-                    .login_session_id = login_session,
-                    .login_code = "",
-                    .auth_status = "missing",
+                error.SessionNotFound => {
+                    const account_norm = normalizeAccount(account);
+                    const scope = try authScopeAlloc(allocator, provider, account_norm);
+                    defer allocator.free(scope);
+                    const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                        .type = "auth.complete",
+                        .target = trimmed_target,
+                        .provider = provider,
+                        .account = account_norm,
+                        .scope = scope,
+                        .status = "missing",
+                        .@"error" = "session_not_found",
+                        .loginSessionId = login_session,
+                    });
+                    return .{
+                        .is_command = true,
+                        .command_name = "auth",
+                        .reply = try allocator.dupe(u8, "Auth failed: session not found."),
+                        .provider = provider,
+                        .model = defaultModelForProvider(provider),
+                        .login_session_id = login_session,
+                        .login_code = "",
+                        .auth_status = "missing",
+                        .metadata_json = metadata_json,
+                    };
                 },
             };
             try self.setAuthBinding(target, provider, account, completed.loginSessionId);
+            const account_norm = normalizeAccount(account);
+            const scope = try authScopeAlloc(allocator, provider, account_norm);
+            defer allocator.free(scope);
+            const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                .type = "auth.complete",
+                .target = trimmed_target,
+                .provider = provider,
+                .account = account_norm,
+                .scope = scope,
+                .status = completed.status,
+                .loginSessionId = completed.loginSessionId,
+                .code = completed.code,
+                .login = completed,
+            });
             return .{
                 .is_command = true,
                 .command_name = "auth",
@@ -1993,6 +2473,7 @@ pub const TelegramRuntime = struct {
                 .login_session_id = completed.loginSessionId,
                 .login_code = completed.code,
                 .auth_status = completed.status,
+                .metadata_json = metadata_json,
             };
         }
         if (std.ascii.eqlIgnoreCase(action, "cancel") or std.ascii.eqlIgnoreCase(action, "logout")) {
@@ -2046,10 +2527,24 @@ pub const TelegramRuntime = struct {
                 null;
             const login_session_label = if (owned_login_session_id) |value| value else login_session;
             const logout_session = login_session_label;
+            const revoked = std.mem.trim(u8, logout_session, " \t\r\n").len > 0;
             if (std.mem.trim(u8, logout_session, " \t\r\n").len > 0) {
                 _ = self.login_manager.logout(logout_session);
             }
             try self.clearAuthBinding(allocator, target, provider, account);
+            const account_norm = normalizeAccount(account);
+            const scope = try authScopeAlloc(allocator, provider, account_norm);
+            defer allocator.free(scope);
+            const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                .type = "auth.cancel",
+                .target = trimmed_target,
+                .provider = provider,
+                .account = account_norm,
+                .scope = scope,
+                .status = if (revoked) "cancelled" else "none",
+                .loginSessionId = if (owned_login_session_id) |value| value else null,
+                .revoked = revoked,
+            });
             return .{
                 .is_command = true,
                 .command_name = "auth",
@@ -2063,9 +2558,17 @@ pub const TelegramRuntime = struct {
                 .owned_login_session_id = owned_login_session_id,
                 .login_code = "",
                 .auth_status = "cancelled",
+                .metadata_json = metadata_json,
             };
         }
 
+        const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+            .type = "auth.invalid",
+            .target = trimmed_target,
+            .provider = default_provider,
+            .status = "invalid",
+            .@"error" = "unknown_action",
+        });
         return .{
             .is_command = true,
             .command_name = "auth",
@@ -2075,7 +2578,82 @@ pub const TelegramRuntime = struct {
             .login_session_id = "",
             .login_code = "",
             .auth_status = "invalid",
+            .metadata_json = metadata_json,
         };
+    }
+
+    fn stringifyJsonAlloc(allocator: std.mem.Allocator, value: anytype) ![]u8 {
+        var out: std.Io.Writer.Allocating = .init(allocator);
+        errdefer out.deinit();
+        try std.json.Stringify.value(value, .{ .emit_null_optional_fields = false }, &out.writer);
+        return out.toOwnedSlice();
+    }
+
+    fn authScopeAlloc(allocator: std.mem.Allocator, provider: []const u8, account: []const u8) ![]u8 {
+        return std.fmt.allocPrint(allocator, "{s}/{s}", .{ normalizeProvider(provider), normalizeAccount(account) });
+    }
+
+    fn authExpiresInSeconds(expires_at_ms: i64) u32 {
+        const remaining_ms = expires_at_ms - time_util.nowMs();
+        if (remaining_ms <= 0) return 0;
+        return @intCast(@divFloor(remaining_ms + 999, 1000));
+    }
+
+    fn buildAuthProvidersMetadataJson(self: *TelegramRuntime, allocator: std.mem.Allocator, target: []const u8) ![]u8 {
+        const catalog = telegramAuthProviderCatalog();
+        var providers = try allocator.alloc(AuthProviderMetadataEntry, catalog.len);
+        defer allocator.free(providers);
+
+        for (catalog, 0..) |entry, idx| {
+            const profile = web_login.providerProfile(entry.id);
+            providers[idx] = .{
+                .id = entry.id,
+                .displayName = entry.display_name,
+                .aliases = entry.aliases,
+                .supportsBrowserSession = entry.supports_browser_session,
+                .apiKeyConfigured = providerApiKeyConfigured(self, allocator, entry.id),
+                .authMode = profile.auth_mode,
+                .defaultModel = profile.default_model,
+                .verificationUri = profile.verification_uri,
+                .guestBypassSupported = profile.guest_bypass_supported,
+                .popupBypassAction = profile.popup_bypass_action,
+                .guestBypassHint = profile.guest_bypass_hint,
+            };
+        }
+
+        return stringifyJsonAlloc(allocator, AuthCommandMetadata{
+            .type = "auth.providers",
+            .target = std.mem.trim(u8, target, " \t\r\n"),
+            .providers = providers,
+        });
+    }
+
+    fn buildAuthBridgeMetadataJson(self: *TelegramRuntime, allocator: std.mem.Allocator, target: []const u8, provider_raw: []const u8) ![]u8 {
+        const provider = normalizeProvider(provider_raw);
+        const guidance = providerBridgeGuidance(provider);
+        const summary = self.login_manager.status();
+        const probe = try lightpanda.probeEndpoint(allocator, self.bridge_endpoint);
+        defer {
+            allocator.free(probe.endpoint);
+            allocator.free(probe.probeUrl);
+            allocator.free(probe.errorText);
+        }
+
+        return stringifyJsonAlloc(allocator, AuthCommandMetadata{
+            .type = "auth.bridge",
+            .target = std.mem.trim(u8, target, " \t\r\n"),
+            .provider = provider,
+            .bridge = .{
+                .status = if (probe.ok) "ok" else "error",
+                .endpoint = probe.endpoint,
+                .probeUrl = probe.probeUrl,
+                .statusCode = probe.statusCode,
+                .latencyMs = probe.latencyMs,
+                .@"error" = probe.errorText,
+                .sessions = summary,
+                .guidance = guidance,
+            },
+        });
     }
 
     fn formatAuthProvidersMessage(self: *TelegramRuntime, allocator: std.mem.Allocator) ![]u8 {

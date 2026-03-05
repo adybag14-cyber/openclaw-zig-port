@@ -12913,6 +12913,114 @@ test "dispatch send/poll handles auth command and assistant reply loop" {
     try std.testing.expect(std.mem.indexOf(u8, poll, "\"updates\"") != null);
 }
 
+test "dispatch send auth commands expose go-compatible metadata envelope" {
+    const allocator = std.testing.allocator;
+
+    const auth_providers = try dispatch(allocator, "{\"id\":\"tg-auth-providers-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta\",\"sessionId\":\"tg-meta\",\"message\":\"/auth providers\"}}");
+    defer allocator.free(auth_providers);
+    {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, auth_providers, .{});
+        defer parsed.deinit();
+        const result = parsed.value.object.get("result") orelse return error.TestUnexpectedResult;
+        const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(metadata == .object);
+        const metadata_type = metadata.object.get("type") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(metadata_type == .string and std.mem.eql(u8, metadata_type.string, "auth.providers"));
+        const providers = metadata.object.get("providers") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(providers == .array and providers.array.items.len > 0);
+    }
+
+    const auth_bridge = try dispatch(allocator, "{\"id\":\"tg-auth-bridge-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta\",\"sessionId\":\"tg-meta\",\"message\":\"/auth bridge qwen\"}}");
+    defer allocator.free(auth_bridge);
+    {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, auth_bridge, .{});
+        defer parsed.deinit();
+        const result = parsed.value.object.get("result") orelse return error.TestUnexpectedResult;
+        const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(metadata == .object);
+        const metadata_type = metadata.object.get("type") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(metadata_type == .string and std.mem.eql(u8, metadata_type.string, "auth.bridge"));
+        const bridge = metadata.object.get("bridge") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(bridge == .object);
+        const sessions = bridge.object.get("sessions") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(sessions == .object);
+    }
+
+    const auth_start = try dispatch(allocator, "{\"id\":\"tg-auth-start-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta\",\"sessionId\":\"tg-meta\",\"message\":\"/auth start codex mobile --force\"}}");
+    defer allocator.free(auth_start);
+    const login_session = try extractResultStringField(allocator, auth_start, "loginSessionId");
+    defer allocator.free(login_session);
+    const login_code = try extractResultStringField(allocator, auth_start, "loginCode");
+    defer allocator.free(login_code);
+    const metadata_type = try extractResultObjectStringField(allocator, auth_start, "metadata", "type");
+    defer allocator.free(metadata_type);
+    try std.testing.expect(std.mem.eql(u8, metadata_type, "auth.start"));
+    const metadata_provider = try extractResultObjectStringField(allocator, auth_start, "metadata", "provider");
+    defer allocator.free(metadata_provider);
+    try std.testing.expect(std.mem.eql(u8, metadata_provider, "codex"));
+    const metadata_account = try extractResultObjectStringField(allocator, auth_start, "metadata", "account");
+    defer allocator.free(metadata_account);
+    try std.testing.expect(std.mem.eql(u8, metadata_account, "mobile"));
+
+    const auth_status = try dispatch(allocator, "{\"id\":\"tg-auth-status-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta\",\"sessionId\":\"tg-meta\",\"message\":\"/auth status codex mobile\"}}");
+    defer allocator.free(auth_status);
+    {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, auth_status, .{});
+        defer parsed.deinit();
+        const result = parsed.value.object.get("result") orelse return error.TestUnexpectedResult;
+        const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(metadata == .object);
+        const login = metadata.object.get("login") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(login == .object);
+        const login_id = login.object.get("loginSessionId") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(login_id == .string and std.mem.eql(u8, login_id.string, login_session));
+    }
+
+    const auth_wait = try dispatch(allocator, "{\"id\":\"tg-auth-wait-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta\",\"sessionId\":\"tg-meta\",\"message\":\"/auth wait codex mobile --timeout 1\"}}");
+    defer allocator.free(auth_wait);
+    {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, auth_wait, .{});
+        defer parsed.deinit();
+        const result = parsed.value.object.get("result") orelse return error.TestUnexpectedResult;
+        const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
+        const timeout = metadata.object.get("timeoutSeconds") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(timeout == .integer and timeout.integer == 1);
+    }
+
+    const provider_callback_url = try std.fmt.allocPrint(allocator, "https://chatgpt.com/?openclaw_code={s}", .{login_code});
+    defer allocator.free(provider_callback_url);
+    const auth_complete_frame = try std.fmt.allocPrint(allocator, "{{\"id\":\"tg-auth-complete-meta\",\"method\":\"send\",\"params\":{{\"channel\":\"telegram\",\"to\":\"room-meta\",\"sessionId\":\"tg-meta\",\"message\":\"/auth complete codex {s} mobile\"}}}}", .{provider_callback_url});
+    defer allocator.free(auth_complete_frame);
+    const auth_complete = try dispatch(allocator, auth_complete_frame);
+    defer allocator.free(auth_complete);
+    try std.testing.expect(std.mem.indexOf(u8, auth_complete, "\"authStatus\":\"authorized\"") != null);
+    {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, auth_complete, .{});
+        defer parsed.deinit();
+        const result = parsed.value.object.get("result") orelse return error.TestUnexpectedResult;
+        const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(metadata == .object);
+        const login = metadata.object.get("login") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(login == .object);
+        const status = login.object.get("status") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(status == .string and std.mem.eql(u8, status.string, "authorized"));
+    }
+
+    const auth_cancel = try dispatch(allocator, "{\"id\":\"tg-auth-cancel-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta\",\"sessionId\":\"tg-meta\",\"message\":\"/auth cancel codex mobile\"}}");
+    defer allocator.free(auth_cancel);
+    const cancel_type = try extractResultObjectStringField(allocator, auth_cancel, "metadata", "type");
+    defer allocator.free(cancel_type);
+    try std.testing.expect(std.mem.eql(u8, cancel_type, "auth.cancel"));
+    {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, auth_cancel, .{});
+        defer parsed.deinit();
+        const result = parsed.value.object.get("result") orelse return error.TestUnexpectedResult;
+        const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
+        const revoked = metadata.object.get("revoked") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(revoked == .bool and revoked.bool);
+    }
+}
+
 test "dispatch channels.telegram.webhook.receive routes update through runtime and skips delivery in dry run" {
     const allocator = std.testing.allocator;
     const frame =

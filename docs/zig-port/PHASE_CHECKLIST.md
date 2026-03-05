@@ -1,13 +1,19 @@
 # Phase Checklist
 
 Release lock: no release tag is allowed until all phases are complete and parity is measured at 100%.
-Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `170/170`.
+Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `171/171`.
 
 ## Full-Stack Replacement Track (FS0..FS7)
 - [x] FS0 - Scope lock + baseline freeze (`docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`, issue `#2`)
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram `/auth` command receipts now expose a Go-compatible nested `metadata` object while preserving Zig's existing top-level command fields:
+      - `send` results now include `result.metadata` for `/auth help|providers|bridge|link|url|start|status|wait|guest|complete|cancel`.
+      - auth metadata now carries structured provider/account/scope/session/login state, provider catalogs, bridge probe/session summaries, timeout telemetry, and revoke state instead of reply-text-only semantics.
+      - top-level `loginSessionId`, `loginCode`, and `authStatus` remain unchanged for existing Zig consumers.
+      - regression coverage added:
+        - `gateway.dispatcher.test.dispatch send auth commands expose go-compatible metadata envelope`
     - Telegram `/auth` parser parity is now stricter for scoped status/wait/complete/cancel flows:
       - `/auth status` now rejects unknown `--*` flags and extra trailing positional arguments instead of silently accepting them.
       - `/auth wait` now accepts Go-style `session <id>`, supports `--timeout <seconds>` and `--timeout=<seconds>`, rejects invalid/unknown timeout flags, and enforces the `1..900` timeout bound.

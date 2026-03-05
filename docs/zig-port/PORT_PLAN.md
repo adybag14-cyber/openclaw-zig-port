@@ -56,8 +56,15 @@ Full-stack replacement execution reference:
 
 ## Current Progress Snapshot
 
-- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `170/170`.
+- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `171/171`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram auth envelope parity expanded:
+    - `src/channels/telegram_runtime.zig` now attaches a nested `metadata` object to `/auth` command receipts while preserving Zig's stable top-level receipt fields (`loginSessionId`, `loginCode`, `authStatus`, `reply`, etc.).
+    - metadata now carries structured auth state for `help`, `providers`, `bridge`, `link|open|url`, `start`, `status`, `wait`, `guest`, `complete`, `cancel`, and invalid-action replies.
+    - provider catalog metadata now round-trips structured provider descriptors (`authMode`, `defaultModel`, `verificationUri`, guest hints, alias sets, API-key posture) instead of only reply text.
+    - bridge metadata now includes structured Lightpanda probe status, endpoint/probe URL, HTTP status, latency, guidance, and login-manager session summary.
+    - dispatcher regression coverage added:
+      - `gateway.dispatcher.test.dispatch send auth commands expose go-compatible metadata envelope`
   - Phase 5 Telegram auth parser parity hardened:
     - `/auth status` now rejects unknown `--*` flags and extra positional tail arguments instead of silently accepting them.
     - `/auth wait` now supports Go-style `session <id>`, bounded `--timeout <seconds>` and `--timeout=<seconds>` parsing, and deterministic rejection for missing/invalid/unknown timeout options.
