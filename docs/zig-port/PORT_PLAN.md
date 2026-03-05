@@ -56,7 +56,7 @@ Full-stack replacement execution reference:
 
 ## Current Progress Snapshot
 
-- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `127/127`.
+- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `137/137`.
 - Full-stack replacement kickoff (2026-03-05):
   - master tracking issue refreshed with FS0..FS7 execution gates.
   - FS0 execution issue opened (`#2`) and linked from master issue.
@@ -296,6 +296,11 @@ Full-stack replacement execution reference:
     - dispatcher telegram bot/webhook delivery paths now consume those runtime defaults when request params omit stream/typing controls.
     - env override wiring added for all new runtime telegram knobs (`OPENCLAW_ZIG_RUNTIME_TELEGRAM_*`).
     - added regression test validating config-driven stream chunking + typing defaults without per-request overrides.
+  - Added Telegram streamed typing keepalive parity:
+    - chunked delivery now emits periodic typing pulses during long streamed replies instead of a single pre-send typing action.
+    - pulse cadence is now controlled by runtime/request typing interval (`runtime.telegram_typing_interval_ms`, `typingIntervalMs|typing_interval_ms`).
+    - delivery telemetry now includes `typingPulseCount` and `typingIntervalMs` for transport diagnostics.
+    - added regression tests for config-default typing interval and explicit typing interval override.
   - Dispatcher `channels.status` now includes telegram queue/target/auth telemetry
   - Added auth + reply-loop smokes (`scripts/web-login-smoke-check.ps1`, `scripts/telegram-reply-loop-smoke-check.ps1`)
   - Telegram reply-loop smoke now asserts `/auth link` parity guidance includes active code/session identifiers and completion command hints.

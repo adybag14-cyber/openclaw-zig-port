@@ -1,7 +1,7 @@
 # Phase Checklist
 
 Release lock: no release tag is allowed until all phases are complete and parity is measured at 100%.
-Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `127/127`.
+Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `137/137`.
 
 ## Full-Stack Replacement Track (FS0..FS7)
 - [x] FS0 - Scope lock + baseline freeze (`docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`, issue `#2`)
@@ -142,6 +142,11 @@ Phase 5 enhancement notes:
     - `OPENCLAW_ZIG_RUNTIME_TELEGRAM_TYPING_INDICATORS`
     - `OPENCLAW_ZIG_RUNTIME_TELEGRAM_TYPING_INTERVAL_MS`
   - Dispatcher telegram delivery now consumes config defaults when request-level stream/typing fields are omitted.
+- Telegram typing keepalive parity slice:
+  - `channels.telegram.webhook.receive` and `channels.telegram.bot.send` now run chunk-aware typing keepalive pulses during streamed delivery batches instead of a single pre-send typing call.
+  - typing cadence now honors runtime/request defaults via `runtime.telegram_typing_interval_ms` and `typingIntervalMs|typing_interval_ms`.
+  - `deliveryBatch` now includes typing telemetry (`typingPulseCount`, `typingIntervalMs`) for deterministic transport diagnostics.
+  - regression tests added for config-default typing interval behavior and explicit typing interval override.
 - Completion semantics hardening:
   - Top-level `ok/status/message` for `browser.request` now reflect live completion outcome when completion execution is requested (`status=failed` on bridge failure).
   - Assistant text extraction now supports additional response shapes: `output_text`, `output[].content[]`, and array-based `choices[].message.content`.
@@ -277,7 +282,7 @@ Phase 6 progress notes:
 ## Latest Validation Snapshot
 - [x] `zig build`
 - [x] `zig build test`
-- [x] `zig build test --summary all` -> `127/127` passing (includes gateway auth/rate-limit hardening tests, runtime file/exec policy hardening tests, config-hash diagnostics coverage, bind-policy token enforcement checks, secure-boot policy/update-gate enforcement coverage, boot attestation + attestation-verify + rollback-cancel coverage, TTS/completion execution-path coverage, PAL extraction coverage, secure secret-store backend coverage, and bare-metal ABI v2 contract tests)
+- [x] `zig build test --summary all` -> `137/137` passing (includes gateway auth/rate-limit hardening tests, runtime file/exec policy hardening tests, config-hash diagnostics coverage, bind-policy token enforcement checks, secure-boot policy/update-gate enforcement coverage, boot attestation + attestation-verify + rollback-cancel coverage, TTS/completion execution-path coverage, PAL extraction coverage, secure secret-store backend coverage, and bare-metal ABI v2 contract tests)
 - [x] Runtime policy hardening slice shipped:
   - `file.read` / `file.write` optional sandbox enforcement with traversal + symlink denial paths:
     - `OPENCLAW_ZIG_RUNTIME_FILE_SANDBOX_ENABLED`
