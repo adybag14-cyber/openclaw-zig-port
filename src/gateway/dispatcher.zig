@@ -11593,7 +11593,7 @@ test "dispatch browser.request metadata-only direct provider reports explicit ap
     const allocator = std.testing.allocator;
     const out = try dispatch(
         allocator,
-        "{\"id\":\"3e\",\"method\":\"browser.request\",\"params\":{\"provider\":\"chatgpt\",\"directProvider\":true,\"stream\":true,\"apiKey\":\"sk-test-chatgpt\"}}",
+        "{\"id\":\"3e\",\"method\":\"browser.request\",\"params\":{\"provider\":\"chatgpt\",\"directProvider\":true,\"stream\":true,\"apiKey\":\"testkey-chatgpt\"}}",
     );
     defer allocator.free(out);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"executionPath\":\"metadata-only\"") != null);
@@ -11608,7 +11608,7 @@ test "dispatch browser.request metadata-only direct provider reports explicit ap
     const allocator = std.testing.allocator;
     const out = try dispatch(
         allocator,
-        "{\"id\":\"3f\",\"method\":\"browser.request\",\"params\":{\"provider\":\"openrouter\",\"directProvider\":true,\"apiKey\":\"or-test-key\"}}",
+        "{\"id\":\"3f\",\"method\":\"browser.request\",\"params\":{\"provider\":\"openrouter\",\"directProvider\":true,\"apiKey\":\"testkey-openrouter\"}}",
     );
     defer allocator.free(out);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"executionPath\":\"metadata-only\"") != null);
@@ -11622,7 +11622,7 @@ test "dispatch browser.request metadata-only direct provider reports explicit ap
     const allocator = std.testing.allocator;
     const out = try dispatch(
         allocator,
-        "{\"id\":\"3g\",\"method\":\"browser.request\",\"params\":{\"provider\":\"opencode\",\"directProvider\":true,\"apiKey\":\"oc-test-key\"}}",
+        "{\"id\":\"3g\",\"method\":\"browser.request\",\"params\":{\"provider\":\"opencode\",\"directProvider\":true,\"apiKey\":\"testkey-opencode\"}}",
     );
     defer allocator.free(out);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"executionPath\":\"metadata-only\"") != null);
@@ -11636,7 +11636,7 @@ test "dispatch browser.request metadata-only direct provider reports explicit ap
     const allocator = std.testing.allocator;
     const out = try dispatch(
         allocator,
-        "{\"id\":\"3h\",\"method\":\"browser.request\",\"params\":{\"provider\":\"openrouter\",\"directProvider\":true,\"apiKey\":\"or-test-key\"}}",
+        "{\"id\":\"3h\",\"method\":\"browser.request\",\"params\":{\"provider\":\"openrouter\",\"directProvider\":true,\"apiKey\":\"testkey-openrouter\"}}",
     );
     defer allocator.free(out);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"executionPath\":\"metadata-only\"") != null);
