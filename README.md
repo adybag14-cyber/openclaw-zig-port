@@ -26,6 +26,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - bare-metal timer wake behavior is now enforced by a live QEMU+GDB probe (`command_timer_reset`, `command_timer_set_quantum`, `command_task_create`, `command_task_wait_for`) against the freestanding PVH artifact
   - bare-metal allocator/syscall behavior is now enforced by a live QEMU+GDB probe (`command_allocator_*`, `command_syscall_*`) including blocked and disabled syscall paths
   - bare-metal interrupt-mask/exception behavior is now enforced by a live QEMU+GDB probe (masked external interrupt remains blocked while exception delivery still wakes a waiting task and records interrupt/exception histories)
+  - bare-metal interrupt-mask profile control is now enforced by a live QEMU+GDB probe (`command_interrupt_mask_apply_profile`, `command_interrupt_mask_set`, `command_interrupt_mask_reset_ignored_counts`, `command_interrupt_mask_clear_all`) covering external-all, custom unmask/remask, external-high, invalid profile rejection, and clear-all recovery
   - bare-metal periodic timer pause/resume behavior is now enforced by a live QEMU+GDB probe (`command_timer_schedule_periodic`, `command_timer_disable`, `command_timer_enable`) that snapshots the first resumed periodic fire against the freestanding PVH artifact
   - bare-metal wake-queue summary/age telemetry is now enforced by a live QEMU+GDB probe (`oc_wake_queue_summary_ptr`, `oc_wake_queue_age_buckets_ptr_quantum_2`) before and after selective queue drains over mixed timer/interrupt/manual wake queues
 - Dual runtime profiles available:
@@ -33,7 +34,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 - Bare-metal profile: `openclaw-zig-baremetal.elf` (`zig build baremetal`, freestanding runtime loop + Multiboot2 header)
   - smoke gate validates ELF class/endianness, Multiboot2 location/alignment, `.multiboot` section, and required exported symbols
   - smoke gate also validates Multiboot2 header field contract and checksum
-  - optional QEMU validation path available via `zig build baremetal -Dbaremetal-qemu-smoke=true`, `scripts/baremetal-qemu-smoke-check.ps1`, `scripts/baremetal-qemu-runtime-oc-tick-check.ps1`, `scripts/baremetal-qemu-command-loop-check.ps1`, `scripts/baremetal-qemu-scheduler-probe-check.ps1`, `scripts/baremetal-qemu-timer-wake-probe-check.ps1`, `scripts/baremetal-qemu-periodic-timer-probe-check.ps1`, `scripts/baremetal-qemu-periodic-interrupt-probe-check.ps1`, `scripts/baremetal-qemu-interrupt-timeout-probe-check.ps1`, `scripts/baremetal-qemu-wake-queue-selective-probe-check.ps1`, `scripts/baremetal-qemu-wake-queue-summary-age-probe-check.ps1`, `scripts/baremetal-qemu-allocator-syscall-probe-check.ps1`, and `scripts/baremetal-qemu-interrupt-mask-exception-probe-check.ps1` (auto-skips when QEMU/GDB or PVH toolchain pieces are unavailable)
+  - optional QEMU validation path available via `zig build baremetal -Dbaremetal-qemu-smoke=true`, `scripts/baremetal-qemu-smoke-check.ps1`, `scripts/baremetal-qemu-runtime-oc-tick-check.ps1`, `scripts/baremetal-qemu-command-loop-check.ps1`, `scripts/baremetal-qemu-scheduler-probe-check.ps1`, `scripts/baremetal-qemu-timer-wake-probe-check.ps1`, `scripts/baremetal-qemu-periodic-timer-probe-check.ps1`, `scripts/baremetal-qemu-periodic-interrupt-probe-check.ps1`, `scripts/baremetal-qemu-interrupt-timeout-probe-check.ps1`, `scripts/baremetal-qemu-wake-queue-selective-probe-check.ps1`, `scripts/baremetal-qemu-wake-queue-summary-age-probe-check.ps1`, `scripts/baremetal-qemu-allocator-syscall-probe-check.ps1`, `scripts/baremetal-qemu-interrupt-mask-exception-probe-check.ps1`, and `scripts/baremetal-qemu-interrupt-mask-profile-probe-check.ps1` (auto-skips when QEMU/GDB or PVH toolchain pieces are unavailable)
   - optional QEMU allocator/syscall failure probe validates invalid-alignment, no-space, blocked-syscall, and disabled-syscall result semantics plus command-result counters against the freestanding PVH artifact
   - optional QEMU scheduler probe validates scheduler reset/timeslice/task-create/policy-enable flow end to end against the freestanding PVH artifact
   - optional QEMU timer wake probe validates timer reset/quantum/task-wait flow end to end, including fired timer entries and wake-queue telemetry against the freestanding PVH artifact
@@ -44,6 +45,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - optional QEMU wake-queue summary/age probe validates exported summary and age-bucket telemetry snapshots before and after selective queue drains against the freestanding PVH artifact
   - optional QEMU allocator/syscall probe validates alloc/free plus syscall register/invoke/block/disable/unregister flow end to end against the freestanding PVH artifact
   - optional QEMU interrupt-mask/exception probe validates masked external vectors stay blocked while exception vectors still flow through wait/wake and history telemetry against the freestanding PVH artifact
+  - optional QEMU interrupt-mask profile probe validates profile application, selective unmask/remask, ignored-count reset, external-high masking, invalid profile rejection, and clear-all recovery against the freestanding PVH artifact
   - bare-metal ABI now includes exported kernel info + command mailbox hooks (`oc_kernel_info_ptr`, `oc_command_ptr`, `oc_submit_command`, `oc_tick_n`)
   - bare-metal boot diagnostics ABI now exported with phase/command/tick telemetry and stack snapshot helpers (`oc_boot_diag_ptr`, `oc_boot_diag_capture_stack`)
   - bare-metal command history ABI now exported for mailbox execution tracing (`oc_command_history_capacity`, `oc_command_history_len`, `oc_command_history_event`, `oc_command_history_clear`)
@@ -424,6 +426,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU allocator syscall probe
 - optional bare-metal QEMU allocator syscall failure probe
 - optional bare-metal QEMU interrupt mask exception probe
+- optional bare-metal QEMU interrupt mask profile probe
 - runtime smoke gate
 - appliance control-plane smoke gate (`system.boot.*`, `system.rollback.*`, secure-boot-gated `update.run`)
 - appliance restart recovery smoke gate (persisted `compat-state.json` replay across stop/start)
@@ -456,6 +459,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU wake-queue summary/age validation
 - optional bare-metal QEMU allocator syscall validation
 - optional bare-metal QEMU allocator syscall failure validation
+- optional bare-metal QEMU interrupt mask profile validation
 - appliance control-plane smoke validation
 - appliance restart recovery validation
 - appliance rollout boundary validation

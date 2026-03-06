@@ -204,6 +204,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-timeout-probe-check.ps1
 
+      - name: Bare-metal QEMU interrupt mask profile probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-profile-probe-check.ps1
+
       - name: Bare-metal QEMU wake queue selective probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-wake-queue-selective-probe-check.ps1

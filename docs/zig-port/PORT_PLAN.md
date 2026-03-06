@@ -1099,6 +1099,11 @@ Full-stack replacement execution reference:
     - live PVH/QEMU+GDB sequence proves `command_interrupt_mask_apply_profile(external_all)` blocks vector `200` without waking the waiting task, while `command_trigger_exception(13, 51966)` still wakes the task and records interrupt/exception histories.
     - key probe evidence: `TASK0_STATE_AFTER_MASK=6`, `WAKE_QUEUE_COUNT_AFTER_MASK=0`, `MASKED_INTERRUPT_IGNORED_COUNT=1`, `INTERRUPT_COUNT=1`, `EXCEPTION_COUNT=1`, `WAKE0_REASON=2`, `WAKE0_VECTOR=13`.
     - probe is wired into both `zig-ci` and `release-preview` validate stages so interrupt-mask regressions now block CI.
+  - bare-metal QEMU interrupt-mask profile validation shipped:
+    - new script: `scripts/baremetal-qemu-interrupt-mask-profile-probe-check.ps1`.
+    - live PVH/QEMU+GDB sequence proves `command_interrupt_mask_apply_profile(external_all)` blocks vector `200`, `command_interrupt_mask_set(200, 0)` restores wake delivery on vector `200`, `command_interrupt_mask_set(201, 1)` preserves `custom` profile drift while ignored counts accumulate, `command_interrupt_mask_reset_ignored_counts` clears the ignored-count telemetry, `command_interrupt_mask_apply_profile(external_high)` enforces the `63/64` boundary, invalid profile `9` is rejected, and `command_interrupt_mask_clear_all` restores the `none` profile.
+    - key probe evidence: `ACK=18`, `LAST_OPCODE=64`, `EXTERNAL_ALL_MASKED_COUNT=224`, `UNMASK_WAKE0_VECTOR=200`, `CUSTOM_IGNORED_200=1`, `CUSTOM_IGNORED_201=1`, `RESET_IGNORED_COUNT=0`, `EXTERNAL_HIGH_MASKED_COUNT=192`, `EXTERNAL_HIGH_MASKED_63=0`, `EXTERNAL_HIGH_MASKED_64=1`, `INVALID_PROFILE_RESULT=-22`, `NONE_PROFILE=0`.
+    - probe is wired into both `zig-ci` and `release-preview` validate stages so live interrupt-mask profile regressions now block CI.
   - Week-3 control-plane completion slice shipped:
     - gateway now exposes `GET /ui` for minimal bootstrap control operations (`status`, `doctor`, `logs.tail`, `node.pair.list`) through a token-aware browser panel.
     - node-pair protocol handling consolidated across payload variants: request aliases (`node_id/deviceId`) and action aliases (`pair_id/nodePairId/id` + optional `status|decision`) now normalize into the same state transitions and response schema.
