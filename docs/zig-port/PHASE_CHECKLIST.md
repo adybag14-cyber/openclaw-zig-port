@@ -8,6 +8,14 @@ Historical note: milestone validation counts below are preserved as captured at 
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram auth success metadata now matches Go more closely on `status|wait|complete` success paths:
+      - success receipts now rely on nested `metadata.login` for auth session details.
+      - the following top-level success metadata fields were removed on those paths:
+        - `status`
+        - `loginSessionId`
+        - `code`
+      - already-completed `/auth complete` metadata now also relies on `scope` + nested `login` instead of duplicating provider/account/session status at the top level.
+      - runtime and dispatcher regressions now parse metadata structurally and assert the removed top-level fields stay absent while `login` remains present.
     - Telegram `/auth bridge` metadata now matches Go’s nested bridge contract more closely instead of shipping Zig-only probe extras:
       - nested `metadata.bridge` now keeps the Go-style keys:
         - `enabled`

@@ -58,6 +58,14 @@ Full-stack replacement execution reference:
 
 - Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `195/195`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram auth success-metadata parity hardened:
+    - success-path `/auth status`, `/auth wait`, and `/auth complete` receipts now rely on the nested Go-style `metadata.login` object for session state instead of duplicating those fields at the top level.
+    - the following top-level success metadata fields were removed on those paths to match Go more closely:
+      - `status`
+      - `loginSessionId`
+      - `code`
+    - the already-completed `/auth complete` metadata path now also avoids re-exposing top-level provider/account/session status and relies on `scope` + nested `login`.
+    - runtime and dispatcher regression coverage now parse metadata structurally and assert that those removed top-level fields stay absent while `metadata.login` remains present.
   - Phase 5 Telegram auth-bridge metadata parity hardened:
     - nested `metadata.bridge` now keeps the Go-style bridge keys:
       - `enabled`

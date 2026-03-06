@@ -13077,6 +13077,9 @@ test "dispatch send auth commands expose go-compatible metadata envelope" {
         try std.testing.expect(login == .object);
         const login_id = login.object.get("loginSessionId") orelse return error.TestUnexpectedResult;
         try std.testing.expect(login_id == .string and std.mem.eql(u8, login_id.string, login_session));
+        try std.testing.expect(metadata.object.get("loginSessionId") == null);
+        try std.testing.expect(metadata.object.get("status") == null);
+        try std.testing.expect(metadata.object.get("code") == null);
     }
 
     const auth_wait = try dispatch(allocator, "{\"id\":\"tg-auth-wait-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta\",\"sessionId\":\"tg-meta\",\"message\":\"/auth wait codex mobile --timeout 1\"}}");
@@ -13088,6 +13091,10 @@ test "dispatch send auth commands expose go-compatible metadata envelope" {
         const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
         const timeout = metadata.object.get("timeoutSeconds") orelse return error.TestUnexpectedResult;
         try std.testing.expect(timeout == .integer and timeout.integer == 1);
+        try std.testing.expect(metadata.object.get("login") != null);
+        try std.testing.expect(metadata.object.get("loginSessionId") == null);
+        try std.testing.expect(metadata.object.get("status") == null);
+        try std.testing.expect(metadata.object.get("code") == null);
     }
 
     const auth_url = try dispatch(allocator, "{\"id\":\"tg-auth-url-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta\",\"sessionId\":\"tg-meta\",\"message\":\"/auth url codex mobile\"}}");
@@ -13129,6 +13136,9 @@ test "dispatch send auth commands expose go-compatible metadata envelope" {
         try std.testing.expect(login == .object);
         const status = login.object.get("status") orelse return error.TestUnexpectedResult;
         try std.testing.expect(status == .string and std.mem.eql(u8, status.string, "authorized"));
+        try std.testing.expect(metadata.object.get("loginSessionId") == null);
+        try std.testing.expect(metadata.object.get("status") == null);
+        try std.testing.expect(metadata.object.get("code") == null);
     }
     const auth_cancel = try dispatch(allocator, "{\"id\":\"tg-auth-cancel-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta\",\"sessionId\":\"tg-meta\",\"message\":\"/auth cancel codex mobile\"}}");
     defer allocator.free(auth_cancel);
@@ -13461,9 +13471,17 @@ test "dispatch send auth complete errors use go-style messages" {
     const already_complete_reply = try extractResultStringField(allocator, already_complete_result, "reply");
     defer allocator.free(already_complete_reply);
     try std.testing.expect(std.mem.indexOf(u8, already_complete_reply, "Auth already completed. Session `") != null);
-    const already_complete_status = try extractResultObjectStringField(allocator, already_complete_result, "metadata", "status");
-    defer allocator.free(already_complete_status);
-    try std.testing.expect(std.mem.eql(u8, already_complete_status, "authorized"));
+    {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, already_complete_result, .{});
+        defer parsed.deinit();
+        const result = parsed.value.object.get("result") orelse return error.TestUnexpectedResult;
+        const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
+        const login = metadata.object.get("login") orelse return error.TestUnexpectedResult;
+        const status = login.object.get("status") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(status == .string and std.mem.eql(u8, status.string, "authorized"));
+        try std.testing.expect(metadata.object.get("status") == null);
+        try std.testing.expect(metadata.object.get("loginSessionId") == null);
+    }
 
     const complete_stale = try dispatch(allocator, "{\"id\":\"tg-auth-complete-stale-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-complete-stale\",\"sessionId\":\"tg-meta-complete-stale\",\"message\":\"/auth complete qwen OC-123 web-login-stale mobile\"}}");
     defer allocator.free(complete_stale);

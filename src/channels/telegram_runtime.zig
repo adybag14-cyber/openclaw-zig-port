@@ -2510,9 +2510,6 @@ pub const TelegramRuntime = struct {
                     .provider = provider,
                     .account = account_norm,
                     .scope = scope,
-                    .status = waited.status,
-                    .loginSessionId = waited.loginSessionId,
-                    .code = waited.code,
                     .timeoutSeconds = timeout_secs,
                     .expiresInSeconds = authExpiresInSeconds(waited.expiresAtMs),
                     .login = waited,
@@ -2574,9 +2571,6 @@ pub const TelegramRuntime = struct {
                 .provider = provider,
                 .account = account_norm,
                 .scope = scope,
-                .status = view.status,
-                .loginSessionId = view.loginSessionId,
-                .code = view.code,
                 .expiresInSeconds = authExpiresInSeconds(view.expiresAtMs),
                 .login = view,
             });
@@ -2845,11 +2839,7 @@ pub const TelegramRuntime = struct {
                         const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
                             .type = "auth.complete",
                             .target = trimmed_target,
-                            .provider = provider,
-                            .account = account_norm,
                             .scope = scope,
-                            .status = login.status,
-                            .loginSessionId = login.loginSessionId,
                             .login = login,
                         });
                         return .{
@@ -2973,9 +2963,6 @@ pub const TelegramRuntime = struct {
                 .provider = provider,
                 .account = account_norm,
                 .scope = scope,
-                .status = completed.status,
-                .loginSessionId = completed.loginSessionId,
-                .code = completed.code,
                 .login = completed,
             });
             return .{
@@ -4541,6 +4528,16 @@ test "telegram runtime auth command and reply poll lifecycle" {
     defer complete_result.deinit(allocator);
     try std.testing.expect(std.mem.eql(u8, complete_result.authStatus, "authorized"));
     try std.testing.expect(std.mem.indexOf(u8, complete_result.reply, "Auth completed. Session `") != null);
+    {
+        const complete_metadata = complete_result.metadataJson orelse return error.TestUnexpectedResult;
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, complete_metadata, .{});
+        defer parsed.deinit();
+        try std.testing.expect(parsed.value == .object);
+        try std.testing.expect(parsed.value.object.get("login") != null);
+        try std.testing.expect(parsed.value.object.get("loginSessionId") == null);
+        try std.testing.expect(parsed.value.object.get("status") == null);
+        try std.testing.expect(parsed.value.object.get("code") == null);
+    }
 
     const chat_frame =
         \\{"id":"tg-chat","method":"send","params":{"channel":"telegram","to":"room-b","sessionId":"sess-b","message":"hello"}}
@@ -4966,6 +4963,16 @@ test "telegram runtime auth supports account scope and force restart" {
     try std.testing.expect(std.mem.indexOf(u8, status_mobile.reply, "Open: https://chat.qwen.ai/?openclaw_code=") != null);
     try std.testing.expect(std.mem.indexOf(u8, status_mobile.reply, "Then run: `/auth complete qwen ") != null);
     try std.testing.expect(std.mem.indexOf(u8, status_mobile.reply, " mobile`") == null);
+    {
+        const status_mobile_metadata = status_mobile.metadataJson orelse return error.TestUnexpectedResult;
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, status_mobile_metadata, .{});
+        defer parsed.deinit();
+        try std.testing.expect(parsed.value == .object);
+        try std.testing.expect(parsed.value.object.get("login") != null);
+        try std.testing.expect(parsed.value.object.get("loginSessionId") == null);
+        try std.testing.expect(parsed.value.object.get("status") == null);
+        try std.testing.expect(parsed.value.object.get("code") == null);
+    }
 
     var start_desktop = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-auth-start-desktop\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-acc\",\"sessionId\":\"sess-acc\",\"message\":\"/auth start qwen desktop\"}}");
     defer start_desktop.deinit(allocator);
@@ -5401,6 +5408,16 @@ test "telegram runtime wait supports session keyword and bounded timeout flag" {
     try std.testing.expect(std.mem.eql(u8, wait.authStatus, "pending"));
     try std.testing.expect(std.mem.eql(u8, wait.loginSessionId, start.loginSessionId));
     try std.testing.expect(std.mem.indexOf(u8, wait.reply, "Auth wait result: `pending`") != null);
+    {
+        const wait_metadata = wait.metadataJson orelse return error.TestUnexpectedResult;
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, wait_metadata, .{});
+        defer parsed.deinit();
+        try std.testing.expect(parsed.value == .object);
+        try std.testing.expect(parsed.value.object.get("login") != null);
+        try std.testing.expect(parsed.value.object.get("loginSessionId") == null);
+        try std.testing.expect(parsed.value.object.get("status") == null);
+        try std.testing.expect(parsed.value.object.get("code") == null);
+    }
 }
 
 test "telegram runtime auth parser rejects invalid options and trailing args" {
