@@ -136,8 +136,14 @@ try {
         dryRun = $false
     }
     $runApplyStatus = "$($runApply.Json.result.status)"
-    if ($runApplyStatus -notin @("completed", "completed_with_errors")) {
+    if ($runApplyStatus -notin @("completed", "completed_with_errors", "completed_with_manual_action")) {
         throw "system.maintenance.run apply returned unexpected status '$runApplyStatus'"
+    }
+    if ($runApplyStatus -eq "completed_with_manual_action") {
+        $partialCount = [int]$runApply.Json.result.counts.partial
+        if ($partialCount -lt 1) {
+            throw "system.maintenance.run apply reported completed_with_manual_action but counts.partial=$partialCount"
+        }
     }
     $runApplyJobId = "$($runApply.Json.result.updateJob.jobId)"
     if ([string]::IsNullOrWhiteSpace($runApplyJobId)) {
@@ -160,6 +166,7 @@ try {
     Write-Output "MAINT_PLAN_HEALTH_SCORE=$($plan.Json.result.healthScore)"
     Write-Output "MAINT_RUN_DRY_STATUS=$($runDry.Json.result.status)"
     Write-Output "MAINT_RUN_APPLY_STATUS=$runApplyStatus"
+    Write-Output "MAINT_RUN_APPLY_PARTIAL=$($runApply.Json.result.counts.partial)"
     Write-Output "MAINT_STATUS_CURRENT=$($status.Json.result.status)"
     Write-Output "MAINT_STATUS_PENDING_ACTIONS=$($status.Json.result.pendingActions)"
     Write-Output "MAINT_RUN_APPLY_JOB_ID=$runApplyJobId"
