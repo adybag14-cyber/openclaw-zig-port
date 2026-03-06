@@ -56,7 +56,7 @@ Full-stack replacement execution reference:
 
 ## Current Progress Snapshot
 
-- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `197/197`.
+- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `200/200`.
 - Release/package lane status (2026-03-06):
   - GitHub prerelease `v0.2.0-zig-edge.26` is live with desktop/android/bare-metal artifacts, parity reports, manifest, SBOM, provenance, npm tarball, wheel, and sdist.
   - release evidence now also includes `release-status.json` + `release-status.md` so every edge cut carries a frozen workflow-status + registry-status snapshot in addition to package preflight evidence.
@@ -71,6 +71,14 @@ Full-stack replacement execution reference:
     - `security.audit` now emits `runtime.state_path.in_memory` when state is empty or memory-backed.
     - `doctor` now exposes `runtime.state_path` and `security.policy_bundle` checks with explicit persisted-vs-memory detail.
     - dispatcher `doctor` JSON coverage now asserts both checks are present on the RPC surface.
+  - FS1 manual-remediation audit slice shipped:
+    - `security.audit --fix` now distinguishes between auto-remediation that actually ran and config changes Zig still cannot apply automatically.
+    - `fix.complete=false` plus `fix.unresolved[]` now surface manual follow-up for memory-backed `OPENCLAW_ZIG_STATE_PATH` and policy-bundle config when applicable.
+    - `system.maintenance.run` now reports partial remediation honestly:
+      - `actions[].status=partial`
+      - run `status=completed_with_manual_action`
+      - `counts.partial`
+    - new regressions cover both the raw audit JSON surface and the maintenance-run partial/remediation contract.
   - Full-stack replacement kickoff (2026-03-05):
   - Phase 5 Telegram auth fallback-metadata parity hardened:
     - no-session `/auth url` metadata now matches Go’s leaner fallback envelope and no longer emits Zig-only top-level:

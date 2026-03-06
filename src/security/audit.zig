@@ -48,8 +48,10 @@ pub const FixAction = struct {
 
 pub const FixResult = struct {
     ok: bool,
+    complete: bool,
     changes: []const []const u8,
     actions: []FixAction,
+    unresolved: []const []const u8,
 };
 
 pub const Report = struct {
@@ -64,6 +66,7 @@ pub const Report = struct {
         if (self.fix) |fix| {
             allocator.free(fix.changes);
             allocator.free(fix.actions);
+            allocator.free(fix.unresolved);
         }
     }
 };
@@ -376,14 +379,34 @@ fn applyFixes(allocator: std.mem.Allocator, cfg: config.Config) !FixResult {
     defer changes.deinit(allocator);
     var actions = std.ArrayList(FixAction).empty;
     defer actions.deinit(allocator);
+    var unresolved = std.ArrayList([]const u8).empty;
+    defer unresolved.deinit(allocator);
     const io = std.Io.Threaded.global_single_threaded.io();
 
     var ok = true;
+    const state_path = std.mem.trim(u8, cfg.state_path, " \t\r\n");
+    if (state_path.len == 0 or startsWithIgnoreCase(state_path, "memory://")) {
+        try actions.append(allocator, .{
+            .kind = "config",
+            .target = "OPENCLAW_ZIG_STATE_PATH",
+            .ok = false,
+            .skipped = "manual config update required",
+        });
+        try unresolved.append(allocator, "set OPENCLAW_ZIG_STATE_PATH to a persisted directory or file path");
+    }
+
     const policy_raw = std.mem.trim(u8, cfg.security.policy_bundle_path, " \t\r\n");
+    const policy_memory_backed = policy_raw.len == 0 or startsWithIgnoreCase(policy_raw, "memory://");
     var policy_path = policy_raw;
-    if (policy_path.len == 0 or startsWithIgnoreCase(policy_path, "memory://")) {
+    if (policy_memory_backed) {
         policy_path = ".openclaw-zig/security-policy.json";
-        try changes.append(allocator, "set policy bundle path to persisted default");
+        try actions.append(allocator, .{
+            .kind = "config",
+            .target = "OPENCLAW_ZIG_SECURITY_POLICY_BUNDLE_PATH",
+            .ok = false,
+            .skipped = "manual config update required",
+        });
+        try unresolved.append(allocator, "set OPENCLAW_ZIG_SECURITY_POLICY_BUNDLE_PATH to a persisted file path");
     }
 
     if (std.fs.path.dirname(policy_path)) |dir_name| {
@@ -397,8 +420,10 @@ fn applyFixes(allocator: std.mem.Allocator, cfg: config.Config) !FixResult {
             });
             return .{
                 .ok = false,
+                .complete = false,
                 .changes = try changes.toOwnedSlice(allocator),
                 .actions = try actions.toOwnedSlice(allocator),
+                .unresolved = try unresolved.toOwnedSlice(allocator),
             };
         };
         try actions.append(allocator, .{
@@ -428,11 +453,17 @@ fn applyFixes(allocator: std.mem.Allocator, cfg: config.Config) !FixResult {
         });
         return .{
             .ok = false,
+            .complete = false,
             .changes = try changes.toOwnedSlice(allocator),
             .actions = try actions.toOwnedSlice(allocator),
+            .unresolved = try unresolved.toOwnedSlice(allocator),
         };
     };
-    try changes.append(allocator, "created policy bundle file");
+    if (policy_memory_backed) {
+        try changes.append(allocator, "created policy bundle template at .openclaw-zig/security-policy.json");
+    } else {
+        try changes.append(allocator, "created policy bundle file");
+    }
     try actions.append(allocator, .{
         .kind = "write",
         .target = policy_path,
@@ -441,8 +472,10 @@ fn applyFixes(allocator: std.mem.Allocator, cfg: config.Config) !FixResult {
 
     return .{
         .ok = ok,
+        .complete = ok and unresolved.items.len == 0,
         .changes = try changes.toOwnedSlice(allocator),
         .actions = try actions.toOwnedSlice(allocator),
+        .unresolved = try unresolved.toOwnedSlice(allocator),
     };
 }
 
@@ -659,6 +692,51 @@ test "security audit reports in-memory runtime state path" {
         }
     }
     try std.testing.expect(found);
+}
+
+test "security audit fix reports manual runtime and policy config blockers" {
+    const allocator = std.testing.allocator;
+    var cfg = config.defaults();
+    cfg.state_path = "memory://runtime-state";
+    cfg.security.policy_bundle_path = "memory://security-policy.json";
+    var runtime_guard = try guard.Guard.init(allocator, cfg.security);
+    defer runtime_guard.deinit();
+
+    var report = try run(allocator, cfg, &runtime_guard, .{ .fix = true });
+    defer report.deinit(allocator);
+
+    const fix = report.fix orelse return error.TestUnexpectedResult;
+    try std.testing.expect(fix.ok);
+    try std.testing.expect(!fix.complete);
+    try std.testing.expectEqual(@as(usize, 2), fix.unresolved.len);
+    try std.testing.expect(std.mem.indexOf(u8, fix.unresolved[0], "OPENCLAW_ZIG_STATE_PATH") != null);
+    try std.testing.expect(std.mem.indexOf(u8, fix.unresolved[1], "OPENCLAW_ZIG_SECURITY_POLICY_BUNDLE_PATH") != null);
+
+    var found_state_action = false;
+    var found_policy_action = false;
+    var found_policy_template = false;
+    for (fix.actions) |action| {
+        if (std.mem.eql(u8, action.target, "OPENCLAW_ZIG_STATE_PATH")) {
+            found_state_action = true;
+            try std.testing.expect(!action.ok);
+            try std.testing.expect(std.mem.eql(u8, action.kind, "config"));
+            try std.testing.expect(std.mem.eql(u8, action.skipped orelse "", "manual config update required"));
+        }
+        if (std.mem.eql(u8, action.target, "OPENCLAW_ZIG_SECURITY_POLICY_BUNDLE_PATH")) {
+            found_policy_action = true;
+            try std.testing.expect(!action.ok);
+            try std.testing.expect(std.mem.eql(u8, action.kind, "config"));
+            try std.testing.expect(std.mem.eql(u8, action.skipped orelse "", "manual config update required"));
+        }
+        if (std.mem.eql(u8, action.target, ".openclaw-zig/security-policy.json")) {
+            found_policy_template = true;
+            try std.testing.expect(action.ok);
+        }
+    }
+    try std.testing.expect(found_state_action);
+    try std.testing.expect(found_policy_action);
+    try std.testing.expect(found_policy_template);
+    try std.testing.expect(std.mem.indexOf(u8, fix.changes[0], "policy bundle template") != null);
 }
 
 test "doctor exposes runtime state path and policy bundle posture checks" {

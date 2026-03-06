@@ -1,7 +1,7 @@
 # Phase Checklist
 
 Release lock: no release tag is allowed until all phases are complete and parity is measured at 100%.
-Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `197/197`.
+Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `200/200`.
 Latest edge release: `v0.2.0-zig-edge.26` is published with binaries, parity evidence, SBOM/provenance, npm tarball, wheel, and sdist attached.
 Registry status:
 - npm public publish still requires npm-side scope/package permission or `NPM_TOKEN`; GitHub release asset + GitHub Packages fallback are available now.
@@ -11,6 +11,17 @@ Registry status:
 ## Full-Stack Replacement Track (FS0..FS7)
 - [x] FS0 - Scope lock + baseline freeze (`docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`, issue `#2`)
 - [ ] FS1 - Runtime/core consolidation
+  - Latest delivered slice:
+    - `security.audit --fix` now reports when Zig can only apply partial remediation because config still needs an operator update.
+    - `fix.complete=false` and `fix.unresolved[]` now expose manual follow-up for memory-backed runtime-state or policy-bundle config instead of implying those settings were changed.
+    - `system.maintenance.run` now reports partial remediation honestly:
+      - `actions[].status=partial`
+      - run `status=completed_with_manual_action`
+      - `counts.partial`
+    - regression coverage added:
+      - `dispatch security.audit fix exposes manual runtime persistence blockers`
+      - `dispatch maintenance run reports partial security remediation when runtime persistence stays memory-backed`
+      - `security audit fix reports manual runtime and policy config blockers`
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
     - Telegram auth fallback metadata now matches Go more closely on the remaining `/auth url`, `/auth complete`, and `auth.invalid` fallback paths:
@@ -379,6 +390,14 @@ FS1 runtime/core consolidation slice (active):
     - `security audit reports in-memory runtime state path`
     - `doctor exposes runtime state path and policy bundle posture checks`
     - dispatcher `doctor` JSON now asserts both checks are present.
+- [x] Runtime/policy fix reporting now distinguishes partial remediation from true completion (`src/security/audit.zig`, `src/gateway/dispatcher.zig`):
+  - `security.audit --fix` now keeps real file/template creation in `changes[]` but reports unresolved config follow-up separately via `fix.complete=false` and `fix.unresolved[]`.
+  - memory-backed `OPENCLAW_ZIG_STATE_PATH` and `OPENCLAW_ZIG_SECURITY_POLICY_BUNDLE_PATH` now surface as manual config actions instead of being implied as auto-fixed.
+  - `system.maintenance.run` now returns `status=completed_with_manual_action`, `counts.partial`, and `actions[].status=partial` when only manual config blockers remain.
+  - regression tests added:
+    - `security audit fix reports manual runtime and policy config blockers`
+    - `dispatch security.audit fix exposes manual runtime persistence blockers`
+    - `dispatch maintenance run reports partial security remediation when runtime persistence stays memory-backed`
 
 ## Phase 4 - Security + Diagnostics
 - [x] Port core guard flow (prompt/tool policy checks)

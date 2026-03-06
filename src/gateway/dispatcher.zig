@@ -4047,6 +4047,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         defer action_results.deinit(allocator);
         var applied_count: usize = 0;
         var failed_count: usize = 0;
+        var partial_count: usize = 0;
         var skipped_count: usize = 0;
 
         if (apply) {
@@ -4055,13 +4056,30 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                     var audit = try security_audit.run(allocator, currentConfig(), guard, .{ .deep = deep, .fix = true });
                     defer audit.deinit(allocator);
                     const fix_ok = if (audit.fix) |fix| fix.ok else false;
+                    const fix_complete = if (audit.fix) |fix| fix.complete else false;
                     const changed = if (audit.fix) |fix| fix.changes.len else 0;
-                    if (fix_ok) applied_count += 1 else failed_count += 1;
+                    if (!fix_ok) {
+                        failed_count += 1;
+                    } else if (!fix_complete) {
+                        partial_count += 1;
+                    } else {
+                        applied_count += 1;
+                    }
                     try action_results.append(allocator, .{
                         .id = action.id,
-                        .status = if (fix_ok) "applied" else "failed",
-                        .ok = fix_ok,
-                        .detail = if (fix_ok) "security audit auto-remediation applied" else "security remediation failed",
+                        .status = if (!fix_ok)
+                            "failed"
+                        else if (!fix_complete)
+                            "partial"
+                        else
+                            "applied",
+                        .ok = fix_ok and fix_complete,
+                        .detail = if (!fix_ok)
+                            "security remediation failed"
+                        else if (!fix_complete)
+                            "security remediation applied partially; manual config update still required"
+                        else
+                            "security audit auto-remediation applied",
                         .changed = changed,
                     });
                     continue;
@@ -4131,17 +4149,26 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             "planned"
         else if (failed_count > 0)
             "completed_with_errors"
+        else if (partial_count > 0)
+            "completed_with_manual_action"
         else
             "completed";
         const phase: []const u8 = if (!apply) "maintenance-plan" else "maintenance-run";
-        const progress: u8 = if (!apply) 100 else if (failed_count > 0) 80 else 100;
+        const progress: u8 = if (!apply)
+            100
+        else if (failed_count > 0)
+            80
+        else if (partial_count > 0)
+            90
+        else
+            100;
 
         const update_job = try compat.createUpdateJob("self-maintain", !apply, false);
         _ = compat.setUpdateJobState(update_job.id, run_status, phase, progress);
         const evt = try compat.addEvent(if (apply) "maintenance.run" else "maintenance.plan");
 
         return protocol.encodeResult(allocator, req.id, .{
-            .ok = failed_count == 0,
+            .ok = failed_count == 0 and partial_count == 0,
             .runId = run_id,
             .status = run_status,
             .phase = phase,
@@ -4159,6 +4186,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                 .total = action_slice.len,
                 .applied = applied_count,
                 .failed = failed_count,
+                .partial = partial_count,
                 .skipped = skipped_count,
             },
             .actions = action_slice,
@@ -8568,7 +8596,7 @@ fn buildMaintenancePlan(
             .id = "security.audit.fix",
             .title = "Apply security remediation",
             .severity = if (summary.critical > 0) "critical" else "warn",
-            .detail = "run security.audit with fix=true to remediate policy and config findings",
+            .detail = "run security.audit with fix=true to apply available remediation and surface manual config updates",
             .recommended = true,
             .auto = true,
         });
@@ -12893,6 +12921,57 @@ test "dispatch exposes security.audit and doctor methods" {
     try std.testing.expect(std.mem.indexOf(u8, doctor, "\"message\":\"memory://dispatcher-doctor-state\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, doctor, "\"id\":\"security.policy_bundle\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, doctor, "\"message\":\"memory://dispatcher-policy\"") != null);
+}
+
+test "dispatch security.audit fix exposes manual runtime persistence blockers" {
+    const allocator = std.testing.allocator;
+    const io = std.Io.Threaded.global_single_threaded.io();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const base_path = try tmp.dir.realPathFileAlloc(io, ".", allocator);
+    defer allocator.free(base_path);
+    const policy_path = try std.fs.path.join(allocator, &.{ base_path, "dispatcher-audit-policy.json" });
+    defer allocator.free(policy_path);
+
+    var cfg = config.defaults();
+    cfg.state_path = "memory://dispatcher-audit-state";
+    cfg.security.policy_bundle_path = policy_path;
+    setConfig(cfg);
+    defer setConfig(config.defaults());
+
+    const audit = try dispatch(allocator, "{\"id\":\"audit-fix\",\"method\":\"security.audit\",\"params\":{\"fix\":true}}");
+    defer allocator.free(audit);
+    try std.testing.expect(std.mem.indexOf(u8, audit, "\"fix\":{") != null);
+    try std.testing.expect(std.mem.indexOf(u8, audit, "\"ok\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, audit, "\"complete\":false") != null);
+    try std.testing.expect(std.mem.indexOf(u8, audit, "\"unresolved\":[\"set OPENCLAW_ZIG_STATE_PATH to a persisted directory or file path\"]") != null);
+}
+
+test "dispatch maintenance run reports partial security remediation when runtime persistence stays memory-backed" {
+    const allocator = std.testing.allocator;
+    const io = std.Io.Threaded.global_single_threaded.io();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const base_path = try tmp.dir.realPathFileAlloc(io, ".", allocator);
+    defer allocator.free(base_path);
+    const policy_path = try std.fs.path.join(allocator, &.{ base_path, "dispatcher-maint-policy.json" });
+    defer allocator.free(policy_path);
+
+    var cfg = config.defaults();
+    cfg.state_path = "memory://dispatcher-maint-state";
+    cfg.security.policy_bundle_path = policy_path;
+    setConfig(cfg);
+    defer setConfig(config.defaults());
+
+    const maintenance_run = try dispatch(allocator, "{\"id\":\"compat-maint-run-apply\",\"method\":\"system.maintenance.run\",\"params\":{\"apply\":true}}");
+    defer allocator.free(maintenance_run);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_run, "\"ok\":false") != null);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_run, "\"status\":\"completed_with_manual_action\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_run, "\"partial\":1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_run, "\"id\":\"security.audit.fix\",\"status\":\"partial\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_run, "manual config update still required") != null);
 }
 
 test "dispatch web.login lifecycle start wait complete status" {
