@@ -142,6 +142,10 @@ jobs:
         shell: pwsh
         run: ./scripts/system-maintenance-smoke-check.ps1 -SkipBuild
 
+      - name: Appliance control-plane smoke check (boot/rollback/update gate)
+        shell: pwsh
+        run: ./scripts/appliance-control-plane-smoke-check.ps1 -SkipBuild
+
   cross-targets:
     runs-on: ubuntu-latest
     strategy:

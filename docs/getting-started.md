@@ -46,6 +46,7 @@ curl -s http://127.0.0.1:8080/rpc \
 ./scripts/baremetal-qemu-runtime-oc-tick-check.ps1
 ./scripts/baremetal-qemu-command-loop-check.ps1
 ./scripts/runtime-smoke-check.ps1
+./scripts/appliance-control-plane-smoke-check.ps1
 ./scripts/web-login-smoke-check.ps1
 ./scripts/telegram-reply-loop-smoke-check.ps1
 ```

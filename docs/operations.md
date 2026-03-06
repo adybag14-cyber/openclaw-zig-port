@@ -24,6 +24,7 @@ Recommended sequence:
 ./scripts/baremetal-qemu-smoke-check.ps1
 ./scripts/baremetal-qemu-runtime-oc-tick-check.ps1
 ./scripts/baremetal-qemu-command-loop-check.ps1
+./scripts/appliance-control-plane-smoke-check.ps1
 ./scripts/gateway-auth-smoke-check.ps1
 ./scripts/websocket-smoke-check.ps1
 ./scripts/web-login-smoke-check.ps1
@@ -41,6 +42,7 @@ Recommended sequence:
 - parity gate enforcement (Go latest + original stable latest + original beta latest, including gateway event parity)
 - docs status drift gate (`scripts/docs-status-check.ps1`)
 - runtime + gateway-auth + websocket smoke checks
+- appliance control-plane smoke check (`system.boot.*`, `system.rollback.*`, secure-boot update gate)
 - parity evidence artifacts
   - websocket smoke validates `/ws` and root compatibility route `/`, including binary-frame RPC dispatch
   - gateway-auth and websocket smokes use bounded receive timeouts to prevent hanging CI jobs
@@ -55,6 +57,7 @@ Recommended sequence:
 - zig master freshness snapshot capture + publish (`zig-master-freshness.json`)
 - release trust evidence generation and publishing (`release-manifest.json`, `sbom.spdx.json`, `provenance.intoto.json`)
 - gateway-auth + websocket smoke checks in validate stage
+- appliance control-plane smoke check in validate stage
 - npm package dry-run validation in release validate stage
 - python package validation (unit tests + build + twine check) in release validate stage
 - local `scripts/release-preview.ps1` mirrors parity/docs/freshness gates before artifact packaging
