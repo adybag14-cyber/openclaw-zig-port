@@ -13158,6 +13158,19 @@ test "dispatch send auth status and wait without session use go-style replies" {
     try std.testing.expect(std.mem.eql(u8, wait_none_error, "missing_session"));
 }
 
+test "dispatch send auth wait bridge errors use go-style messages" {
+    const allocator = std.testing.allocator;
+
+    const wait_missing = try dispatch(allocator, "{\"id\":\"tg-auth-wait-missing-bridge\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-wait-missing\",\"sessionId\":\"tg-meta-wait-missing\",\"message\":\"/auth wait qwen session web-login-stale mobile --timeout 1\"}}");
+    defer allocator.free(wait_missing);
+    const wait_missing_reply = try extractResultStringField(allocator, wait_missing, "reply");
+    defer allocator.free(wait_missing_reply);
+    try std.testing.expect(std.mem.indexOf(u8, wait_missing_reply, "Auth wait failed: login session not found") != null);
+    const wait_missing_error = try extractResultObjectStringField(allocator, wait_missing, "metadata", "error");
+    defer allocator.free(wait_missing_error);
+    try std.testing.expect(std.mem.eql(u8, wait_missing_error, "login session not found"));
+}
+
 test "dispatch send model and tts commands expose go-compatible metadata envelope" {
     const allocator = std.testing.allocator;
 

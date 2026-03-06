@@ -1,13 +1,19 @@
 # Phase Checklist
 
 Release lock: no release tag is allowed until all phases are complete and parity is measured at 100%.
-Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `186/186`.
+Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `188/188`.
 
 ## Full-Stack Replacement Track (FS0..FS7)
 - [x] FS0 - Scope lock + baseline freeze (`docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`, issue `#2`)
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram `/auth wait` bridge-missing errors now match Go more closely:
+      - when a scoped/bound login session is missing, `/auth wait` now returns `Auth wait failed: login session not found` instead of Zig's older `session not found.` reply.
+      - missing-session wait metadata now carries `error=login session not found` and no longer reports the extra Zig-only `status=missing` field on the bridge-error path.
+      - regression coverage added:
+        - `channels.telegram_runtime.test.telegram runtime auth wait missing session uses go-style bridge error`
+        - `gateway.dispatcher.test.dispatch send auth wait bridge errors use go-style messages`
     - Telegram `/auth status|wait` now split their no-session replies the same way Go does:
       - `/auth status` with no scoped session now returns `No active auth flow for <target> in scope <scope>.` with `authStatus=none` and metadata `status=none`.
       - `/auth wait` with no scoped session now returns `No auth session selected for scope <scope>. Start with /auth start <provider>.` with `authStatus=missing` and metadata `error=missing_session`.

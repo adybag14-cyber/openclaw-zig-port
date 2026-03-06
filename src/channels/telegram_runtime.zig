@@ -2465,15 +2465,14 @@ pub const TelegramRuntime = struct {
                             .provider = provider,
                             .account = account_norm,
                             .scope = scope,
-                            .status = "missing",
-                            .@"error" = "session_not_found",
+                            .@"error" = "login session not found",
                             .loginSessionId = login_session,
                             .timeoutSeconds = timeout_secs,
                         });
                         return .{
                             .is_command = true,
                             .command_name = "auth",
-                            .reply = try allocator.dupe(u8, "Auth wait failed: session not found."),
+                            .reply = try allocator.dupe(u8, "Auth wait failed: login session not found"),
                             .provider = provider,
                             .model = defaultModelForProvider(provider),
                             .login_session_id = login_session,
@@ -2492,15 +2491,14 @@ pub const TelegramRuntime = struct {
                             .provider = provider,
                             .account = account_norm,
                             .scope = scope,
-                            .status = "expired",
-                            .@"error" = "session_expired",
+                            .@"error" = "login session expired",
                             .loginSessionId = login_session,
                             .timeoutSeconds = timeout_secs,
                         });
                         return .{
                             .is_command = true,
                             .command_name = "auth",
-                            .reply = try allocator.dupe(u8, "Auth wait failed: session expired."),
+                            .reply = try allocator.dupe(u8, "Auth wait failed: login session expired"),
                             .provider = provider,
                             .model = defaultModelForProvider(provider),
                             .login_session_id = login_session,
@@ -5154,6 +5152,24 @@ test "telegram runtime auth status and wait without session use go-style replies
     try std.testing.expect(std.mem.indexOf(u8, wait.metadataJson.?, "\"type\":\"auth.wait\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, wait.metadataJson.?, "\"error\":\"missing_session\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, wait.metadataJson.?, "\"status\":") == null);
+}
+
+test "telegram runtime auth wait missing session uses go-style bridge error" {
+    var login = web_login.LoginManager.init(std.testing.allocator, 10);
+    defer login.deinit();
+    var runtime = TelegramRuntime.init(std.testing.allocator, &login);
+    defer runtime.deinit();
+
+    const allocator = std.testing.allocator;
+
+    try runtime.setAuthBinding("room-wait-missing", "qwen", "mobile", "web-login-stale");
+    var wait_missing = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-wait-stale\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-wait-missing\",\"sessionId\":\"sess-wait-missing\",\"message\":\"/auth wait qwen mobile --timeout 1\"}}");
+    defer wait_missing.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, wait_missing.authStatus, "missing"));
+    try std.testing.expect(std.mem.indexOf(u8, wait_missing.reply, "Auth wait failed: login session not found") != null);
+    try std.testing.expect(wait_missing.metadataJson != null);
+    try std.testing.expect(std.mem.indexOf(u8, wait_missing.metadataJson.?, "\"error\":\"login session not found\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, wait_missing.metadataJson.?, "\"status\":") == null);
 }
 
 test "telegram runtime auth cancel revokes scoped session" {
