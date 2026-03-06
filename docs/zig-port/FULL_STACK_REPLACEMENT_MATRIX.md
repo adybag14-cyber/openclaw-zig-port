@@ -33,7 +33,7 @@ Legend:
 | Telegram + Channels | `/auth` `/model` `/tts` + polling/webhook flow | exact | In progress | telegram reply loop smoke + manual-e2e | smoke output + chat evidence |
 | Memory + Recall | persistence/history/vector/graph behaviors | compatible | In progress | memory tests + long-run smoke | memory tests + persistence artifacts |
 | Edge + WASM | lifecycle/trust/capabilities/edge contracts | compatible | In progress | wasm/edge tests + parity checks | CI + dispatcher tests |
-| Appliance/Bare-metal | boot/runtime progression/control-plane + staged rollout boundary | additive | In progress | bare-metal smoke + qemu smoke + runtime probe + appliance rollout smoke | qemu scripts outputs + appliance rollout smoke output |
+| Appliance/Bare-metal | boot/runtime progression/control-plane + staged rollout boundary + minimal appliance readiness contract | additive | In progress | bare-metal smoke + qemu smoke + runtime probe + appliance rollout smoke + appliance readiness smoke | qemu scripts outputs + appliance rollout smoke output + appliance readiness smoke output |
 | Ops + Packaging | release matrix, checksums, provenance, docs | exact | In progress | `zig-ci`, `docs-pages`, release-preview dry-run | Actions runs + release assets |
 
 ## External Interface Cutover Contract (FS0)

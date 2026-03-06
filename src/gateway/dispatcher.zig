@@ -135,6 +135,12 @@ const MaintenancePlan = struct {
     runtimeQueueDepth: usize,
     runtimeLeasedJobs: usize,
     runtimeRecoveryBacklog: usize,
+    applianceProfileReady: bool,
+    applianceProfileStatus: []const u8,
+    applianceProfileCheckedAtMs: i64,
+    applianceProfilePassing: usize,
+    applianceProfileWarnings: usize,
+    applianceProfileFailing: usize,
     actions: []MaintenanceAction,
 };
 
@@ -144,6 +150,28 @@ const MaintenanceActionResult = struct {
     ok: bool,
     detail: []const u8,
     changed: usize,
+};
+
+const ApplianceProfileCheck = struct {
+    id: []const u8,
+    status: []const u8,
+    message: []const u8,
+    detail: []const u8,
+};
+
+const ApplianceProfileReport = struct {
+    profile: []const u8,
+    ready: bool,
+    status: []const u8,
+    checkedAtMs: i64,
+    passing: usize,
+    warnings: usize,
+    failing: usize,
+    checks: []ApplianceProfileCheck,
+
+    fn deinit(self: *ApplianceProfileReport, allocator: std.mem.Allocator) void {
+        allocator.free(self.checks);
+    }
 };
 
 const CompatAgent = struct {
@@ -2466,6 +2494,9 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         const runtime = getRuntime();
         const runtime_snapshot = runtime.snapshot();
         const guard = try getGuard();
+        const compat = try getCompatState();
+        var appliance_profile = try buildApplianceProfile(allocator, cfg, compat, time_util.nowMs());
+        defer appliance_profile.deinit(allocator);
         return protocol.encodeResult(allocator, req.id, .{
             .status = "ok",
             .service = "openclaw-zig",
@@ -2485,6 +2516,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
             .security = guard.snapshot(),
             .gateway_auth_mode = if (gateway_token_required) "token" else "none",
             .configHash = config.fingerprintHex(cfg),
+            .applianceProfile = appliance_profile,
         });
     }
 
@@ -4107,6 +4139,15 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                 .leasedJobs = plan.runtimeLeasedJobs,
                 .recoveryBacklog = plan.runtimeRecoveryBacklog,
             },
+            .applianceProfile = .{
+                .profile = "minimal-appliance-v1",
+                .ready = plan.applianceProfileReady,
+                .status = plan.applianceProfileStatus,
+                .checkedAtMs = plan.applianceProfileCheckedAtMs,
+                .passing = plan.applianceProfilePassing,
+                .warnings = plan.applianceProfileWarnings,
+                .failing = plan.applianceProfileFailing,
+            },
             .actions = plan.actions,
             .actionCount = plan.actions.len,
             .recommendedCount = countRecommendedMaintenanceActions(plan.actions),
@@ -4277,6 +4318,15 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                 .leasedJobs = plan.runtimeLeasedJobs,
                 .recoveryBacklog = plan.runtimeRecoveryBacklog,
             },
+            .applianceProfile = .{
+                .profile = "minimal-appliance-v1",
+                .ready = plan.applianceProfileReady,
+                .status = plan.applianceProfileStatus,
+                .checkedAtMs = plan.applianceProfileCheckedAtMs,
+                .passing = plan.applianceProfilePassing,
+                .warnings = plan.applianceProfileWarnings,
+                .failing = plan.applianceProfileFailing,
+            },
             .counts = .{
                 .total = action_slice.len,
                 .applied = applied_count,
@@ -4359,13 +4409,25 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                 .leasedJobs = plan.runtimeLeasedJobs,
                 .recoveryBacklog = plan.runtimeRecoveryBacklog,
             },
+            .applianceProfile = .{
+                .profile = "minimal-appliance-v1",
+                .ready = plan.applianceProfileReady,
+                .status = plan.applianceProfileStatus,
+                .checkedAtMs = plan.applianceProfileCheckedAtMs,
+                .passing = plan.applianceProfilePassing,
+                .warnings = plan.applianceProfileWarnings,
+                .failing = plan.applianceProfileFailing,
+            },
         });
     }
 
     if (std.ascii.eqlIgnoreCase(req.method, "system.boot.status")) {
         const compat = try getCompatState();
+        const cfg = currentConfig();
         const now_ms = time_util.nowMs();
         const gate = compat.bootGateStatus(now_ms);
+        var appliance_profile = try buildApplianceProfile(allocator, cfg, compat, now_ms);
+        defer appliance_profile.deinit(allocator);
         return protocol.encodeResult(allocator, req.id, .{
             .ok = true,
             .secureBoot = .{
@@ -4398,6 +4460,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                 .plannedAtMs = compat.rollback_planned_at_ms,
                 .lastRunAtMs = compat.rollback_last_run_at_ms,
             },
+            .applianceProfile = appliance_profile,
         });
     }
 
@@ -8117,14 +8180,30 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
 
     if (std.ascii.eqlIgnoreCase(req.method, "doctor")) {
         const opts: security_audit.Options = security_audit.optionsFromFrame(allocator, frame_json) catch security_audit.Options{};
+        const cfg = currentConfig();
         const guard = try getGuard();
-        var report = try security_audit.doctor(allocator, currentConfig(), guard, opts);
+        var report = try security_audit.doctor(allocator, cfg, guard, opts);
         defer report.deinit(allocator);
+        const compat = try getCompatState();
+        var appliance_profile = try buildApplianceProfile(allocator, cfg, compat, time_util.nowMs());
+        defer appliance_profile.deinit(allocator);
+        var checks: std.ArrayList(security_audit.DoctorCheck) = .empty;
+        defer checks.deinit(allocator);
+        try checks.appendSlice(allocator, report.checks);
+        try checks.append(allocator, .{
+            .id = "appliance.profile",
+            .status = doctorApplianceProfileStatus(appliance_profile),
+            .message = appliance_profile.status,
+            .detail = "minimal appliance profile readiness for persisted state, secure boot, signer policy, verification freshness, and control-plane auth",
+        });
+        const augmented_checks = try checks.toOwnedSlice(allocator);
+        defer allocator.free(augmented_checks);
         return protocol.encodeResult(allocator, req.id, .{
-            .checks = report.checks,
+            .checks = augmented_checks,
             .security = report.security,
             .configHash = report.configHash,
             .runtime = getRuntime().snapshot(),
+            .applianceProfile = appliance_profile,
         });
     }
 
@@ -8720,6 +8799,8 @@ fn buildMaintenancePlan(
     else
         @as(usize, 500);
     const runtime_snapshot = runtime.snapshot();
+    var appliance_profile = try buildApplianceProfile(allocator, cfg, compat, time_util.nowMs());
+    defer appliance_profile.deinit(allocator);
 
     var actions: std.ArrayList(MaintenanceAction) = .empty;
     defer actions.deinit(allocator);
@@ -8766,6 +8847,16 @@ fn buildMaintenancePlan(
             .auto = false,
         });
     }
+    if (!appliance_profile.ready) {
+        try actions.append(allocator, .{
+            .id = "appliance.profile.minimal",
+            .title = "Satisfy minimal appliance profile",
+            .severity = "critical",
+            .detail = "persist runtime state, enforce control-plane auth, enable secure-boot update gating, configure a signer, and verify the current boot state",
+            .recommended = true,
+            .auto = false,
+        });
+    }
     if (actions.items.len == 0) {
         try actions.append(allocator, .{
             .id = "noop",
@@ -8777,7 +8868,7 @@ fn buildMaintenancePlan(
         });
     }
 
-    const health_score = computeMaintenanceHealthScore(summary, fail_checks, warn_checks, usage_ratio, compat.heartbeat_enabled);
+    const health_score = computeMaintenanceHealthScore(summary, fail_checks, warn_checks, usage_ratio, compat.heartbeat_enabled, appliance_profile.failing, appliance_profile.warnings);
 
     return .{
         .generatedAtMs = time_util.nowMs(),
@@ -8798,6 +8889,12 @@ fn buildMaintenancePlan(
         .runtimeQueueDepth = runtime_snapshot.queueDepth,
         .runtimeLeasedJobs = runtime_snapshot.leasedJobs,
         .runtimeRecoveryBacklog = runtime_snapshot.recoveryBacklog,
+        .applianceProfileReady = appliance_profile.ready,
+        .applianceProfileStatus = appliance_profile.status,
+        .applianceProfileCheckedAtMs = appliance_profile.checkedAtMs,
+        .applianceProfilePassing = appliance_profile.passing,
+        .applianceProfileWarnings = appliance_profile.warnings,
+        .applianceProfileFailing = appliance_profile.failing,
         .actions = try actions.toOwnedSlice(allocator),
     };
 }
@@ -8810,12 +8907,141 @@ fn countDoctorChecksByStatus(checks: []const security_audit.DoctorCheck, status:
     return count;
 }
 
+fn summarizeApplianceProfileStatus(failing: usize, warnings: usize) []const u8 {
+    if (failing > 0) return "not_ready";
+    if (warnings > 0) return "warning";
+    return "ready";
+}
+
+fn doctorApplianceProfileStatus(profile: ApplianceProfileReport) []const u8 {
+    if (profile.failing > 0) return "fail";
+    if (profile.warnings > 0) return "warn";
+    return "pass";
+}
+
+fn buildApplianceProfile(
+    allocator: std.mem.Allocator,
+    cfg: config.Config,
+    compat: *const CompatState,
+    now_ms: i64,
+) !ApplianceProfileReport {
+    var checks: std.ArrayList(ApplianceProfileCheck) = .empty;
+    defer checks.deinit(allocator);
+
+    const state_path = std.mem.trim(u8, cfg.state_path, " \t\r\n");
+    const runtime_persisted = state_path.len > 0 and !startsWithIgnoreCase(state_path, "memory://");
+    try checks.append(allocator, .{
+        .id = "runtime.state_path",
+        .status = if (runtime_persisted) "pass" else "fail",
+        .message = if (state_path.len > 0) state_path else "unset",
+        .detail = if (runtime_persisted)
+            "runtime state path is persisted for restart recovery"
+        else
+            "set OPENCLAW_ZIG_STATE_PATH to a persisted directory or file path",
+    });
+
+    const gateway_token = std.mem.trim(u8, cfg.gateway.auth_token, " \t\r\n");
+    const gateway_token_required = cfg.gateway.require_token or !isLoopbackBind(cfg.http_bind);
+    try checks.append(allocator, .{
+        .id = "gateway.auth_token",
+        .status = if (gateway_token.len == 0)
+            "fail"
+        else if (!gateway_token_required)
+            "warn"
+        else
+            "pass",
+        .message = if (gateway_token.len == 0)
+            "missing"
+        else if (!gateway_token_required)
+            "configured_not_enforced"
+        else
+            "enforced",
+        .detail = if (gateway_token.len == 0)
+            "configure OPENCLAW_ZIG_GATEWAY_AUTH_TOKEN and require token auth for appliance control"
+        else if (!gateway_token_required)
+            "token exists but gateway auth is not fully enforced; set OPENCLAW_ZIG_GATEWAY_REQUIRE_TOKEN=true"
+        else
+            "gateway token auth is enforced for the appliance control plane",
+    });
+
+    try checks.append(allocator, .{
+        .id = "secure_boot.enabled",
+        .status = if (compat.boot_secure_enabled) "pass" else "fail",
+        .message = if (compat.boot_secure_enabled) "enabled" else "disabled",
+        .detail = if (compat.boot_secure_enabled)
+            "secure boot policy is active"
+        else
+            "enable secure boot policy for minimal appliance profile",
+    });
+
+    const update_gate_enforced = compat.boot_secure_enabled and compat.boot_enforce_update_gate;
+    try checks.append(allocator, .{
+        .id = "secure_boot.update_gate",
+        .status = if (update_gate_enforced) "pass" else "fail",
+        .message = if (update_gate_enforced) "enforced" else "disabled",
+        .detail = if (update_gate_enforced)
+            "secure boot gate blocks unapplied updates until verification is current"
+        else
+            "enable secure-boot update gating before appliance rollout",
+    });
+
+    const required_signer = std.mem.trim(u8, compat.boot_required_signer, " \t\r\n");
+    try checks.append(allocator, .{
+        .id = "secure_boot.required_signer",
+        .status = if (required_signer.len > 0) "pass" else "fail",
+        .message = if (required_signer.len > 0) required_signer else "unset",
+        .detail = if (required_signer.len > 0)
+            "boot verification requires a named signer"
+        else
+            "set a required signer before declaring the appliance profile ready",
+    });
+
+    const gate = compat.bootGateStatus(now_ms);
+    const verification_current = compat.boot_last_verified and gate.allowed and !gate.stale;
+    try checks.append(allocator, .{
+        .id = "secure_boot.verification",
+        .status = if (verification_current) "pass" else "fail",
+        .message = if (verification_current) "current" else gate.reason,
+        .detail = if (verification_current)
+            "current boot verification satisfies the enforced update gate"
+        else
+            "run system.boot.verify with the required signer until the appliance boot state is current",
+    });
+
+    var passing: usize = 0;
+    var warnings: usize = 0;
+    var failing: usize = 0;
+    for (checks.items) |check| {
+        if (std.ascii.eqlIgnoreCase(check.status, "pass")) {
+            passing += 1;
+        } else if (std.ascii.eqlIgnoreCase(check.status, "warn")) {
+            warnings += 1;
+        } else {
+            failing += 1;
+        }
+    }
+
+    const ready = failing == 0;
+    return .{
+        .profile = "minimal-appliance-v1",
+        .ready = ready,
+        .status = summarizeApplianceProfileStatus(failing, warnings),
+        .checkedAtMs = now_ms,
+        .passing = passing,
+        .warnings = warnings,
+        .failing = failing,
+        .checks = try checks.toOwnedSlice(allocator),
+    };
+}
+
 fn computeMaintenanceHealthScore(
     summary: security_audit.Summary,
     doctor_fail: usize,
     doctor_warn: usize,
     usage_ratio: f64,
     heartbeat_enabled: bool,
+    appliance_fail: usize,
+    appliance_warn: usize,
 ) u8 {
     var penalty: i64 = 0;
     penalty += @as(i64, @intCast(summary.critical)) * 25;
@@ -8828,6 +9054,8 @@ fn computeMaintenanceHealthScore(
         penalty += 7;
     }
     if (!heartbeat_enabled) penalty += 5;
+    penalty += @as(i64, @intCast(appliance_fail)) * 12;
+    penalty += @as(i64, @intCast(appliance_warn)) * 4;
     const score_i64 = std.math.clamp(@as(i64, 100) - penalty, 0, 100);
     return @as(u8, @intCast(score_i64));
 }
@@ -14396,29 +14624,44 @@ test "dispatch compat talk tts models and control methods return contracts" {
     try std.testing.expect(std.mem.indexOf(u8, update_status_stable, "\"currentChannel\":\"stable\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, update_status_stable, "\"currentVersion\":\"v0.2.0-zig-stable\"") != null);
 
+    const status = try dispatch(allocator, "{\"id\":\"compat-status\",\"method\":\"status\",\"params\":{}}");
+    defer allocator.free(status);
+    try std.testing.expect(std.mem.indexOf(u8, status, "\"applianceProfile\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, status, "\"profile\":\"minimal-appliance-v1\"") != null);
+
+    const doctor = try dispatch(allocator, "{\"id\":\"compat-doctor\",\"method\":\"doctor\",\"params\":{}}");
+    defer allocator.free(doctor);
+    try std.testing.expect(std.mem.indexOf(u8, doctor, "\"applianceProfile\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, doctor, "\"id\":\"appliance.profile\"") != null);
+
     const maintenance_plan = try dispatch(allocator, "{\"id\":\"compat-maint-plan\",\"method\":\"system.maintenance.plan\",\"params\":{\"deep\":false}}");
     defer allocator.free(maintenance_plan);
     try std.testing.expect(std.mem.indexOf(u8, maintenance_plan, "\"healthScore\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, maintenance_plan, "\"actions\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, maintenance_plan, "\"runtime\":{\"statePath\":") != null);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_plan, "\"applianceProfile\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_plan, "\"appliance.profile.minimal\"") != null);
 
     const maintenance_run = try dispatch(allocator, "{\"id\":\"compat-maint-run\",\"method\":\"system.maintenance.run\",\"params\":{\"dryRun\":true}}");
     defer allocator.free(maintenance_run);
     try std.testing.expect(std.mem.indexOf(u8, maintenance_run, "\"status\":\"planned\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, maintenance_run, "\"updateJob\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, maintenance_run, "\"runtime\":{\"statePath\":") != null);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_run, "\"applianceProfile\"") != null);
 
     const maintenance_status = try dispatch(allocator, "{\"id\":\"compat-maint-status\",\"method\":\"system.maintenance.status\",\"params\":{}}");
     defer allocator.free(maintenance_status);
     try std.testing.expect(std.mem.indexOf(u8, maintenance_status, "\"latestRun\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, maintenance_status, "\"healthScore\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, maintenance_status, "\"runtime\":{\"statePath\":") != null);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_status, "\"applianceProfile\"") != null);
 
     const boot_status = try dispatch(allocator, "{\"id\":\"compat-boot-status\",\"method\":\"system.boot.status\",\"params\":{}}");
     defer allocator.free(boot_status);
     try std.testing.expect(std.mem.indexOf(u8, boot_status, "\"secureBoot\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, boot_status, "\"activeSlot\":\"A\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, boot_status, "\"updateGate\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, boot_status, "\"applianceProfile\"") != null);
 
     const boot_policy_get = try dispatch(allocator, "{\"id\":\"compat-boot-policy-get\",\"method\":\"system.boot.policy.get\",\"params\":{}}");
     defer allocator.free(boot_policy_get);
@@ -14768,6 +15011,62 @@ test "dispatch compat agent and skills methods return contracts" {
     const deleted = try dispatch(allocator, deleted_frame);
     defer allocator.free(deleted);
     try std.testing.expect(std.mem.indexOf(u8, deleted, "\"ok\":true") != null);
+}
+
+test "dispatch appliance profile transitions to ready when minimal criteria are satisfied" {
+    const allocator = std.testing.allocator;
+    var cfg = config.defaults();
+    cfg.state_path = "C:/tmp/openclaw-zig-appliance-profile";
+    cfg.gateway.require_token = true;
+    cfg.gateway.auth_token = "profile-token";
+    setConfig(cfg);
+    defer setConfig(config.defaults());
+
+    const status_before = try dispatch(allocator, "{\"id\":\"appliance-profile-status-before\",\"method\":\"status\",\"params\":{}}");
+    defer allocator.free(status_before);
+    try std.testing.expect(std.mem.indexOf(u8, status_before, "\"applianceProfile\":{\"profile\":\"minimal-appliance-v1\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, status_before, "\"ready\":false") != null);
+    try std.testing.expect(std.mem.indexOf(u8, status_before, "\"status\":\"not_ready\"") != null);
+
+    const doctor_before = try dispatch(allocator, "{\"id\":\"appliance-profile-doctor-before\",\"method\":\"doctor\",\"params\":{}}");
+    defer allocator.free(doctor_before);
+    try std.testing.expect(std.mem.indexOf(u8, doctor_before, "\"id\":\"appliance.profile\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, doctor_before, "\"status\":\"fail\"") != null);
+
+    const maintenance_before = try dispatch(allocator, "{\"id\":\"appliance-profile-maint-before\",\"method\":\"system.maintenance.plan\",\"params\":{}}");
+    defer allocator.free(maintenance_before);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_before, "\"appliance.profile.minimal\"") != null);
+
+    const boot_policy_set = try dispatch(allocator, "{\"id\":\"appliance-profile-boot-policy\",\"method\":\"system.boot.policy.set\",\"params\":{\"policy\":\"signature-required\",\"enforceUpdateGate\":true,\"verificationMaxAgeMs\":300000,\"requiredSigner\":\"sigstore\"}}");
+    defer allocator.free(boot_policy_set);
+    try std.testing.expect(std.mem.indexOf(u8, boot_policy_set, "\"enforceUpdateGate\":true") != null);
+
+    const boot_verify = try dispatch(allocator, "{\"id\":\"appliance-profile-boot-verify\",\"method\":\"system.boot.verify\",\"params\":{\"measurement\":\"appliance-profile-hash\",\"expectedHash\":\"appliance-profile-hash\",\"signer\":\"sigstore\"}}");
+    defer allocator.free(boot_verify);
+    try std.testing.expect(std.mem.indexOf(u8, boot_verify, "\"verified\":true") != null);
+
+    const boot_status_after = try dispatch(allocator, "{\"id\":\"appliance-profile-boot-status-after\",\"method\":\"system.boot.status\",\"params\":{}}");
+    defer allocator.free(boot_status_after);
+    try std.testing.expect(std.mem.indexOf(u8, boot_status_after, "\"applianceProfile\":{\"profile\":\"minimal-appliance-v1\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, boot_status_after, "\"ready\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, boot_status_after, "\"status\":\"ready\"") != null);
+
+    const status_after = try dispatch(allocator, "{\"id\":\"appliance-profile-status-after\",\"method\":\"status\",\"params\":{}}");
+    defer allocator.free(status_after);
+    try std.testing.expect(std.mem.indexOf(u8, status_after, "\"applianceProfile\":{\"profile\":\"minimal-appliance-v1\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, status_after, "\"ready\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, status_after, "\"status\":\"ready\"") != null);
+
+    const doctor_after = try dispatch(allocator, "{\"id\":\"appliance-profile-doctor-after\",\"method\":\"doctor\",\"params\":{}}");
+    defer allocator.free(doctor_after);
+    try std.testing.expect(std.mem.indexOf(u8, doctor_after, "\"id\":\"appliance.profile\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, doctor_after, "\"message\":\"ready\"") != null);
+
+    const maintenance_after = try dispatch(allocator, "{\"id\":\"appliance-profile-maint-after\",\"method\":\"system.maintenance.plan\",\"params\":{}}");
+    defer allocator.free(maintenance_after);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_after, "\"applianceProfile\":{\"profile\":\"minimal-appliance-v1\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_after, "\"ready\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, maintenance_after, "\"appliance.profile.minimal\"") == null);
 }
 
 test "dispatch compat cron methods return contracts" {

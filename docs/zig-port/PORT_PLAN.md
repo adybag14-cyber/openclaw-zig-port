@@ -954,6 +954,12 @@ Full-stack replacement execution reference:
     - `update.plan` channel metadata is now generated from the full update-channel table so new rollout lanes stay visible in the public RPC contract.
     - added rollout acceptance script (`scripts/appliance-rollout-boundary-smoke-check.ps1`) and made it a required gate in both `zig-ci` and `release-preview` validate jobs.
     - the rollout gate proves secure-boot block/allow behavior, real `canary` selection, successful canary apply, and stable promotion over live HTTP RPC.
+  - appliance minimal-profile acceptance depth shipped:
+    - live `minimal-appliance-v1` readiness contract now exists in `status`, `doctor`, `system.boot.status`, and `system.maintenance.*`.
+    - readiness requires persisted runtime state, enforced control-plane token auth, secure-boot enablement, update-gate enforcement, required signer policy, and current boot verification.
+    - `doctor` now reports `appliance.profile`, and maintenance planning surfaces `appliance.profile.minimal` when the contract is not satisfied.
+    - added `scripts/appliance-minimal-profile-smoke-check.ps1` and made it a required gate in both `zig-ci` and `release-preview` validate jobs.
+    - the readiness gate proves a live `not_ready -> ready` transition over HTTP RPC after setting boot policy and verifying the current measurement.
   - added bare-metal runtime profile (`src/baremetal_main.zig`) and build target (`zig build baremetal`) plus smoke gate (`scripts/baremetal-smoke-check.ps1`) in both `zig-ci` and `release-preview` validate jobs.
   - release-preview packaging now ships the freestanding image artifact (`openclaw-zig-<version>-x86_64-freestanding-none.elf`) alongside desktop/android zips + checksums.
   - bare-metal runtime now embeds Multiboot2 header and smoke gate checks ELF magic + Multiboot2 magic bytes to reduce boot-regression risk.

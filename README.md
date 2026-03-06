@@ -11,7 +11,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - Original OpenClaw beta baseline (`v2026.3.2-beta.1`): `94/94` covered
   - Union baseline: `135/135` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
-- Latest local validation: `zig build test --summary all` -> `202/202` passing
+- Latest local validation: `zig build test --summary all` -> `203/203` passing
 - Latest published edge release tag: `v0.2.0-zig-edge.26`
 - Recent FS1 progress (2026-03-06):
   - runtime recovery posture is now surfaced on live diagnostics and maintenance RPCs
@@ -21,6 +21,8 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 - Recent FS6 progress (2026-03-06):
   - `update.*` now has a real `canary` rollout lane instead of collapsing `canary` into `edge`
   - appliance rollout boundary is now enforced by live smoke validation (`canary` selection, secure-boot block, canary apply, stable promotion)
+  - minimal appliance profile is now a live runtime contract surfaced in `status`, `doctor`, `system.boot.status`, and maintenance responses
+  - appliance profile readiness is now enforced by live smoke validation (persisted state, control-plane auth, secure-boot gate, signer, current verification)
 - Dual runtime profiles available:
   - OS-hosted profile: `openclaw-zig` (`--serve`, doctor, security audit, full RPC stack)
 - Bare-metal profile: `openclaw-zig-baremetal.elf` (`zig build baremetal`, freestanding runtime loop + Multiboot2 header)
@@ -398,6 +400,7 @@ Run local preview packaging with CI-aligned validate gates:
 - appliance control-plane smoke gate (`system.boot.*`, `system.rollback.*`, secure-boot-gated `update.run`)
 - appliance restart recovery smoke gate (persisted `compat-state.json` replay across stop/start)
 - appliance rollout boundary smoke gate (real `canary` lane selection, secure-boot block, canary-to-stable promotion)
+- appliance minimal profile smoke gate (readiness contract for persisted state, control-plane auth, secure-boot gating, signer, and fresh verification)
 - parity evidence artifact publication (`parity-go-zig.json`, `parity-go-zig.md`)
 
 `docs-pages` workflow (`.github/workflows/docs-pages.yml`):
@@ -417,6 +420,7 @@ Run local preview packaging with CI-aligned validate gates:
 - appliance control-plane smoke validation
 - appliance restart recovery validation
 - appliance rollout boundary validation
+- appliance minimal profile validation
 - full preview artifact matrix build and publish
 - includes bare-metal release artifact: `openclaw-zig-<version>-x86_64-freestanding-none.elf`
 - duplicate release tag guard

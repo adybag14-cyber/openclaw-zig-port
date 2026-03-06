@@ -154,6 +154,10 @@ jobs:
         shell: pwsh
         run: ./scripts/appliance-rollout-boundary-smoke-check.ps1 -SkipBuild
 
+      - name: Appliance minimal profile smoke check (readiness contract)
+        shell: pwsh
+        run: ./scripts/appliance-minimal-profile-smoke-check.ps1 -SkipBuild
+
   cross-targets:
     runs-on: ubuntu-latest
     strategy:

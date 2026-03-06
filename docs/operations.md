@@ -27,6 +27,7 @@ Recommended sequence:
 ./scripts/appliance-control-plane-smoke-check.ps1
 ./scripts/appliance-restart-recovery-smoke-check.ps1
 ./scripts/appliance-rollout-boundary-smoke-check.ps1
+./scripts/appliance-minimal-profile-smoke-check.ps1
 ./scripts/gateway-auth-smoke-check.ps1
 ./scripts/websocket-smoke-check.ps1
 ./scripts/web-login-smoke-check.ps1
@@ -47,6 +48,7 @@ Recommended sequence:
 - appliance control-plane smoke check (`system.boot.*`, `system.rollback.*`, secure-boot update gate)
 - appliance restart recovery smoke check (persisted control-plane replay + recovery actionability)
 - appliance rollout boundary smoke check (real `canary` lane selection + canary-to-stable promotion)
+- appliance minimal profile smoke check (persisted state + auth + secure-boot/readiness contract)
 - parity evidence artifacts
   - websocket smoke validates `/ws` and root compatibility route `/`, including binary-frame RPC dispatch
   - gateway-auth and websocket smokes use bounded receive timeouts to prevent hanging CI jobs
@@ -64,6 +66,7 @@ Recommended sequence:
 - appliance control-plane smoke check in validate stage
 - appliance restart recovery smoke check in validate stage
 - appliance rollout boundary smoke check in validate stage
+- appliance minimal profile smoke check in validate stage
 - npm package dry-run validation in release validate stage
 - python package validation (unit tests + build + twine check) in release validate stage
 - local `scripts/release-preview.ps1` mirrors parity/docs/freshness gates before artifact packaging

@@ -392,6 +392,8 @@ Registry status:
 - [ ] FS6 - Appliance/bare-metal maturity track
   - rollout boundary is now defined at the runtime contract level: `stable`, `canary`, and `edge` are separate update lanes, with `canary` no longer collapsing into `edge`.
   - latest required evidence now includes `scripts/appliance-rollout-boundary-smoke-check.ps1` (secure-boot block, canary apply, stable promotion).
+  - minimal appliance profile readiness is now a live runtime contract surfaced on `status`, `doctor`, `system.boot.status`, and `system.maintenance.*`.
+  - latest required evidence now also includes `scripts/appliance-minimal-profile-smoke-check.ps1` (persisted state path, control-plane auth, secure-boot update gate, signer policy, and current verification).
 - [ ] FS7 - Cutover + decommission gates
 
 ## Phase 1 - Foundation
@@ -758,7 +760,7 @@ Phase 6 progress notes:
 ## Latest Validation Snapshot
 - [x] `zig build`
 - [x] `zig build test`
-- [x] `zig build test --summary all` -> `202/202` passing (includes gateway auth/rate-limit hardening tests, runtime file/exec policy hardening tests, config-hash diagnostics coverage, bind-policy token enforcement checks, secure-boot policy/update-gate enforcement coverage, TTS/completion execution-path coverage, PAL extraction coverage, secure secret-store backend coverage, bare-metal ABI v2 contract tests, and runtime persistence posture diagnostics coverage)
+- [x] `zig build test --summary all` -> `203/203` passing (includes gateway auth/rate-limit hardening tests, runtime file/exec policy hardening tests, config-hash diagnostics coverage, bind-policy token enforcement checks, secure-boot policy/update-gate enforcement coverage, TTS/completion execution-path coverage, PAL extraction coverage, secure secret-store backend coverage, bare-metal ABI v2 contract tests, runtime persistence posture diagnostics coverage, and appliance minimal-profile readiness coverage)
 - [x] Runtime policy hardening slice shipped:
   - `file.read` / `file.write` optional sandbox enforcement with traversal + symlink denial paths:
     - `OPENCLAW_ZIG_RUNTIME_FILE_SANDBOX_ENABLED`
@@ -843,6 +845,7 @@ Phase 6 progress notes:
 - [x] `scripts/system-maintenance-smoke-check.ps1` (`system.maintenance.plan -> run(dry-run+apply) -> status` all HTTP 200 with lifecycle contract checks)
 - [x] `scripts/appliance-control-plane-smoke-check.ps1` (`system.boot.status -> policy.get/set -> verify(fail/ok) -> attest/attest.verify(signature-required) -> rollback.plan/cancel/run(dry-run+apply) -> secure-boot-gated update.run` all HTTP 200 with contract checks)
 - [x] `scripts/appliance-restart-recovery-smoke-check.ps1` (persisted `compat-state.json` replay across restart: boot policy + verification + update head + rollback plan survive stop/start and remain actionable after recovery)
+- [x] `scripts/appliance-minimal-profile-smoke-check.ps1` (readiness contract proves persisted `OPENCLAW_ZIG_STATE_PATH`, enforced control-plane token auth, secure-boot update gate, required signer, and current boot verification transition `not_ready -> ready` over live HTTP RPC)
 - [x] `scripts/baremetal-smoke-check.ps1` (`zig build baremetal` + artifact presence/size checks for freestanding image)
 - [x] `scripts/baremetal-smoke-check.ps1` now validates ELF + Multiboot2 magic in the freestanding image.
 - [x] `scripts/baremetal-smoke-check.ps1` now validates `.multiboot` section + required exported symbols (`_start`, `oc_tick`, `oc_tick_n`, `oc_status_ptr`, `oc_command_ptr`, `oc_kernel_info_ptr`, `oc_submit_command`, `kernel_info`, `multiboot2_header`) from ELF symtab.
@@ -1006,6 +1009,7 @@ Phase 6 progress notes:
 - [x] Added appliance control-plane smoke gate (`scripts/appliance-control-plane-smoke-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (`system.boot.*`, `system.rollback.*`, signed `system.boot.attest.verify`, and secure-boot-gated `update.run` contract checks).
 - [x] Added appliance restart recovery smoke gate (`scripts/appliance-restart-recovery-smoke-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (persisted `compat-state.json` replay of boot policy, boot verification, update head, and rollback plan across restart).
 - [x] Added appliance rollout boundary smoke gate (`scripts/appliance-rollout-boundary-smoke-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (real `canary` lane selection, secure-boot block, canary apply, and stable promotion over live RPC).
+- [x] Added appliance minimal-profile smoke gate (`scripts/appliance-minimal-profile-smoke-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (live readiness contract for persisted state, control-plane auth, secure-boot update gating, signer policy, and current verification).
 - [x] Added bare-metal smoke gate (`scripts/baremetal-smoke-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs.
 - [x] Added bare-metal release packaging to `release-preview` (publishes `openclaw-zig-<version>-x86_64-freestanding-none.elf` with checksums).
 - [x] CI regression fixed for Zig master environ API mismatch (`std.process.Environ`):
