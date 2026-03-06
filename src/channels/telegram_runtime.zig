@@ -165,12 +165,8 @@ const AuthBridgeMetadata = struct {
     endpoint: []const u8,
     reachable: bool,
     httpStatus: u16,
-    probeUrl: []const u8,
-    statusCode: u16,
-    latencyMs: i64,
     @"error": []const u8,
     sessions: web_login.SummaryView,
-    guidance: []const u8,
 };
 
 const AuthCommandMetadata = struct {
@@ -3153,7 +3149,6 @@ pub const TelegramRuntime = struct {
 
     fn buildAuthBridgeMetadataJson(self: *TelegramRuntime, allocator: std.mem.Allocator, target: []const u8, provider_raw: []const u8) ![]u8 {
         const provider = normalizeProvider(provider_raw);
-        const guidance = providerBridgeGuidance(provider);
         const summary = self.login_manager.status();
         const endpoint = std.mem.trim(u8, self.bridge_endpoint, " \t\r\n");
         const enabled = endpoint.len > 0;
@@ -3176,12 +3171,8 @@ pub const TelegramRuntime = struct {
                 .endpoint = probe.endpoint,
                 .reachable = reachable,
                 .httpStatus = probe.statusCode,
-                .probeUrl = probe.probeUrl,
-                .statusCode = probe.statusCode,
-                .latencyMs = probe.latencyMs,
                 .@"error" = probe.errorText,
                 .sessions = summary,
-                .guidance = guidance,
             },
         });
     }
@@ -4076,20 +4067,6 @@ fn inferProviderFromAuthInput(input_raw: []const u8) ?[]const u8 {
     if (containsIgnoreCase(trimmed, "openrouter.ai")) return "openrouter";
     if (containsIgnoreCase(trimmed, "opencode.ai")) return "opencode";
     return null;
-}
-
-fn providerBridgeGuidance(provider_raw: []const u8) []const u8 {
-    const provider = normalizeProvider(provider_raw);
-    if (std.ascii.eqlIgnoreCase(provider, "qwen")) {
-        return "Browser bridge: lightpanda\nProvider: qwen\nFlow: open https://chat.qwen.ai and if popup appears click 'Stay logged out'.\nThen run: /auth guest qwen [account]";
-    }
-    if (std.ascii.eqlIgnoreCase(provider, "zai")) {
-        return "Browser bridge: lightpanda\nProvider: zai (glm-5)\nFlow: open https://chat.z.ai and click 'Stay logged out' on login prompts.\nThen run: /auth guest zai [account]";
-    }
-    if (std.ascii.eqlIgnoreCase(provider, "inception")) {
-        return "Browser bridge: lightpanda\nProvider: inception (mercury-2)\nFlow: open https://chat.inceptionlabs.ai and stay in guest mode.\nThen run: /auth guest inception [account]";
-    }
-    return "Browser bridge: lightpanda\nFlow: start auth and complete with callback URL or code.\nCommand: /auth complete <provider> <callback_url_or_code> [session_id] [account]";
 }
 
 fn providerApiKeyConfigured(self: *TelegramRuntime, allocator: std.mem.Allocator, provider_raw: []const u8) bool {
@@ -5003,7 +4980,7 @@ test "telegram runtime auth supports account scope and force restart" {
     try std.testing.expect(std.mem.indexOf(u8, chat_mobile.reply, "OpenClaw Zig (qwen/") != null);
 }
 
-test "telegram runtime auth bridge and providers help keep compact go-style replies with rich metadata" {
+test "telegram runtime auth bridge and providers help keep compact go-style replies with go-compatible metadata" {
     var login = web_login.LoginManager.init(std.testing.allocator, 5 * 60 * 1000);
     defer login.deinit();
     var runtime = TelegramRuntime.init(std.testing.allocator, &login);
@@ -5047,9 +5024,12 @@ test "telegram runtime auth bridge and providers help keep compact go-style repl
     try std.testing.expect(std.mem.indexOf(u8, bridge_qwen.reply, "Bridge `unreachable` (http://127.0.0.1:1).") != null);
     try std.testing.expect(std.mem.indexOf(u8, bridge_qwen.reply, "Probe error: probe failed: ConnectionRefused") != null);
     const bridge_qwen_metadata = bridge_qwen.metadataJson orelse return error.TestUnexpectedResult;
-    try std.testing.expect(std.mem.indexOf(u8, bridge_qwen_metadata, "\"guidance\":\"Browser bridge: lightpanda") != null);
     try std.testing.expect(std.mem.indexOf(u8, bridge_qwen_metadata, "\"reachable\":false") != null);
     try std.testing.expect(std.mem.indexOf(u8, bridge_qwen_metadata, "\"httpStatus\":0") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bridge_qwen_metadata, "\"guidance\":") == null);
+    try std.testing.expect(std.mem.indexOf(u8, bridge_qwen_metadata, "\"probeUrl\":") == null);
+    try std.testing.expect(std.mem.indexOf(u8, bridge_qwen_metadata, "\"statusCode\":") == null);
+    try std.testing.expect(std.mem.indexOf(u8, bridge_qwen_metadata, "\"latencyMs\":") == null);
 }
 
 test "telegram runtime auth link command surfaces pending qwen session details" {

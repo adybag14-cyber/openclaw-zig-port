@@ -58,6 +58,21 @@ Full-stack replacement execution reference:
 
 - Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `195/195`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram auth-bridge metadata parity hardened:
+    - nested `metadata.bridge` now keeps the Go-style bridge keys:
+      - `enabled`
+      - `status`
+      - `endpoint`
+      - `reachable`
+      - `httpStatus`
+      - `error`
+      - `sessions`
+    - Zig-only bridge metadata fields were removed from this path:
+      - `guidance`
+      - `probeUrl`
+      - `statusCode`
+      - `latencyMs`
+    - runtime and dispatcher regressions now assert the absence of those extra bridge fields.
   - Phase 5 Telegram invalid-auth metadata envelope hardened:
     - invalid `/auth start|status|wait|url|complete|cancel` parser receipts now use Go’s narrow metadata contract:
       - `type`

@@ -13008,7 +13008,10 @@ test "dispatch send auth commands expose go-compatible metadata envelope" {
         try std.testing.expect(bridge.object.get("enabled") != null);
         try std.testing.expect(bridge.object.get("reachable") != null);
         try std.testing.expect(bridge.object.get("httpStatus") != null);
-        try std.testing.expect(bridge.object.get("guidance") != null);
+        try std.testing.expect(bridge.object.get("guidance") == null);
+        try std.testing.expect(bridge.object.get("probeUrl") == null);
+        try std.testing.expect(bridge.object.get("statusCode") == null);
+        try std.testing.expect(bridge.object.get("latencyMs") == null);
     }
 
     const auth_help = try dispatch(allocator, "{\"id\":\"tg-auth-help-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta\",\"sessionId\":\"tg-meta\",\"message\":\"/auth help\"}}");

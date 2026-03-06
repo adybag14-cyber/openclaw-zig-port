@@ -8,6 +8,21 @@ Historical note: milestone validation counts below are preserved as captured at 
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram `/auth bridge` metadata now matches Go’s nested bridge contract more closely instead of shipping Zig-only probe extras:
+      - nested `metadata.bridge` now keeps the Go-style keys:
+        - `enabled`
+        - `status`
+        - `endpoint`
+        - `reachable`
+        - `httpStatus`
+        - `error`
+        - `sessions`
+      - nested bridge metadata no longer emits Zig-only fields on this path:
+        - `guidance`
+        - `probeUrl`
+        - `statusCode`
+        - `latencyMs`
+      - runtime and dispatcher regression coverage now assert the absence of those extra bridge fields.
     - Telegram invalid `/auth` parser metadata now matches Go’s narrow envelope instead of leaking Zig-only fields:
       - invalid `/auth start|status|wait|url|complete|cancel` receipts now keep only the Go-style machine-readable core:
         - `type`
