@@ -847,6 +847,7 @@ Phase 6 progress notes:
 - [x] `scripts/appliance-restart-recovery-smoke-check.ps1` (persisted `compat-state.json` replay across restart: boot policy + verification + update head + rollback plan survive stop/start and remain actionable after recovery)
 - [x] `scripts/appliance-minimal-profile-smoke-check.ps1` (readiness contract proves persisted `OPENCLAW_ZIG_STATE_PATH`, enforced control-plane token auth, secure-boot update gate, required signer, and current boot verification transition `not_ready -> ready` over live HTTP RPC)
 - [x] `scripts/baremetal-qemu-scheduler-probe-check.ps1` (optional PVH/QEMU scheduler probe proves scheduler reset, timeslice update, task creation, policy switch, and live dispatch telemetry end to end against the freestanding artifact)
+- [x] `scripts/baremetal-qemu-timer-wake-probe-check.ps1` (optional PVH/QEMU timer/wake probe proves timer reset, tick-quantum update, task create + `task_wait_for`, fired timer entry state, and wake-queue telemetry end to end against the freestanding artifact)
 - [x] `scripts/baremetal-smoke-check.ps1` (`zig build baremetal` + artifact presence/size checks for freestanding image)
 - [x] `scripts/baremetal-smoke-check.ps1` now validates ELF + Multiboot2 magic in the freestanding image.
 - [x] `scripts/baremetal-smoke-check.ps1` now validates `.multiboot` section + required exported symbols (`_start`, `oc_tick`, `oc_tick_n`, `oc_status_ptr`, `oc_command_ptr`, `oc_kernel_info_ptr`, `oc_submit_command`, `kernel_info`, `multiboot2_header`) from ELF symtab.
@@ -1013,6 +1014,7 @@ Phase 6 progress notes:
 - [x] Added appliance minimal-profile smoke gate (`scripts/appliance-minimal-profile-smoke-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (live readiness contract for persisted state, control-plane auth, secure-boot update gating, signer policy, and current verification).
 - [x] Added bare-metal smoke gate (`scripts/baremetal-smoke-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs.
 - [x] Added bare-metal optional QEMU scheduler probe (`scripts/baremetal-qemu-scheduler-probe-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (scheduler reset, timeslice, task creation, policy switch, and live dispatch telemetry over the PVH freestanding artifact).
+- [x] Added bare-metal optional QEMU timer/wake probe (`scripts/baremetal-qemu-timer-wake-probe-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (timer reset, tick-quantum update, task create + `task_wait_for`, fired timer entry telemetry, and wake-queue evidence over the PVH freestanding artifact).
 - [x] Added bare-metal release packaging to `release-preview` (publishes `openclaw-zig-<version>-x86_64-freestanding-none.elf` with checksums).
 - [x] CI regression fixed for Zig master environ API mismatch (`std.process.Environ`):
   - failing run: `zig-ci` `22668754695` (compile failure in `telegram_runtime.zig` from `.block = .global` on posix targets).

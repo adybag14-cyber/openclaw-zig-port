@@ -162,6 +162,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-probe-check.ps1
 
+      - name: Bare-metal QEMU timer wake probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-wake-probe-check.ps1
+
   cross-targets:
     runs-on: ubuntu-latest
     strategy:

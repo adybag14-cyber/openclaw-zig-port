@@ -986,6 +986,10 @@ Full-stack replacement execution reference:
     - new script: `scripts/baremetal-qemu-scheduler-probe-check.ps1` resolves scheduler state/task symbols from the freestanding ELF and drives scheduler commands through the mailbox under QEMU+GDB.
     - the probe validates `command_scheduler_reset`, `command_scheduler_set_timeslice`, `command_task_create`, `command_scheduler_set_policy`, and `command_scheduler_enable` end to end over the PVH freestanding artifact.
     - current proof path validates `enabled=1`, `task_count=1`, `running_slot=0`, `dispatch_count>=1`, `timeslice=3`, `policy=priority`, and a live task with `priority=5`, `budget=12`, and nonzero run-count/budget-remaining telemetry.
+  - bare-metal QEMU timer/wake validation shipped:
+    - new script: `scripts/baremetal-qemu-timer-wake-probe-check.ps1` resolves timer state/entry and wake-queue symbols from the freestanding ELF and drives timer commands through the mailbox under QEMU+GDB.
+    - the probe validates `command_timer_reset`, `command_timer_set_quantum`, `command_task_create`, and `command_task_wait_for` end to end over the PVH freestanding artifact.
+    - current proof path validates `ack=5`, `last_opcode=53`, `last_result=0`, `ticks=8`, `task_state=ready`, `run_count=0`, `timer_state.enabled=1`, `timer_count=0`, `pending_wake_count=1`, `dispatch_count=1`, `tick_quantum=3`, a fired timer entry for task `1`, and wake event telemetry (`reason=timer`, `vector=0`, `tick=last_fire_tick`).
   - bare-metal mailbox interrupt-control expansion shipped:
     - new command opcodes wired in runtime: `command_trigger_interrupt`, `command_reset_interrupt_counters`, `command_reinit_descriptor_tables`.
     - reset path now clears runtime interrupt counters via bootstrap export to keep command-driven diagnostics deterministic.
