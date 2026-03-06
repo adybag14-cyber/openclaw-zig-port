@@ -58,6 +58,12 @@ Full-stack replacement execution reference:
 
 - Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `190/190`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram auth success-reply parity hardened:
+    - `/auth url` now emits the compact Go-style operator reply (`Auth URL: ...` + `Code: ...`) instead of Zig's longer status/session/scope/guest guidance block.
+    - rich `/auth url` details remain in the nested metadata envelope, so machine-readable context is preserved while the human reply matches Go.
+    - `/auth complete` success replies now use the generic Go wording:
+      - `Auth completed. Session \`<id>\` is \`<status>\`.`
+    - regression assertions added in both runtime and dispatcher tests for the compact `/auth url` and success `/auth complete` paths.
   - Phase 5 Telegram auth-complete parity hardened:
     - missing `/auth complete` sessions now use the Go-style scope reply:
       - `No pending auth session for scope \`<provider>/<account>\`. Run \`/auth start <provider>\` first.`

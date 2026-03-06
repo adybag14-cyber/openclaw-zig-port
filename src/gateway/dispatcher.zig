@@ -12953,6 +12953,7 @@ test "dispatch send/poll handles auth command and assistant reply loop" {
     const auth_complete = try dispatch(allocator, auth_complete_frame);
     defer allocator.free(auth_complete);
     try std.testing.expect(std.mem.indexOf(u8, auth_complete, "\"authStatus\":\"authorized\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, auth_complete, "Auth completed. Session `") != null);
 
     const chat = try dispatch(allocator, "{\"id\":\"tg-chat\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-dispatch\",\"sessionId\":\"tg-d1\",\"message\":\"hello from dispatcher\"}}");
     defer allocator.free(chat);
@@ -13043,6 +13044,14 @@ test "dispatch send auth commands expose go-compatible metadata envelope" {
         try std.testing.expect(timeout == .integer and timeout.integer == 1);
     }
 
+    const auth_url = try dispatch(allocator, "{\"id\":\"tg-auth-url-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta\",\"sessionId\":\"tg-meta\",\"message\":\"/auth url codex mobile\"}}");
+    defer allocator.free(auth_url);
+    const auth_url_reply = try extractResultStringField(allocator, auth_url, "reply");
+    defer allocator.free(auth_url_reply);
+    try std.testing.expect(std.mem.indexOf(u8, auth_url_reply, "Auth URL: https://chatgpt.com/?openclaw_code=") != null);
+    try std.testing.expect(std.mem.indexOf(u8, auth_url_reply, "Status: `") == null);
+    try std.testing.expect(std.mem.indexOf(u8, auth_url_reply, "Session: `") == null);
+
     const provider_callback_url = try std.fmt.allocPrint(allocator, "https://chatgpt.com/?openclaw_code={s}", .{login_code});
     defer allocator.free(provider_callback_url);
     const auth_complete_frame = try std.fmt.allocPrint(allocator, "{{\"id\":\"tg-auth-complete-meta\",\"method\":\"send\",\"params\":{{\"channel\":\"telegram\",\"to\":\"room-meta\",\"sessionId\":\"tg-meta\",\"message\":\"/auth complete codex {s} mobile\"}}}}", .{provider_callback_url});
@@ -13050,6 +13059,9 @@ test "dispatch send auth commands expose go-compatible metadata envelope" {
     const auth_complete = try dispatch(allocator, auth_complete_frame);
     defer allocator.free(auth_complete);
     try std.testing.expect(std.mem.indexOf(u8, auth_complete, "\"authStatus\":\"authorized\"") != null);
+    const auth_complete_reply = try extractResultStringField(allocator, auth_complete, "reply");
+    defer allocator.free(auth_complete_reply);
+    try std.testing.expect(std.mem.indexOf(u8, auth_complete_reply, "Auth completed. Session `") != null);
     {
         var parsed = try std.json.parseFromSlice(std.json.Value, allocator, auth_complete, .{});
         defer parsed.deinit();

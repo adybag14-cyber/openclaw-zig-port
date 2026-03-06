@@ -8,6 +8,14 @@ Historical note: milestone validation counts below are preserved as captured at 
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram auth success/operator replies now match Go more closely:
+      - `/auth url` now uses the compact Go-style reply shape:
+        - `Auth URL: <verificationUriComplete>`
+        - `Code: <code>`
+      - detailed status/session/scope/guest guidance for `/auth url` remains available in nested metadata instead of the reply body.
+      - `/auth complete` success replies now use the generic Go-style wording:
+        - `Auth completed. Session <id> is <status>.`
+      - regression coverage tightened at both runtime and dispatcher layers for the compact `/auth url` and `/auth complete` success paths.
     - Telegram `/auth complete` now matches Go more closely on no-session and bridge-error paths:
       - missing complete sessions now return `No pending auth session for scope <scope>. Run /auth start <provider> first.` instead of Zig's older provider/account-specific wording.
       - no-session complete metadata now carries `error=missing_session` without the extra Zig-only `status=none`, and top-level `authStatus` now settles to `none`.

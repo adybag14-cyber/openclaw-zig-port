@@ -2953,7 +2953,7 @@ pub const TelegramRuntime = struct {
             return .{
                 .is_command = true,
                 .command_name = "auth",
-                .reply = try std.fmt.allocPrint(allocator, "Auth completed for `{s}` account `{s}`. Session `{s}` is `{s}`.", .{ provider, normalizeAccount(account), completed.loginSessionId, completed.status }),
+                .reply = try std.fmt.allocPrint(allocator, "Auth completed. Session `{s}` is `{s}`.", .{ completed.loginSessionId, completed.status }),
                 .provider = provider,
                 .model = completed.model,
                 .login_session_id = completed.loginSessionId,
@@ -3226,33 +3226,12 @@ pub const TelegramRuntime = struct {
         view: web_login.SessionView,
     ) ![]u8 {
         _ = self;
-        const provider = normalizeProvider(provider_raw);
-        const account_is_default = std.mem.eql(u8, account_norm, "default");
-        if (view.guestBypassSupported) {
-            if (account_is_default) {
-                return std.fmt.allocPrint(
-                    allocator,
-                    "Auth URL: {s}\nCode: `{s}`\nStatus: `{s}`\nSession: `{s}`\nGuest mode: supported (`{s}`)\nHint: {s}\nThen run `/auth guest {s}` or `/auth complete {s} <callback_url_or_code> {s}`.",
-                    .{ view.verificationUriComplete, view.code, view.status, view.loginSessionId, view.popupBypassAction, view.guestBypassHint, provider, provider, view.loginSessionId },
-                );
-            }
-            return std.fmt.allocPrint(
-                allocator,
-                "Auth URL: {s}\nCode: `{s}`\nStatus: `{s}`\nSession: `{s}`\nScope: `{s}/{s}`\nGuest mode: supported (`{s}`)\nHint: {s}\nThen run `/auth guest {s} {s}` or `/auth complete {s} <callback_url_or_code> {s} {s}`.",
-                .{ view.verificationUriComplete, view.code, view.status, view.loginSessionId, provider, account_norm, view.popupBypassAction, view.guestBypassHint, provider, account_norm, provider, view.loginSessionId, account_norm },
-            );
-        }
-        if (account_is_default) {
-            return std.fmt.allocPrint(
-                allocator,
-                "Auth URL: {s}\nCode: `{s}`\nStatus: `{s}`\nSession: `{s}`\nThen run `/auth complete {s} <callback_url_or_code> {s}`.",
-                .{ view.verificationUriComplete, view.code, view.status, view.loginSessionId, provider, view.loginSessionId },
-            );
-        }
+        _ = provider_raw;
+        _ = account_norm;
         return std.fmt.allocPrint(
             allocator,
-            "Auth URL: {s}\nCode: `{s}`\nStatus: `{s}`\nSession: `{s}`\nScope: `{s}/{s}`\nThen run `/auth complete {s} <callback_url_or_code> {s} {s}`.",
-            .{ view.verificationUriComplete, view.code, view.status, view.loginSessionId, provider, account_norm, provider, view.loginSessionId, account_norm },
+            "Auth URL: {s}\nCode: `{s}`",
+            .{ view.verificationUriComplete, view.code },
         );
     }
 
@@ -4558,6 +4537,7 @@ test "telegram runtime auth command and reply poll lifecycle" {
     var complete_result = try runtime.sendFromFrame(allocator, complete_frame);
     defer complete_result.deinit(allocator);
     try std.testing.expect(std.mem.eql(u8, complete_result.authStatus, "authorized"));
+    try std.testing.expect(std.mem.indexOf(u8, complete_result.reply, "Auth completed. Session `") != null);
 
     const chat_frame =
         \\{"id":"tg-chat","method":"send","params":{"channel":"telegram","to":"room-b","sessionId":"sess-b","message":"hello"}}
@@ -5071,8 +5051,10 @@ test "telegram runtime auth url alias surfaces session details" {
     defer url.deinit(allocator);
     try std.testing.expect(std.mem.eql(u8, url.authStatus, "pending"));
     try std.testing.expect(std.mem.indexOf(u8, url.reply, "Auth URL: https://chat.qwen.ai/?openclaw_code=") != null);
-    try std.testing.expect(std.mem.indexOf(u8, url.reply, "Scope: `qwen/mobile`") != null);
-    try std.testing.expect(std.mem.indexOf(u8, url.reply, "Guest mode: supported (`stay_logged_out`)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, url.reply, "Status: `") == null);
+    try std.testing.expect(std.mem.indexOf(u8, url.reply, "Session: `") == null);
+    try std.testing.expect(std.mem.indexOf(u8, url.reply, "Scope: `") == null);
+    try std.testing.expect(std.mem.indexOf(u8, url.reply, "Guest mode: supported") == null);
     try std.testing.expect(std.mem.indexOf(u8, url.reply, start.loginCode) != null);
 }
 
