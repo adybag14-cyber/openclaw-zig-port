@@ -3,7 +3,7 @@
 ## Current Snapshot
 
 - Latest published edge release: `v0.2.0-zig-edge.26`
-- Latest local test gate: `zig build test --summary all` -> `202/202` passing
+- Latest local test gate: `zig build test --summary all` -> `203/203` passing
 - Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=169`, `ZIG_EVENTS_COUNT=19`
 - Current head: `ccf905b`
 - Latest CI:
@@ -27,6 +27,7 @@ Recommended sequence:
 ./scripts/baremetal-qemu-scheduler-probe-check.ps1
 ./scripts/baremetal-qemu-timer-wake-probe-check.ps1
 ./scripts/baremetal-qemu-allocator-syscall-probe-check.ps1
+./scripts/baremetal-qemu-allocator-syscall-failure-probe-check.ps1
 ./scripts/appliance-control-plane-smoke-check.ps1
 ./scripts/appliance-restart-recovery-smoke-check.ps1
 ./scripts/appliance-rollout-boundary-smoke-check.ps1
@@ -55,6 +56,7 @@ Recommended sequence:
 - optional bare-metal QEMU scheduler probe (scheduler reset/timeslice/task-create/policy-enable against the freestanding PVH artifact)
 - optional bare-metal QEMU timer wake probe (timer reset/quantum/task-wait to fired timer entry + wake queue telemetry against the freestanding PVH artifact)
 - optional bare-metal QEMU allocator syscall probe (alloc/free plus syscall register/invoke/block/disable/unregister against the freestanding PVH artifact)
+- optional bare-metal QEMU allocator syscall failure probe (invalid-alignment, no-space, blocked-syscall, and disabled-syscall result semantics plus command-result counters against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt mask exception probe (masked external vector remains blocked while an exception vector still wakes the waiting task and records history telemetry against the freestanding PVH artifact)
 - parity evidence artifacts
   - websocket smoke validates `/ws` and root compatibility route `/`, including binary-frame RPC dispatch
@@ -77,6 +79,7 @@ Recommended sequence:
 - bare-metal optional QEMU scheduler probe in validate stage
 - bare-metal optional QEMU timer wake probe in validate stage
 - bare-metal optional QEMU allocator syscall probe in validate stage
+- bare-metal optional QEMU allocator syscall failure probe in validate stage
 - bare-metal optional QEMU interrupt mask exception probe in validate stage
 - npm package dry-run validation in release validate stage
 - python package validation (unit tests + build + twine check) in release validate stage

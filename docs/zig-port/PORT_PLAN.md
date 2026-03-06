@@ -56,7 +56,7 @@ Full-stack replacement execution reference:
 
 ## Current Progress Snapshot
 
-- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `202/202`.
+- Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `203/203`.
 - Release/package lane status (2026-03-06):
   - GitHub prerelease `v0.2.0-zig-edge.26` is live with desktop/android/bare-metal artifacts, parity reports, manifest, SBOM, provenance, npm tarball, wheel, and sdist.
   - release evidence now also includes `release-status.json` + `release-status.md` so every edge cut carries a frozen workflow-status + registry-status snapshot in addition to package preflight evidence.
@@ -994,6 +994,10 @@ Full-stack replacement execution reference:
     - new script: `scripts/baremetal-qemu-allocator-syscall-probe-check.ps1` resolves allocator state/record, page bitmap, and syscall state/entry symbols from the freestanding ELF and drives allocator/syscall commands through the mailbox under QEMU+GDB.
     - the probe validates `command_allocator_reset`, `command_allocator_alloc`, `command_allocator_free`, `command_syscall_reset`, `command_syscall_register`, `command_syscall_invoke`, `command_syscall_set_flags`, `command_syscall_disable`, `command_syscall_enable`, and `command_syscall_unregister` end to end over the PVH freestanding artifact.
     - current proof path validates `ack=12`, `last_opcode=35`, `last_result=0`, `ticks=13`, first allocation at heap base `0x0010_0000`, `free_pages=254` after alloc, `page_len=2`, bitmap entries consumed then released, syscall invoke result `47206`, blocked invoke result `-17`, disabled invoke result `-38`, allocator returned to fully freed state, and syscall state returned to enabled/unregistered steady state.
+  - bare-metal QEMU allocator/syscall failure validation shipped:
+    - new script: `scripts/baremetal-qemu-allocator-syscall-failure-probe-check.ps1` resolves allocator state, command-result counters, and syscall state/entry symbols from the freestanding ELF and drives failure-path commands through the mailbox under QEMU+GDB.
+    - the probe validates `command_allocator_reset`, invalid-alignment `command_allocator_alloc`, no-space `command_allocator_alloc`, `command_syscall_reset`, `command_syscall_register`, blocked `command_syscall_invoke`, and disabled `command_syscall_invoke` end to end over the PVH freestanding artifact.
+    - current proof path validates `ack=11`, `last_opcode=36`, `last_result=-38`, allocator state remains fully free after failure paths, command-result counters record `ok=4`, `invalid=1`, `not_supported=1`, `other_error=2`, `total=8`, and the syscall entry remains blocked without synthetic invoke residue (`invoke_count=0`, `last_arg=0`, `last_result=0`).
   - bare-metal mailbox interrupt-control expansion shipped:
     - new command opcodes wired in runtime: `command_trigger_interrupt`, `command_reset_interrupt_counters`, `command_reinit_descriptor_tables`.
     - reset path now clears runtime interrupt counters via bootstrap export to keep command-driven diagnostics deterministic.

@@ -11,7 +11,7 @@ Full documentation for the OpenClaw Zig runtime port.
   - Original OpenClaw beta baseline (`v2026.3.2-beta.1`): `94/94`
   - Union baseline: `135/135` (`MISSING_IN_ZIG=0`)
   - Gateway events union baseline: `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
-- Latest local validation: `202/202` tests passing
+- Latest local validation: `203/203` tests passing
 - Latest published edge release tag: `v0.2.0-zig-edge.26`
 - Recent FS1 progress (2026-03-06):
   - runtime recovery posture surfaced in `status`, `doctor`, `doctor.memory.status`, `agent.identity.get`, and maintenance RPCs

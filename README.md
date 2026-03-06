@@ -32,6 +32,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - smoke gate validates ELF class/endianness, Multiboot2 location/alignment, `.multiboot` section, and required exported symbols
   - smoke gate also validates Multiboot2 header field contract and checksum
   - optional QEMU validation path available via `zig build baremetal -Dbaremetal-qemu-smoke=true`, `scripts/baremetal-qemu-smoke-check.ps1`, `scripts/baremetal-qemu-runtime-oc-tick-check.ps1`, `scripts/baremetal-qemu-command-loop-check.ps1`, `scripts/baremetal-qemu-scheduler-probe-check.ps1`, `scripts/baremetal-qemu-timer-wake-probe-check.ps1`, `scripts/baremetal-qemu-allocator-syscall-probe-check.ps1`, and `scripts/baremetal-qemu-interrupt-mask-exception-probe-check.ps1` (auto-skips when QEMU/GDB or PVH toolchain pieces are unavailable)
+  - optional QEMU allocator/syscall failure probe validates invalid-alignment, no-space, blocked-syscall, and disabled-syscall result semantics plus command-result counters against the freestanding PVH artifact
   - optional QEMU scheduler probe validates scheduler reset/timeslice/task-create/policy-enable flow end to end against the freestanding PVH artifact
   - optional QEMU timer wake probe validates timer reset/quantum/task-wait flow end to end, including fired timer entries and wake-queue telemetry against the freestanding PVH artifact
   - optional QEMU allocator/syscall probe validates alloc/free plus syscall register/invoke/block/disable/unregister flow end to end against the freestanding PVH artifact
@@ -409,6 +410,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU scheduler probe
 - optional bare-metal QEMU timer wake probe
 - optional bare-metal QEMU allocator syscall probe
+- optional bare-metal QEMU allocator syscall failure probe
 - optional bare-metal QEMU interrupt mask exception probe
 - runtime smoke gate
 - appliance control-plane smoke gate (`system.boot.*`, `system.rollback.*`, secure-boot-gated `update.run`)
@@ -437,6 +439,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU scheduler validation
 - optional bare-metal QEMU timer wake validation
 - optional bare-metal QEMU allocator syscall validation
+- optional bare-metal QEMU allocator syscall failure validation
 - appliance control-plane smoke validation
 - appliance restart recovery validation
 - appliance rollout boundary validation

@@ -196,6 +196,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-allocator-syscall-probe-check.ps1
 
+      - name: Bare-metal QEMU allocator syscall failure probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-allocator-syscall-failure-probe-check.ps1
+
       - name: Bare-metal QEMU interrupt mask exception probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-mask-exception-probe-check.ps1

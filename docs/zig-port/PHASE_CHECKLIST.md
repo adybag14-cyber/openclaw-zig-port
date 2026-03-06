@@ -1,7 +1,7 @@
 # Phase Checklist
 
 Release lock: no release tag is allowed until all phases are complete and parity is measured at 100%.
-Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `202/202`.
+Historical note: milestone validation counts below are preserved as captured at the time of each slice; current project-wide test gate is `203/203`.
 Latest edge release: `v0.2.0-zig-edge.26` is published with binaries, parity evidence, SBOM/provenance, npm tarball, wheel, and sdist attached.
 Registry status:
 - npm public publish still requires npm-side scope/package permission or `NPM_TOKEN`; GitHub release asset + GitHub Packages fallback are available now.
@@ -849,6 +849,7 @@ Phase 6 progress notes:
 - [x] `scripts/baremetal-qemu-scheduler-probe-check.ps1` (optional PVH/QEMU scheduler probe proves scheduler reset, timeslice update, task creation, policy switch, and live dispatch telemetry end to end against the freestanding artifact)
 - [x] `scripts/baremetal-qemu-timer-wake-probe-check.ps1` (optional PVH/QEMU timer/wake probe proves timer reset, tick-quantum update, task create + `task_wait_for`, fired timer entry state, and wake-queue telemetry end to end against the freestanding artifact)
 - [x] `scripts/baremetal-qemu-allocator-syscall-probe-check.ps1` (optional PVH/QEMU allocator/syscall probe proves alloc/free and syscall register/invoke/block/disable/unregister paths end to end against the freestanding artifact)
+- [x] `scripts/baremetal-qemu-allocator-syscall-failure-probe-check.ps1` (optional PVH/QEMU allocator/syscall failure probe proves invalid-alignment, no-space, blocked-syscall, and disabled-syscall result semantics plus command-result counters end to end against the freestanding artifact)
 - [x] `scripts/baremetal-qemu-interrupt-mask-exception-probe-check.ps1` (optional PVH/QEMU interrupt-mask/exception probe proves masked external vectors stay blocked while exception vectors still wake the waiting task and record interrupt/exception history telemetry end to end against the freestanding artifact)
 - [x] `scripts/baremetal-smoke-check.ps1` (`zig build baremetal` + artifact presence/size checks for freestanding image)
 - [x] `scripts/baremetal-smoke-check.ps1` now validates ELF + Multiboot2 magic in the freestanding image.
@@ -1019,6 +1020,7 @@ Phase 6 progress notes:
 - [x] Added bare-metal optional QEMU interrupt-mask/exception probe (`scripts/baremetal-qemu-interrupt-mask-exception-probe-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (masked external vectors remain blocked while exception delivery still wakes a waiting task and records both interrupt and exception histories over the PVH freestanding artifact).
 - [x] Added bare-metal optional QEMU timer/wake probe (`scripts/baremetal-qemu-timer-wake-probe-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (timer reset, tick-quantum update, task create + `task_wait_for`, fired timer entry telemetry, and wake-queue evidence over the PVH freestanding artifact).
 - [x] Added bare-metal optional QEMU allocator/syscall probe (`scripts/baremetal-qemu-allocator-syscall-probe-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (allocator alloc/free plus syscall register/invoke/block/disable/unregister evidence over the PVH freestanding artifact).
+- [x] Added bare-metal optional QEMU allocator/syscall failure probe (`scripts/baremetal-qemu-allocator-syscall-failure-probe-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (allocator invalid-alignment/no-space plus blocked/disabled syscall result semantics and command-result counter evidence over the PVH freestanding artifact).
 - [x] Added bare-metal release packaging to `release-preview` (publishes `openclaw-zig-<version>-x86_64-freestanding-none.elf` with checksums).
 - [x] CI regression fixed for Zig master environ API mismatch (`std.process.Environ`):
   - failing run: `zig-ci` `22668754695` (compile failure in `telegram_runtime.zig` from `.block = .global` on posix targets).
