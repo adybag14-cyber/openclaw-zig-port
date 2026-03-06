@@ -12998,6 +12998,14 @@ test "dispatch send auth commands expose go-compatible metadata envelope" {
         try std.testing.expect(sessions == .object);
     }
 
+    const auth_help = try dispatch(allocator, "{\"id\":\"tg-auth-help-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta\",\"sessionId\":\"tg-meta\",\"message\":\"/auth help\"}}");
+    defer allocator.free(auth_help);
+    const auth_help_reply = try extractResultStringField(allocator, auth_help, "reply");
+    defer allocator.free(auth_help_reply);
+    try std.testing.expect(std.mem.indexOf(u8, auth_help_reply, "Auth command usage:") != null);
+    try std.testing.expect(std.mem.indexOf(u8, auth_help_reply, "`/auth complete <code> [session_id]`") != null);
+    try std.testing.expect(std.mem.indexOf(u8, auth_help_reply, "`/auth guest <provider> [account] [session_id]`") != null);
+
     const auth_start = try dispatch(allocator, "{\"id\":\"tg-auth-start-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta\",\"sessionId\":\"tg-meta\",\"message\":\"/auth start codex mobile --force\"}}");
     defer allocator.free(auth_start);
     const login_session = try extractResultStringField(allocator, auth_start, "loginSessionId");

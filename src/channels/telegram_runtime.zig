@@ -1991,7 +1991,21 @@ pub const TelegramRuntime = struct {
             return .{
                 .is_command = true,
                 .command_name = "auth",
-                .reply = try allocator.dupe(u8, "Usage: /auth [start|status|wait|link|open|url|complete|guest|cancel|providers|bridge]\nExamples:\n/auth start qwen mobile --force\n/auth url qwen mobile\n/auth wait qwen mobile --timeout 45\n/auth complete qwen <callback_url_or_code> <session_id> mobile\n/auth complete <callback_url_or_code> [session_id]"),
+                .reply = try allocator.dupe(
+                    u8,
+                    "Auth command usage:\n" ++
+                        "`/auth providers`\n" ++
+                        "`/auth status [provider] [account] [session_id]`\n" ++
+                        "`/auth bridge`\n" ++
+                        "`/auth` (start default provider)\n" ++
+                        "`/auth start <provider> [account] [--force]`\n" ++
+                        "`/auth wait <provider> [session_id] [account] [--timeout <seconds>]`\n" ++
+                        "`/auth complete <provider> <callback_url_or_code> [session_id] [account]`\n" ++
+                        "`/auth complete <code> [session_id]`\n" ++
+                        "`/auth cancel [provider] [account] [session_id]`\n" ++
+                        "`/auth url <provider> [account] [session_id]`\n" ++
+                        "`/auth guest <provider> [account] [session_id]`",
+                ),
                 .provider = default_provider,
                 .model = default_model,
                 .login_session_id = "",
@@ -4985,6 +4999,20 @@ test "telegram runtime auth bridge and providers help include guest guidance" {
     try std.testing.expect(std.mem.indexOf(u8, providers.reply, "qwen [Qwen] mode:guest_or_code") != null);
     try std.testing.expect(std.mem.indexOf(u8, providers.reply, "apiKey:true") != null);
     try std.testing.expect(std.mem.indexOf(u8, providers.reply, "aliases:z.ai|z-ai|zaiweb|zai-web|glm|glm5|glm-5") != null);
+
+    var help = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-auth-help\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-help\",\"sessionId\":\"sess-help\",\"message\":\"/auth help\"}}");
+    defer help.deinit(allocator);
+    try std.testing.expect(std.mem.indexOf(u8, help.reply, "Auth command usage:") != null);
+    try std.testing.expect(std.mem.indexOf(u8, help.reply, "`/auth providers`") != null);
+    try std.testing.expect(std.mem.indexOf(u8, help.reply, "`/auth status [provider] [account] [session_id]`") != null);
+    try std.testing.expect(std.mem.indexOf(u8, help.reply, "`/auth bridge`") != null);
+    try std.testing.expect(std.mem.indexOf(u8, help.reply, "`/auth` (start default provider)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, help.reply, "`/auth wait <provider> [session_id] [account] [--timeout <seconds>]`") != null);
+    try std.testing.expect(std.mem.indexOf(u8, help.reply, "`/auth complete <provider> <callback_url_or_code> [session_id] [account]`") != null);
+    try std.testing.expect(std.mem.indexOf(u8, help.reply, "`/auth complete <code> [session_id]`") != null);
+    try std.testing.expect(std.mem.indexOf(u8, help.reply, "`/auth cancel [provider] [account] [session_id]`") != null);
+    try std.testing.expect(std.mem.indexOf(u8, help.reply, "`/auth url <provider> [account] [session_id]`") != null);
+    try std.testing.expect(std.mem.indexOf(u8, help.reply, "`/auth guest <provider> [account] [session_id]`") != null);
 
     var bridge_qwen = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-auth-bridge-qwen\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-help\",\"sessionId\":\"sess-help\",\"message\":\"/auth bridge qwen\"}}");
     defer bridge_qwen.deinit(allocator);

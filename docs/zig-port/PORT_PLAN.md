@@ -58,6 +58,22 @@ Full-stack replacement execution reference:
 
 - Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `192/192`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram auth-help parity hardened:
+    - `/auth help` now leads with the Go canonical `Auth command usage:` surface instead of Zig's older custom usage/examples block.
+    - canonical help lines now cover:
+      - `/auth providers`
+      - `/auth status [provider] [account] [session_id]`
+      - `/auth bridge`
+      - `/auth` (start default provider)
+      - `/auth start <provider> [account] [--force]`
+      - `/auth wait <provider> [session_id] [account] [--timeout <seconds>]`
+      - `/auth complete <provider> <callback_url_or_code> [session_id] [account]`
+      - `/auth complete <code> [session_id]`
+      - `/auth cancel [provider] [account] [session_id]`
+    - Zig-only auth helpers remain documented in the same reply:
+      - `/auth url <provider> [account] [session_id]`
+      - `/auth guest <provider> [account] [session_id]`
+    - runtime and dispatcher regression coverage now assert the canonical help surface directly.
   - Phase 5 Telegram auth-usage parity hardened:
     - invalid `/auth status` parser replies now use the backticked Go-style usage string:
       - `Usage: \`/auth status [provider] [account] [session_id]\``

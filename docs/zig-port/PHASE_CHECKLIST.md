@@ -8,6 +8,21 @@ Historical note: milestone validation counts below are preserved as captured at 
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram `/auth help` now presents the Go canonical command surface first while keeping Zig-only auth helpers explicit:
+      - help replies now begin with `Auth command usage:` and include the Go canonical lines for:
+        - `/auth providers`
+        - `/auth status [provider] [account] [session_id]`
+        - `/auth bridge`
+        - `/auth` (start default provider)
+        - `/auth start <provider> [account] [--force]`
+        - `/auth wait <provider> [session_id] [account] [--timeout <seconds>]`
+        - `/auth complete <provider> <callback_url_or_code> [session_id] [account]`
+        - `/auth complete <code> [session_id]`
+        - `/auth cancel [provider] [account] [session_id]`
+      - Zig-specific auth helpers remain explicit in the same reply:
+        - `/auth url <provider> [account] [session_id]`
+        - `/auth guest <provider> [account] [session_id]`
+      - runtime and dispatcher regression coverage now assert the canonical help surface directly.
     - Telegram auth parser usage text now matches Go more closely on invalid `status|wait|complete` flows:
       - invalid `/auth status` parser replies now use the backticked Go-style usage string:
         - `Usage: \`/auth status [provider] [account] [session_id]\``
