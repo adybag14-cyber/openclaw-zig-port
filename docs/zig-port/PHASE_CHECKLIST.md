@@ -8,6 +8,15 @@ Historical note: milestone validation counts below are preserved as captured at 
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram `/auth wait` timeout parser metadata now matches Go on all invalid timeout paths:
+      - missing `--timeout` values still use the Go-visible operator reply:
+        - `Missing timeout value. Example: \`/auth wait --timeout 90\``
+      - non-integer and out-of-range timeout values still use the Go-visible operator reply:
+        - `Timeout must be an integer between 1 and 900 seconds.`
+      - machine-readable `metadata.error` for all of those parser failures now normalizes to the same Go token:
+        - `/auth wait ... --timeout` missing value -> `invalid_wait_args`
+        - `/auth wait ... --timeout abc|0|901` -> `invalid_wait_args`
+      - runtime and dispatcher regression coverage now assert the normalized Go-compatible metadata error instead of the older Zig-only `missing_timeout` / `invalid_timeout` split.
     - Telegram pending `/auth status` completion guidance now matches Go more closely on account-scoped flows:
       - pending `/auth status` still appends the live `Open: <verificationUriComplete>` line.
       - the suggested completion command now always uses the compact Go form:

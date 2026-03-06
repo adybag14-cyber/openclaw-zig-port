@@ -13219,7 +13219,7 @@ test "dispatch send invalid auth parser replies preserve metadata envelope" {
     try std.testing.expect(std.mem.eql(u8, bad_wait_type, "auth.wait"));
     const bad_wait_error = try extractResultObjectStringField(allocator, bad_wait, "metadata", "error");
     defer allocator.free(bad_wait_error);
-    try std.testing.expect(std.mem.eql(u8, bad_wait_error, "invalid_timeout"));
+    try std.testing.expect(std.mem.eql(u8, bad_wait_error, "invalid_wait_args"));
 
     const wait_usage = try dispatch(allocator, "{\"id\":\"tg-auth-wait-usage-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth wait session\"}}");
     defer allocator.free(wait_usage);

@@ -2385,13 +2385,13 @@ pub const TelegramRuntime = struct {
                 }
                 if (std.ascii.eqlIgnoreCase(token, "--timeout")) {
                     if (index + 1 >= rest.len) {
-                        return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Missing timeout value. Example: `/auth wait --timeout 90`"), "missing_timeout", "invalid", "", timeout_secs);
+                        return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Missing timeout value. Example: `/auth wait --timeout 90`"), "invalid_wait_args", "invalid", "", timeout_secs);
                     }
                     const parsed_timeout = std.fmt.parseInt(u32, std.mem.trim(u8, rest[index + 1], " \t\r\n"), 10) catch {
-                        return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."), "invalid_timeout", "invalid", "", timeout_secs);
+                        return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."), "invalid_wait_args", "invalid", "", timeout_secs);
                     };
                     if (parsed_timeout < 1 or parsed_timeout > 900) {
-                        return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."), "invalid_timeout", "invalid", "", timeout_secs);
+                        return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."), "invalid_wait_args", "invalid", "", timeout_secs);
                     }
                     timeout_secs = parsed_timeout;
                     explicit_timeout = true;
@@ -2401,10 +2401,10 @@ pub const TelegramRuntime = struct {
                 if (is_wait and std.ascii.startsWithIgnoreCase(token, "--timeout=")) {
                     const raw_timeout = std.mem.trim(u8, token["--timeout=".len..], " \t\r\n");
                     const parsed_timeout = std.fmt.parseInt(u32, raw_timeout, 10) catch {
-                        return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."), "invalid_timeout", "invalid", "", timeout_secs);
+                        return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."), "invalid_wait_args", "invalid", "", timeout_secs);
                     };
                     if (parsed_timeout < 1 or parsed_timeout > 900) {
-                        return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."), "invalid_timeout", "invalid", "", timeout_secs);
+                        return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."), "invalid_wait_args", "invalid", "", timeout_secs);
                     }
                     timeout_secs = parsed_timeout;
                     explicit_timeout = true;
@@ -2420,7 +2420,7 @@ pub const TelegramRuntime = struct {
                 if (is_wait and !explicit_timeout and session_token.len == 0 and (std.mem.eql(u8, normalizeAccount(account), "default") or index == rest.len - 1)) {
                     if (std.fmt.parseInt(u32, token, 10)) |parsed_timeout| {
                         if (parsed_timeout < 1 or parsed_timeout > 900) {
-                            return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."), "invalid_timeout", "invalid", "", timeout_secs);
+                            return self.authInvalidOutcome(allocator, trimmed_target, "auth.wait", provider, account, try allocator.dupe(u8, "Timeout must be an integer between 1 and 900 seconds."), "invalid_wait_args", "invalid", "", timeout_secs);
                         }
                         timeout_secs = parsed_timeout;
                         continue;
@@ -5507,7 +5507,7 @@ test "telegram runtime auth parser rejects invalid options and trailing args" {
     try std.testing.expect(std.mem.indexOf(u8, bad_wait.reply, "Timeout must be an integer between 1 and 900 seconds.") != null);
     try std.testing.expect(bad_wait.metadataJson != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_wait.metadataJson.?, "\"type\":\"auth.wait\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, bad_wait.metadataJson.?, "\"error\":\"invalid_timeout\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_wait.metadataJson.?, "\"error\":\"invalid_wait_args\"") != null);
 
     var wait_usage = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-wait-usage-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth wait session\"}}");
     defer wait_usage.deinit(allocator);

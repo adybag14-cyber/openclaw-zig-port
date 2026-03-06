@@ -58,6 +58,15 @@ Full-stack replacement execution reference:
 
 - Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `195/195`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram auth-wait timeout parser metadata hardened:
+    - missing `--timeout` values still use the Go-visible operator reply:
+      - `Missing timeout value. Example: \`/auth wait --timeout 90\``
+    - non-integer and out-of-range timeout values still use the Go-visible operator reply:
+      - `Timeout must be an integer between 1 and 900 seconds.`
+    - machine-readable `metadata.error` for all timeout parser failures now matches Go instead of Zig’s older split tokens:
+      - `/auth wait ... --timeout` missing value -> `invalid_wait_args`
+      - `/auth wait ... --timeout abc|0|901` -> `invalid_wait_args`
+    - runtime and dispatcher regressions now assert the normalized Go-compatible metadata error instead of the prior `missing_timeout` / `invalid_timeout` split.
   - Phase 5 Telegram pending-status completion parity hardened:
     - pending `/auth status` still appends the live `Open: <verificationUriComplete>` line.
     - the suggested completion command now always uses the compact Go form:
