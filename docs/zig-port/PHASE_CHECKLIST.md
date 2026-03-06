@@ -8,6 +8,17 @@ Historical note: milestone validation counts below are preserved as captured at 
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram invalid `/auth` parser metadata now matches Go’s narrow envelope instead of leaking Zig-only fields:
+      - invalid `/auth start|status|wait|url|complete|cancel` receipts now keep only the Go-style machine-readable core:
+        - `type`
+        - `target`
+        - `error`
+      - invalid parser receipts no longer emit Zig-only metadata fields on those paths such as:
+        - `status="invalid"`
+        - `scope`
+        - `resolvedScope`
+        - `timeoutSeconds`
+      - runtime and dispatcher regression coverage now assert the absence of those extra fields on representative invalid-start and invalid-wait parser failures.
     - Telegram `/auth wait` timeout parser metadata now matches Go on all invalid timeout paths:
       - missing `--timeout` values still use the Go-visible operator reply:
         - `Missing timeout value. Example: \`/auth wait --timeout 90\``

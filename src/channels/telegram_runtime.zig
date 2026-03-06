@@ -1120,19 +1120,12 @@ pub const TelegramRuntime = struct {
         timeout_seconds: ?u32,
     ) !SendOutcome {
         _ = self;
-        const account_norm = normalizeAccount(account_raw);
-        const scope = try authScopeAlloc(allocator, provider, account_norm);
-        defer allocator.free(scope);
+        _ = account_raw;
+        _ = timeout_seconds;
         const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
             .type = action_type,
             .target = trimmed_target,
-            .provider = provider,
-            .account = account_norm,
-            .scope = scope,
-            .status = auth_status,
             .@"error" = error_code,
-            .loginSessionId = if (std.mem.trim(u8, login_session_id, " \t\r\n").len > 0) login_session_id else null,
-            .timeoutSeconds = timeout_seconds,
         });
         return .{
             .is_command = true,
@@ -2207,16 +2200,9 @@ pub const TelegramRuntime = struct {
                     continue;
                 }
                 if (std.ascii.startsWithIgnoreCase(token, "--")) {
-                    const scope = try authScopeAlloc(allocator, provider, account);
-                    defer allocator.free(scope);
                     const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
                         .type = "auth.start",
                         .target = trimmed_target,
-                        .provider = provider,
-                        .account = normalizeAccount(account),
-                        .scope = scope,
-                        .resolvedScope = scope,
-                        .status = "invalid",
                         .@"error" = "invalid_start_args",
                     });
                     return .{
@@ -2235,16 +2221,9 @@ pub const TelegramRuntime = struct {
                     account = token;
                     continue;
                 }
-                const scope = try authScopeAlloc(allocator, provider, account);
-                defer allocator.free(scope);
                 const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
                     .type = "auth.start",
                     .target = trimmed_target,
-                    .provider = provider,
-                    .account = normalizeAccount(account),
-                    .scope = scope,
-                    .resolvedScope = scope,
-                    .status = "invalid",
                     .@"error" = "invalid_start_args",
                 });
                 return .{
@@ -5461,6 +5440,8 @@ test "telegram runtime auth parser rejects invalid options and trailing args" {
     try std.testing.expect(bad_start_option.metadataJson != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_start_option.metadataJson.?, "\"type\":\"auth.start\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_start_option.metadataJson.?, "\"error\":\"invalid_start_args\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_start_option.metadataJson.?, "\"status\":\"invalid\"") == null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_start_option.metadataJson.?, "\"scope\":") == null);
 
     var bad_start_usage = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-bad-start-usage-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth start qwen mobile extra\"}}");
     defer bad_start_usage.deinit(allocator);
@@ -5469,6 +5450,7 @@ test "telegram runtime auth parser rejects invalid options and trailing args" {
     try std.testing.expect(bad_start_usage.metadataJson != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_start_usage.metadataJson.?, "\"type\":\"auth.start\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_start_usage.metadataJson.?, "\"error\":\"invalid_start_args\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_start_usage.metadataJson.?, "\"resolvedScope\":") == null);
 
     var bad_status = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-bad-status-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth status qwen mobile --bogus\"}}");
     defer bad_status.deinit(allocator);
@@ -5508,6 +5490,8 @@ test "telegram runtime auth parser rejects invalid options and trailing args" {
     try std.testing.expect(bad_wait.metadataJson != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_wait.metadataJson.?, "\"type\":\"auth.wait\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_wait.metadataJson.?, "\"error\":\"invalid_wait_args\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_wait.metadataJson.?, "\"timeoutSeconds\":") == null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_wait.metadataJson.?, "\"scope\":") == null);
 
     var wait_usage = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-wait-usage-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth wait session\"}}");
     defer wait_usage.deinit(allocator);

@@ -58,6 +58,13 @@ Full-stack replacement execution reference:
 
 - Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `195/195`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram invalid-auth metadata envelope hardened:
+    - invalid `/auth start|status|wait|url|complete|cancel` parser receipts now use Go’s narrow metadata contract:
+      - `type`
+      - `target`
+      - `error`
+    - those invalid parser paths no longer emit Zig-only metadata fields such as `status="invalid"`, `scope`, `resolvedScope`, or `timeoutSeconds`.
+    - runtime and dispatcher regressions now assert the absence of those extra fields on representative invalid-start and invalid-wait parser failures.
   - Phase 5 Telegram auth-wait timeout parser metadata hardened:
     - missing `--timeout` values still use the Go-visible operator reply:
       - `Missing timeout value. Example: \`/auth wait --timeout 90\``

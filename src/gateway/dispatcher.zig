@@ -13157,6 +13157,8 @@ test "dispatch send invalid auth parser replies preserve metadata envelope" {
     const bad_start_option_error = try extractResultObjectStringField(allocator, bad_start_option, "metadata", "error");
     defer allocator.free(bad_start_option_error);
     try std.testing.expect(std.mem.eql(u8, bad_start_option_error, "invalid_start_args"));
+    try std.testing.expect(std.mem.indexOf(u8, bad_start_option, "\"status\":\"invalid\"") == null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_start_option, "\"scope\":") == null);
 
     const bad_start_usage = try dispatch(allocator, "{\"id\":\"tg-auth-bad-start-usage-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth start qwen mobile extra\"}}");
     defer allocator.free(bad_start_usage);
@@ -13169,6 +13171,7 @@ test "dispatch send invalid auth parser replies preserve metadata envelope" {
     const bad_start_usage_error = try extractResultObjectStringField(allocator, bad_start_usage, "metadata", "error");
     defer allocator.free(bad_start_usage_error);
     try std.testing.expect(std.mem.eql(u8, bad_start_usage_error, "invalid_start_args"));
+    try std.testing.expect(std.mem.indexOf(u8, bad_start_usage, "\"resolvedScope\":") == null);
 
     const bad_status = try dispatch(allocator, "{\"id\":\"tg-auth-bad-status-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth status qwen mobile --bogus\"}}");
     defer allocator.free(bad_status);
@@ -13220,6 +13223,8 @@ test "dispatch send invalid auth parser replies preserve metadata envelope" {
     const bad_wait_error = try extractResultObjectStringField(allocator, bad_wait, "metadata", "error");
     defer allocator.free(bad_wait_error);
     try std.testing.expect(std.mem.eql(u8, bad_wait_error, "invalid_wait_args"));
+    try std.testing.expect(std.mem.indexOf(u8, bad_wait, "\"timeoutSeconds\":") == null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_wait, "\"scope\":") == null);
 
     const wait_usage = try dispatch(allocator, "{\"id\":\"tg-auth-wait-usage-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth wait session\"}}");
     defer allocator.free(wait_usage);
