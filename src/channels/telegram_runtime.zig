@@ -2860,6 +2860,56 @@ pub const TelegramRuntime = struct {
                 };
             }
             const code = web_login.extractAuthCode(code_token);
+            if (std.mem.trim(u8, code, " \t\r\n").len == 0) {
+                const account_norm = normalizeAccount(account);
+                const scope = try authScopeAlloc(allocator, provider, account_norm);
+                defer allocator.free(scope);
+                if (self.login_manager.get(login_session)) |login| {
+                    if (std.ascii.eqlIgnoreCase(login.status, "authorized")) {
+                        const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                            .type = "auth.complete",
+                            .target = trimmed_target,
+                            .provider = provider,
+                            .account = account_norm,
+                            .scope = scope,
+                            .status = login.status,
+                            .loginSessionId = login.loginSessionId,
+                            .login = login,
+                        });
+                        return .{
+                            .is_command = true,
+                            .command_name = "auth",
+                            .reply = try std.fmt.allocPrint(allocator, "Auth already completed. Session `{s}` is `{s}`.", .{ login.loginSessionId, login.status }),
+                            .provider = provider,
+                            .model = login.model,
+                            .login_session_id = login.loginSessionId,
+                            .login_code = login.code,
+                            .auth_status = login.status,
+                            .metadata_json = metadata_json,
+                        };
+                    }
+                }
+                const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
+                    .type = "auth.complete",
+                    .target = trimmed_target,
+                    .provider = provider,
+                    .account = account_norm,
+                    .scope = scope,
+                    .@"error" = "missing_code",
+                    .loginSessionId = login_session,
+                });
+                return .{
+                    .is_command = true,
+                    .command_name = "auth",
+                    .reply = try allocator.dupe(u8, "Missing code. Usage: `/auth complete <provider> <callback_url_or_code> [session_id] [account]`"),
+                    .provider = provider,
+                    .model = defaultModelForProvider(provider),
+                    .login_session_id = login_session,
+                    .login_code = "",
+                    .auth_status = "pending",
+                    .metadata_json = metadata_json,
+                };
+            }
             const completed = self.login_manager.complete(login_session, code) catch |err| switch (err) {
                 error.InvalidCode => {
                     const account_norm = normalizeAccount(account);
@@ -5235,6 +5285,43 @@ test "telegram runtime auth complete missing session and bridge errors use go-st
     try std.testing.expect(complete_invalid.metadataJson != null);
     try std.testing.expect(std.mem.indexOf(u8, complete_invalid.metadataJson.?, "\"error\":\"invalid login code\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, complete_invalid.metadataJson.?, "\"status\":") == null);
+
+    const missing_code_frame = try std.fmt.allocPrint(
+        allocator,
+        "{{\"id\":\"tg-complete-missing-code\",\"method\":\"send\",\"params\":{{\"channel\":\"telegram\",\"to\":\"room-complete-invalid\",\"sessionId\":\"sess-complete-invalid\",\"message\":\"/auth complete qwen guest {s} mobile\"}}}}",
+        .{start_invalid.loginSessionId},
+    );
+    defer allocator.free(missing_code_frame);
+    var complete_missing_code = try runtime.sendFromFrame(allocator, missing_code_frame);
+    defer complete_missing_code.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, complete_missing_code.authStatus, "pending"));
+    try std.testing.expect(std.mem.indexOf(u8, complete_missing_code.reply, "Missing code. Usage: `/auth complete <provider> <callback_url_or_code> [session_id] [account]`") != null);
+    try std.testing.expect(complete_missing_code.metadataJson != null);
+    try std.testing.expect(std.mem.indexOf(u8, complete_missing_code.metadataJson.?, "\"error\":\"missing_code\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, complete_missing_code.metadataJson.?, "\"loginSessionId\":\"") != null);
+
+    const authorize_frame = try std.fmt.allocPrint(
+        allocator,
+        "{{\"id\":\"tg-complete-authorize-first\",\"method\":\"send\",\"params\":{{\"channel\":\"telegram\",\"to\":\"room-complete-invalid\",\"sessionId\":\"sess-complete-invalid\",\"message\":\"/auth complete qwen {s} {s} mobile\"}}}}",
+        .{ start_invalid.loginCode, start_invalid.loginSessionId },
+    );
+    defer allocator.free(authorize_frame);
+    var authorize_first = try runtime.sendFromFrame(allocator, authorize_frame);
+    defer authorize_first.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, authorize_first.authStatus, "authorized"));
+
+    const already_complete_frame = try std.fmt.allocPrint(
+        allocator,
+        "{{\"id\":\"tg-complete-authorized-empty\",\"method\":\"send\",\"params\":{{\"channel\":\"telegram\",\"to\":\"room-complete-invalid\",\"sessionId\":\"sess-complete-invalid\",\"message\":\"/auth complete qwen guest {s} mobile\"}}}}",
+        .{start_invalid.loginSessionId},
+    );
+    defer allocator.free(already_complete_frame);
+    var already_complete = try runtime.sendFromFrame(allocator, already_complete_frame);
+    defer already_complete.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, already_complete.authStatus, "authorized"));
+    try std.testing.expect(std.mem.indexOf(u8, already_complete.reply, "Auth already completed. Session `") != null);
+    try std.testing.expect(already_complete.metadataJson != null);
+    try std.testing.expect(std.mem.indexOf(u8, already_complete.metadataJson.?, "\"status\":\"authorized\"") != null);
 
     try runtime.setAuthBinding("room-complete-stale", "qwen", "mobile", "web-login-stale");
     var complete_stale = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-complete-stale\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-complete-stale\",\"sessionId\":\"sess-complete-stale\",\"message\":\"/auth complete qwen OC-123 mobile\"}}");

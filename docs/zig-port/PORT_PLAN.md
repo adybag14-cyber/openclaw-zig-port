@@ -200,6 +200,11 @@ Full-stack replacement execution reference:
     - regression tests added:
       - `channels.telegram_runtime.test.telegram runtime auth complete missing session and bridge errors use go-style replies`
       - `gateway.dispatcher.test.dispatch send auth complete errors use go-style messages`
+  - Phase 5 Telegram empty-code completion parity hardened:
+    - when `/auth complete` receives a callback/code token that extracts to an empty value, Zig now mirrors Go:
+      - pending sessions reply with `Missing code. Usage: \`/auth complete <provider> <callback_url_or_code> [session_id] [account]\`` and metadata `error=missing_code`
+      - already-authorized sessions reply with `Auth already completed. Session \`<id>\` is \`authorized\`.`
+    - runtime and dispatcher regression coverage now exercise both paths via `/auth complete <provider> guest <session_id> <account>`.
   - Phase 5 Telegram auth-wait bridge error parity hardened:
     - when `/auth wait` resolves through a scoped/bound login session that no longer exists, Zig now mirrors the Go bridge error wording:
       - `Auth wait failed: login session not found`

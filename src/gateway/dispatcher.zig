@@ -13401,6 +13401,50 @@ test "dispatch send auth complete errors use go-style messages" {
     defer allocator.free(complete_invalid_error);
     try std.testing.expect(std.mem.eql(u8, complete_invalid_error, "invalid login code"));
 
+    const complete_missing_code = try std.fmt.allocPrint(
+        allocator,
+        "{{\"id\":\"tg-auth-complete-missing-code-meta\",\"method\":\"send\",\"params\":{{\"channel\":\"telegram\",\"to\":\"room-meta-complete-invalid\",\"sessionId\":\"tg-meta-complete-invalid\",\"message\":\"/auth complete qwen guest {s} mobile\"}}}}",
+        .{start_session},
+    );
+    defer allocator.free(complete_missing_code);
+    const complete_missing_code_result = try dispatch(allocator, complete_missing_code);
+    defer allocator.free(complete_missing_code_result);
+    const complete_missing_code_reply = try extractResultStringField(allocator, complete_missing_code_result, "reply");
+    defer allocator.free(complete_missing_code_reply);
+    try std.testing.expect(std.mem.indexOf(u8, complete_missing_code_reply, "Missing code. Usage: `/auth complete <provider> <callback_url_or_code> [session_id] [account]`") != null);
+    const complete_missing_code_error = try extractResultObjectStringField(allocator, complete_missing_code_result, "metadata", "error");
+    defer allocator.free(complete_missing_code_error);
+    try std.testing.expect(std.mem.eql(u8, complete_missing_code_error, "missing_code"));
+
+    const start_code = try extractResultStringField(allocator, start, "loginCode");
+    defer allocator.free(start_code);
+    const authorize_first = try std.fmt.allocPrint(
+        allocator,
+        "{{\"id\":\"tg-auth-complete-authorize-first-meta\",\"method\":\"send\",\"params\":{{\"channel\":\"telegram\",\"to\":\"room-meta-complete-invalid\",\"sessionId\":\"tg-meta-complete-invalid\",\"message\":\"/auth complete qwen {s} {s} mobile\"}}}}",
+        .{ start_code, start_session },
+    );
+    defer allocator.free(authorize_first);
+    const authorize_first_result = try dispatch(allocator, authorize_first);
+    defer allocator.free(authorize_first_result);
+    const authorize_first_status = try extractResultStringField(allocator, authorize_first_result, "authStatus");
+    defer allocator.free(authorize_first_status);
+    try std.testing.expect(std.mem.eql(u8, authorize_first_status, "authorized"));
+
+    const already_complete = try std.fmt.allocPrint(
+        allocator,
+        "{{\"id\":\"tg-auth-complete-authorized-empty-meta\",\"method\":\"send\",\"params\":{{\"channel\":\"telegram\",\"to\":\"room-meta-complete-invalid\",\"sessionId\":\"tg-meta-complete-invalid\",\"message\":\"/auth complete qwen guest {s} mobile\"}}}}",
+        .{start_session},
+    );
+    defer allocator.free(already_complete);
+    const already_complete_result = try dispatch(allocator, already_complete);
+    defer allocator.free(already_complete_result);
+    const already_complete_reply = try extractResultStringField(allocator, already_complete_result, "reply");
+    defer allocator.free(already_complete_reply);
+    try std.testing.expect(std.mem.indexOf(u8, already_complete_reply, "Auth already completed. Session `") != null);
+    const already_complete_status = try extractResultObjectStringField(allocator, already_complete_result, "metadata", "status");
+    defer allocator.free(already_complete_status);
+    try std.testing.expect(std.mem.eql(u8, already_complete_status, "authorized"));
+
     const complete_stale = try dispatch(allocator, "{\"id\":\"tg-auth-complete-stale-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-complete-stale\",\"sessionId\":\"tg-meta-complete-stale\",\"message\":\"/auth complete qwen OC-123 web-login-stale mobile\"}}");
     defer allocator.free(complete_stale);
     const complete_stale_reply = try extractResultStringField(allocator, complete_stale, "reply");
