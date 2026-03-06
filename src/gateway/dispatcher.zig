@@ -13176,7 +13176,7 @@ test "dispatch send invalid auth parser replies preserve metadata envelope" {
     try std.testing.expect(std.mem.eql(u8, bad_status_type, "auth.status"));
     const bad_status_error = try extractResultObjectStringField(allocator, bad_status, "metadata", "error");
     defer allocator.free(bad_status_error);
-    try std.testing.expect(std.mem.eql(u8, bad_status_error, "unknown_status_option"));
+    try std.testing.expect(std.mem.eql(u8, bad_status_error, "invalid_status_args"));
 
     const status_usage = try dispatch(allocator, "{\"id\":\"tg-auth-status-usage-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth status qwen mobile extra\"}}");
     defer allocator.free(status_usage);
@@ -13228,6 +13228,15 @@ test "dispatch send invalid auth parser replies preserve metadata envelope" {
     const wait_usage_error = try extractResultObjectStringField(allocator, wait_usage, "metadata", "error");
     defer allocator.free(wait_usage_error);
     try std.testing.expect(std.mem.eql(u8, wait_usage_error, "invalid_wait_args"));
+
+    const bad_wait_option = try dispatch(allocator, "{\"id\":\"tg-auth-bad-wait-option-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth wait qwen mobile --bogus\"}}");
+    defer allocator.free(bad_wait_option);
+    const bad_wait_option_reply = try extractResultStringField(allocator, bad_wait_option, "reply");
+    defer allocator.free(bad_wait_option_reply);
+    try std.testing.expect(std.mem.indexOf(u8, bad_wait_option_reply, "Unknown wait option `--bogus`.") != null);
+    const bad_wait_option_error = try extractResultObjectStringField(allocator, bad_wait_option, "metadata", "error");
+    defer allocator.free(bad_wait_option_error);
+    try std.testing.expect(std.mem.eql(u8, bad_wait_option_error, "invalid_wait_args"));
 
     const bad_complete = try dispatch(allocator, "{\"id\":\"tg-auth-bad-complete-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth complete qwen code123 missing extra tail\"}}");
     defer allocator.free(bad_complete);

@@ -58,6 +58,15 @@ Full-stack replacement execution reference:
 
 - Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `195/195`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram auth parser-metadata parity hardened:
+    - unknown `/auth status ... --bogus` replies still use the Go-visible operator text:
+      - `Unknown status option \`--bogus\``
+    - unknown `/auth wait ... --bogus` replies still use the Go-visible operator text:
+      - `Unknown wait option \`--bogus\`.`
+    - machine-readable `metadata.error` for those parser failures now matches Go instead of Zig-only tokens:
+      - `/auth status ... --bogus` -> `invalid_status_args`
+      - `/auth wait ... --bogus` -> `invalid_wait_args`
+    - runtime and dispatcher regressions now assert both the reply text and the normalized metadata errors for these parse-failure receipts.
   - Phase 5 Telegram auth parser-wording parity hardened:
     - invalid `/auth start` unknown-flag replies now use the Go-style operator wording:
       - `Unknown start option \`--bogus\`.`

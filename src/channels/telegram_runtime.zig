@@ -2414,7 +2414,7 @@ pub const TelegramRuntime = struct {
                         try std.fmt.allocPrint(allocator, "Unknown wait option `{s}`.", .{token})
                     else
                         try std.fmt.allocPrint(allocator, "Unknown status option `{s}`.", .{token});
-                    return self.authInvalidOutcome(allocator, trimmed_target, if (is_wait) "auth.wait" else "auth.status", provider, account, unknown_reply, if (is_wait) "unknown_wait_option" else "unknown_status_option", "invalid", "", if (is_wait) timeout_secs else null);
+                    return self.authInvalidOutcome(allocator, trimmed_target, if (is_wait) "auth.wait" else "auth.status", provider, account, unknown_reply, if (is_wait) "invalid_wait_args" else "invalid_status_args", "invalid", "", if (is_wait) timeout_secs else null);
                 }
                 if (is_wait and !explicit_timeout and session_token.len == 0 and (std.mem.eql(u8, normalizeAccount(account), "default") or index == rest.len - 1)) {
                     if (std.fmt.parseInt(u32, token, 10)) |parsed_timeout| {
@@ -5398,7 +5398,7 @@ test "telegram runtime auth parser rejects invalid options and trailing args" {
     try std.testing.expect(std.mem.indexOf(u8, bad_status.reply, "Unknown status option `--bogus`") != null);
     try std.testing.expect(bad_status.metadataJson != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_status.metadataJson.?, "\"type\":\"auth.status\"") != null);
-    try std.testing.expect(std.mem.indexOf(u8, bad_status.metadataJson.?, "\"error\":\"unknown_status_option\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_status.metadataJson.?, "\"error\":\"invalid_status_args\"") != null);
 
     var status_usage = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-status-usage-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth status qwen mobile extra\"}}");
     defer status_usage.deinit(allocator);
@@ -5437,6 +5437,14 @@ test "telegram runtime auth parser rejects invalid options and trailing args" {
     try std.testing.expect(std.mem.indexOf(u8, wait_usage.reply, "Usage: `/auth wait <provider> [session_id] [account] [--timeout <seconds>]`") != null);
     try std.testing.expect(wait_usage.metadataJson != null);
     try std.testing.expect(std.mem.indexOf(u8, wait_usage.metadataJson.?, "\"error\":\"invalid_wait_args\"") != null);
+
+    var bad_wait_option = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-bad-wait-option-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth wait qwen mobile --bogus\"}}");
+    defer bad_wait_option.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, bad_wait_option.authStatus, "invalid"));
+    try std.testing.expect(std.mem.indexOf(u8, bad_wait_option.reply, "Unknown wait option `--bogus`.") != null);
+    try std.testing.expect(bad_wait_option.metadataJson != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_wait_option.metadataJson.?, "\"type\":\"auth.wait\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_wait_option.metadataJson.?, "\"error\":\"invalid_wait_args\"") != null);
 
     const bad_complete_frame = try std.fmt.allocPrint(
         allocator,

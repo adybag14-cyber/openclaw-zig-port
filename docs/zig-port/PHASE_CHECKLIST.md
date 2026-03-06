@@ -8,6 +8,15 @@ Historical note: milestone validation counts below are preserved as captured at 
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram auth parser metadata now matches Go more closely for `/auth status|wait` unknown-flag failures:
+      - unknown `/auth status ... --bogus` replies still use the Go-visible operator text:
+        - `Unknown status option \`--bogus\``
+      - unknown `/auth wait ... --bogus` replies still use the Go-visible operator text:
+        - `Unknown wait option \`--bogus\`.`
+      - machine-readable `metadata.error` for those parser failures now matches Go instead of Zig-only tokens:
+        - `/auth status ... --bogus` -> `invalid_status_args`
+        - `/auth wait ... --bogus` -> `invalid_wait_args`
+      - runtime and dispatcher regression coverage now assert both reply text and the normalized metadata errors for these parse-failure receipts.
     - Telegram auth parser wording now matches Go more closely on the remaining `/auth start` and `/auth cancel` invalid-input paths:
       - invalid `/auth start` unknown-flag replies now use the Go-style operator wording:
         - `Unknown start option \`--bogus\`.`
