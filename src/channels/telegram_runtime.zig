@@ -3081,7 +3081,6 @@ pub const TelegramRuntime = struct {
                 .provider = provider,
                 .account = account_norm,
                 .scope = scope,
-                .status = if (revoked) "cancelled" else "none",
                 .loginSessionId = if (owned_login_session_id) |value| value else null,
                 .revoked = revoked,
             });
@@ -5369,6 +5368,9 @@ test "telegram runtime auth cancel revokes scoped session" {
     try std.testing.expect(std.mem.indexOf(u8, cancel.reply, "Auth session `web-login-") != null);
     try std.testing.expect(std.mem.indexOf(u8, cancel.reply, "` cancelled.") != null);
     try std.testing.expect(std.mem.indexOf(u8, cancel.reply, "for `qwen` account `mobile`") == null);
+    try std.testing.expect(cancel.metadataJson != null);
+    try std.testing.expect(std.mem.indexOf(u8, cancel.metadataJson.?, "\"revoked\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, cancel.metadataJson.?, "\"status\":") == null);
 
     const status_frame = try std.fmt.allocPrint(
         allocator,
@@ -5414,6 +5416,7 @@ test "telegram runtime auth cancel explicit rejected session reports revoked fal
     try std.testing.expect(second_cancel.metadataJson != null);
     try std.testing.expect(std.mem.indexOf(u8, second_cancel.metadataJson.?, "\"type\":\"auth.cancel\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, second_cancel.metadataJson.?, "\"revoked\":false") != null);
+    try std.testing.expect(std.mem.indexOf(u8, second_cancel.metadataJson.?, "\"status\":") == null);
 }
 
 test "telegram runtime wait supports session keyword and bounded timeout flag" {

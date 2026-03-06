@@ -175,6 +175,7 @@ Full-stack replacement execution reference:
   - Phase 5 Telegram auth operator-text parity hardened:
     - `/auth cancel` success replies now use the generic Go-style wording:
       - `Auth session \`<id>\` cancelled.`
+    - active `/auth cancel` receipts now omit Zig's older extra `status` field and keep the Go-style `revoked` + `loginSessionId` metadata surface only.
     - unknown `/auth` actions now use the fuller Go-style help text:
       - `Unknown \`/auth\` action. Use \`/auth help\` for full usage.`
     - bare and provider-only `/auth complete` invocations now follow the Go parser contract:

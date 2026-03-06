@@ -13139,6 +13139,7 @@ test "dispatch send auth commands expose go-compatible metadata envelope" {
         const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
         const revoked = metadata.object.get("revoked") orelse return error.TestUnexpectedResult;
         try std.testing.expect(revoked == .bool and revoked.bool);
+        try std.testing.expect(metadata.object.get("status") == null);
     }
 }
 
@@ -13318,6 +13319,14 @@ test "dispatch send auth cancel and invalid action use go-style replies" {
     try std.testing.expect(std.mem.indexOf(u8, auth_cancel_reply, "Auth session `") != null);
     try std.testing.expect(std.mem.indexOf(u8, auth_cancel_reply, "` cancelled.") != null);
     try std.testing.expect(std.mem.indexOf(u8, auth_cancel_reply, "for `qwen` account `mobile`") == null);
+    {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, auth_cancel, .{});
+        defer parsed.deinit();
+        const result = parsed.value.object.get("result") orelse return error.TestUnexpectedResult;
+        const metadata = result.object.get("metadata") orelse return error.TestUnexpectedResult;
+        try std.testing.expect(metadata == .object);
+        try std.testing.expect(metadata.object.get("status") == null);
+    }
 
     const invalid_action = try dispatch(allocator, "{\"id\":\"tg-auth-invalid-action-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-cancel\",\"sessionId\":\"tg-meta-cancel\",\"message\":\"/auth nonsense\"}}");
     defer allocator.free(invalid_action);
