@@ -13106,7 +13106,6 @@ test "dispatch send auth commands expose go-compatible metadata envelope" {
         const status = login.object.get("status") orelse return error.TestUnexpectedResult;
         try std.testing.expect(status == .string and std.mem.eql(u8, status.string, "authorized"));
     }
-
     const auth_cancel = try dispatch(allocator, "{\"id\":\"tg-auth-cancel-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta\",\"sessionId\":\"tg-meta\",\"message\":\"/auth cancel codex mobile\"}}");
     defer allocator.free(auth_cancel);
     const cancel_type = try extractResultObjectStringField(allocator, auth_cancel, "metadata", "type");
@@ -13166,6 +13165,30 @@ test "dispatch send invalid auth parser replies preserve metadata envelope" {
     const status_usage_error = try extractResultObjectStringField(allocator, status_usage, "metadata", "error");
     defer allocator.free(status_usage_error);
     try std.testing.expect(std.mem.eql(u8, status_usage_error, "invalid_status_args"));
+
+    const bad_url = try dispatch(allocator, "{\"id\":\"tg-auth-bad-url-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth url qwen mobile --bogus\"}}");
+    defer allocator.free(bad_url);
+    const bad_url_reply = try extractResultStringField(allocator, bad_url, "reply");
+    defer allocator.free(bad_url_reply);
+    try std.testing.expect(std.mem.indexOf(u8, bad_url_reply, "Unknown status option `--bogus`") != null);
+    const bad_url_type = try extractResultObjectStringField(allocator, bad_url, "metadata", "type");
+    defer allocator.free(bad_url_type);
+    try std.testing.expect(std.mem.eql(u8, bad_url_type, "auth.url"));
+    const bad_url_error = try extractResultObjectStringField(allocator, bad_url, "metadata", "error");
+    defer allocator.free(bad_url_error);
+    try std.testing.expect(std.mem.eql(u8, bad_url_error, "invalid_url_args"));
+
+    const url_usage = try dispatch(allocator, "{\"id\":\"tg-auth-url-usage-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth open qwen mobile extra\"}}");
+    defer allocator.free(url_usage);
+    const url_usage_reply = try extractResultStringField(allocator, url_usage, "reply");
+    defer allocator.free(url_usage_reply);
+    try std.testing.expect(std.mem.indexOf(u8, url_usage_reply, "Usage: `/auth status [provider] [account] [session_id]`") != null);
+    const url_usage_type = try extractResultObjectStringField(allocator, url_usage, "metadata", "type");
+    defer allocator.free(url_usage_type);
+    try std.testing.expect(std.mem.eql(u8, url_usage_type, "auth.url"));
+    const url_usage_error = try extractResultObjectStringField(allocator, url_usage, "metadata", "error");
+    defer allocator.free(url_usage_error);
+    try std.testing.expect(std.mem.eql(u8, url_usage_error, "invalid_url_args"));
 
     const bad_wait = try dispatch(allocator, "{\"id\":\"tg-auth-bad-wait-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth wait qwen mobile --timeout 0\"}}");
     defer allocator.free(bad_wait);

@@ -58,6 +58,14 @@ Full-stack replacement execution reference:
 
 - Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `193/193`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram auth-url parser parity hardened:
+    - `/auth url`, `/auth link`, and `/auth open` now reject malformed input with the same operator-visible parse surface Go uses for `/auth url`.
+    - unknown `--*` flags now return the Go-style status-parser reply text:
+      - `Unknown status option \`--bogus\``
+    - extra positional arguments now return the Go-style status usage string:
+      - `Usage: \`/auth status [provider] [account] [session_id]\``
+    - invalid alias parser receipts now emit `metadata.type=auth.url` with `error=invalid_url_args` instead of silently accepting malformed alias inputs.
+    - runtime and dispatcher regressions now assert both unknown-flag and extra-arg failures for this alias surface.
   - Phase 5 Telegram auth-url metadata parity hardened:
     - `/auth link`, `/auth open`, and `/auth url` now all emit the same Go-compatible nested metadata type:
       - `type=auth.url`

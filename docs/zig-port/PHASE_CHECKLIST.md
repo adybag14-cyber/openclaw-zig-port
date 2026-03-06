@@ -8,6 +8,13 @@ Historical note: milestone validation counts below are preserved as captured at 
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram `/auth url` alias parsing now matches Go more closely across `url`, `link`, and `open`:
+      - unknown `--*` flags on these aliases now fail with the same reply surface Go uses for `/auth url` parsing:
+        - `Unknown status option \`--bogus\``
+      - extra positional arguments now fail with the same Go parser usage string:
+        - `Usage: \`/auth status [provider] [account] [session_id]\``
+      - invalid alias parse receipts now emit nested `metadata.type="auth.url"` with `error="invalid_url_args"` instead of silently accepting malformed input.
+      - runtime and dispatcher regression coverage now assert both unknown-flag and extra-arg failures for the alias surface.
     - Telegram `/auth link|open|url` aliases now share the same Go-compatible metadata contract:
       - successful, missing-session, and no-session `link|open` alias receipts now emit nested `metadata.type="auth.url"` instead of the older Zig-only `auth.link`.
       - alias reply text stays on the compact auth-url surface already aligned in the previous slice:

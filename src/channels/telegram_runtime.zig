@@ -2044,6 +2044,7 @@ pub const TelegramRuntime = struct {
             };
         }
         if (std.ascii.eqlIgnoreCase(action, "link") or std.ascii.eqlIgnoreCase(action, "open") or std.ascii.eqlIgnoreCase(action, "url")) {
+            const usage = "Usage: `/auth status [provider] [account] [session_id]`";
             var provider = default_provider;
             var account: []const u8 = "default";
             var session_token: []const u8 = "";
@@ -2055,6 +2056,20 @@ pub const TelegramRuntime = struct {
             while (index < rest.len) : (index += 1) {
                 const token = std.mem.trim(u8, rest[index], " \t\r\n");
                 if (token.len == 0) continue;
+                if (std.ascii.startsWithIgnoreCase(token, "--")) {
+                    return self.authInvalidOutcome(
+                        allocator,
+                        trimmed_target,
+                        "auth.url",
+                        provider,
+                        account,
+                        try std.fmt.allocPrint(allocator, "Unknown status option `{s}`.", .{token}),
+                        "invalid_url_args",
+                        "invalid",
+                        "",
+                        null,
+                    );
+                }
                 if (session_token.len == 0 and looksLikeLoginSessionID(token)) {
                     session_token = token;
                     continue;
@@ -2063,6 +2078,18 @@ pub const TelegramRuntime = struct {
                     account = token;
                     continue;
                 }
+                return self.authInvalidOutcome(
+                    allocator,
+                    trimmed_target,
+                    "auth.url",
+                    provider,
+                    account,
+                    try allocator.dupe(u8, usage),
+                    "invalid_url_args",
+                    "invalid",
+                    "",
+                    null,
+                );
             }
 
             const bound_session = try self.getAuthBinding(allocator, target, provider, account);
@@ -2832,7 +2859,6 @@ pub const TelegramRuntime = struct {
                     .metadata_json = metadata_json,
                 };
             }
-
             const code = web_login.extractAuthCode(code_token);
             const completed = self.login_manager.complete(login_session, code) catch |err| switch (err) {
                 error.InvalidCode => {
@@ -5365,6 +5391,22 @@ test "telegram runtime auth parser rejects invalid options and trailing args" {
     try std.testing.expect(std.mem.indexOf(u8, status_usage.reply, "Usage: `/auth status [provider] [account] [session_id]`") != null);
     try std.testing.expect(status_usage.metadataJson != null);
     try std.testing.expect(std.mem.indexOf(u8, status_usage.metadataJson.?, "\"error\":\"invalid_status_args\"") != null);
+
+    var bad_url = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-bad-url-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth url qwen mobile --bogus\"}}");
+    defer bad_url.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, bad_url.authStatus, "invalid"));
+    try std.testing.expect(std.mem.indexOf(u8, bad_url.reply, "Unknown status option `--bogus`") != null);
+    try std.testing.expect(bad_url.metadataJson != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_url.metadataJson.?, "\"type\":\"auth.url\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_url.metadataJson.?, "\"error\":\"invalid_url_args\"") != null);
+
+    var url_usage = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-url-usage-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth link qwen mobile extra\"}}");
+    defer url_usage.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, url_usage.authStatus, "invalid"));
+    try std.testing.expect(std.mem.indexOf(u8, url_usage.reply, "Usage: `/auth status [provider] [account] [session_id]`") != null);
+    try std.testing.expect(url_usage.metadataJson != null);
+    try std.testing.expect(std.mem.indexOf(u8, url_usage.metadataJson.?, "\"type\":\"auth.url\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, url_usage.metadataJson.?, "\"error\":\"invalid_url_args\"") != null);
 
     var bad_wait = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-bad-wait-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth wait qwen mobile --timeout 0\"}}");
     defer bad_wait.deinit(allocator);
