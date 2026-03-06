@@ -2413,12 +2413,20 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         const runtime_snapshot = runtime.snapshot();
         const guard = try getGuard();
         return protocol.encodeResult(allocator, req.id, .{
+            .status = "ok",
             .service = "openclaw-zig",
+            .version = "dev",
+            .phase = "phase-8-cutover-ready",
             .browser_bridge = "lightpanda",
+            .supportedMethods = registry.supported_methods,
+            .count = registry.count(),
             .supported_methods = registry.count(),
             .runtime_queue_depth = runtime.queueDepth(),
             .runtime_leased_jobs = runtime_snapshot.leasedJobs,
             .runtime_sessions = runtime.sessionCount(),
+            .sessions = .{
+                .count = runtime.sessionCount(),
+            },
             .runtime = runtime_snapshot,
             .security = guard.snapshot(),
             .gateway_auth_mode = if (gateway_token_required) "token" else "none",
@@ -12969,6 +12977,12 @@ test "dispatch file.write and file.read lifecycle updates status counters" {
 
     const status_out = try dispatch(allocator, "{\"id\":\"life-status\",\"method\":\"status\",\"params\":{}}");
     defer allocator.free(status_out);
+    try std.testing.expect(std.mem.indexOf(u8, status_out, "\"status\":\"ok\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, status_out, "\"version\":\"dev\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, status_out, "\"phase\":\"phase-8-cutover-ready\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, status_out, "\"supportedMethods\":[") != null);
+    try std.testing.expect(std.mem.indexOf(u8, status_out, "\"count\":") != null);
+    try std.testing.expect(std.mem.indexOf(u8, status_out, "\"sessions\":{\"count\":") != null);
     try std.testing.expect(std.mem.indexOf(u8, status_out, "\"runtime_queue_depth\":0") != null);
     try std.testing.expect(std.mem.indexOf(u8, status_out, "\"runtime_leased_jobs\":0") != null);
     try std.testing.expect(std.mem.indexOf(u8, status_out, "\"runtime_sessions\":") != null);

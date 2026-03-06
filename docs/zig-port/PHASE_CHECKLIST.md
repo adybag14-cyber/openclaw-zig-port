@@ -12,6 +12,16 @@ Registry status:
 - [x] FS0 - Scope lock + baseline freeze (`docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`, issue `#2`)
 - [ ] FS1 - Runtime/core consolidation
   - Latest delivered slice:
+    - `status` now includes the Go-visible summary keys Zig can expose without widening the handler surface:
+      - `status`
+      - `version`
+      - `phase`
+      - `supportedMethods`
+      - `count`
+      - `sessions.count`
+    - Zig keeps the older runtime/security compatibility fields on the same receipt, so existing Zig callers do not lose the richer telemetry.
+    - regression coverage added:
+      - `dispatch file.write and file.read lifecycle updates status counters`
     - `agent.identity.get` now reports a stable process start time instead of generating a fresh timestamp on every call.
     - the identity receipt now includes the Go-visible RFC3339 `startedAt` field while preserving `startedAtMs` for Zig callers.
     - `authMode` now reflects gateway auth posture (`token` or `none`) instead of the browser-bridge `keyless` label.

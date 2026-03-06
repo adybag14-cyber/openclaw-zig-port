@@ -116,6 +116,16 @@ Full-stack replacement execution reference:
     - the identity contract now includes the Go-visible RFC3339 `startedAt` field while preserving `startedAtMs` for Zig callers.
     - `authMode` now reflects gateway auth posture (`token` or `none`) instead of the unrelated browser-bridge `keyless` label.
     - dispatcher regression coverage now asserts `authMode`, `startedAt`, and `startedAtMs` on the identity receipt.
+  - FS1 status contract parity slice shipped:
+    - `status` now includes the Go-visible summary keys Zig can expose without widening the handler surface:
+      - `status`
+      - `version`
+      - `phase`
+      - `supportedMethods`
+      - `count`
+      - `sessions.count`
+    - Zig keeps the older compatibility fields (`browser_bridge`, `supported_methods`, `runtime_*`, `gateway_auth_mode`, `configHash`) alongside the new Go-visible summary envelope.
+    - dispatcher regression coverage now asserts both the Go-style summary keys and the richer Zig runtime/security posture on the same receipt.
   - Full-stack replacement kickoff (2026-03-05):
   - Phase 5 Telegram auth fallback-metadata parity hardened:
     - no-session `/auth url` metadata now matches Go’s leaner fallback envelope and no longer emits Zig-only top-level:
