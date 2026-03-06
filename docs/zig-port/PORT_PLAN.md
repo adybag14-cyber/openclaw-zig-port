@@ -58,6 +58,12 @@ Full-stack replacement execution reference:
 
 - Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `195/195`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram pending-status completion parity hardened:
+    - pending `/auth status` still appends the live `Open: <verificationUriComplete>` line.
+    - the suggested completion command now always uses the compact Go form:
+      - `Then run: \`/auth complete <provider> <code>\``
+    - account-scoped pending status replies no longer append the account token to that completion command.
+    - runtime and dispatcher regressions now assert that account-scoped pending status replies omit the trailing account token.
   - Phase 5 Telegram no-session cancel metadata parity hardened:
     - `/auth cancel` with no active scoped session still returns the Go-style reply:
       - `No active auth session for this target.`
@@ -216,7 +222,7 @@ Full-stack replacement execution reference:
       - `channels.telegram_runtime.test.telegram runtime auth status clears stale binding when session is missing`
   - Phase 5 Telegram pending-status UX parity hardened:
     - pending `/auth status` replies now include the live verification URL plus the concrete completion command, instead of only returning `Auth status: <pending>`.
-    - account-scoped bindings keep the exact scoped completion form (`/auth complete <provider> <code> <account>`), while default scope keeps the shorter Go-style completion command.
+    - account-scoped bindings now also use the compact Go completion form (`/auth complete <provider> <code>`) instead of Zig's older scoped variant with the trailing account token.
   - Phase 5 Telegram auth URL stale-binding parity hardened:
     - `/auth url` now clears the scoped auth binding when the referenced login session is missing, matching the Go cleanup behavior for expired/missing URL lookups.
     - missing-session URL lookups now return the Go-style reply:

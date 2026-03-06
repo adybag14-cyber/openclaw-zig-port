@@ -8,6 +8,12 @@ Historical note: milestone validation counts below are preserved as captured at 
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram pending `/auth status` completion guidance now matches Go more closely on account-scoped flows:
+      - pending `/auth status` still appends the live `Open: <verificationUriComplete>` line.
+      - the suggested completion command now always uses the compact Go form:
+        - `Then run: \`/auth complete <provider> <code>\``
+      - account-scoped pending status replies no longer append the account token to that completion command.
+      - runtime and dispatcher regression coverage now assert that account-scoped pending status replies omit the trailing account token.
     - Telegram no-session `/auth cancel` metadata now matches Go more closely:
       - `/auth cancel` with no active scoped session still returns the Go-style reply:
         - `No active auth session for this target.`
@@ -163,7 +169,7 @@ Historical note: milestone validation counts below are preserved as captured at 
         - `channels.telegram_runtime.test.telegram runtime auth status clears stale binding when session is missing`
     - Telegram pending `/auth status` replies now include the live URL and concrete completion step:
       - pending status replies now append `Open: <verificationUriComplete>` and the Go-style next-step command instead of only returning `Auth status: ...`.
-      - account-scoped status replies preserve the exact scoped completion form (`/auth complete <provider> <code> <account>`), while default scope keeps the shorter Go-style command.
+      - account-scoped status replies now also use the compact Go completion form (`/auth complete <provider> <code>`) instead of Zig's older scoped variant with the trailing account token.
     - Telegram `/auth url` now clears stale scoped bindings when the backing login session is gone:
       - a missing backing session on `/auth url` now returns the Go-style `Auth session expired or missing. Run \`/auth\` again.` reply instead of a generic `Auth session not found.` response.
       - the scoped Telegram auth binding is cleared immediately on that missing-session path, preventing dead bindings from lingering across later auth flows.
