@@ -982,6 +982,10 @@ Full-stack replacement execution reference:
   - bare-metal QEMU command-loop validation shipped:
     - new script: `scripts/baremetal-qemu-command-loop-check.ps1` resolves `_start`, `spinPause`, `status`, and `command_mailbox` symbols from the freestanding ELF and injects a mailbox opcode through GDB under QEMU.
     - current proof path validates `command_set_tick_batch_hint` end to end (`ack=1`, `last_opcode=6`, `last_result=0`, `ticks=7`, `tick_batch_hint=7`) so FS6 now has boot, runtime progression, and command-loop evidence instead of boot-only smoke.
+  - bare-metal QEMU scheduler validation shipped:
+    - new script: `scripts/baremetal-qemu-scheduler-probe-check.ps1` resolves scheduler state/task symbols from the freestanding ELF and drives scheduler commands through the mailbox under QEMU+GDB.
+    - the probe validates `command_scheduler_reset`, `command_scheduler_set_timeslice`, `command_task_create`, `command_scheduler_set_policy`, and `command_scheduler_enable` end to end over the PVH freestanding artifact.
+    - current proof path validates `enabled=1`, `task_count=1`, `running_slot=0`, `dispatch_count>=1`, `timeslice=3`, `policy=priority`, and a live task with `priority=5`, `budget=12`, and nonzero run-count/budget-remaining telemetry.
   - bare-metal mailbox interrupt-control expansion shipped:
     - new command opcodes wired in runtime: `command_trigger_interrupt`, `command_reset_interrupt_counters`, `command_reinit_descriptor_tables`.
     - reset path now clears runtime interrupt counters via bootstrap export to keep command-driven diagnostics deterministic.

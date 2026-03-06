@@ -24,6 +24,7 @@ Recommended sequence:
 ./scripts/baremetal-qemu-smoke-check.ps1
 ./scripts/baremetal-qemu-runtime-oc-tick-check.ps1
 ./scripts/baremetal-qemu-command-loop-check.ps1
+./scripts/baremetal-qemu-scheduler-probe-check.ps1
 ./scripts/appliance-control-plane-smoke-check.ps1
 ./scripts/appliance-restart-recovery-smoke-check.ps1
 ./scripts/appliance-rollout-boundary-smoke-check.ps1
@@ -49,6 +50,7 @@ Recommended sequence:
 - appliance restart recovery smoke check (persisted control-plane replay + recovery actionability)
 - appliance rollout boundary smoke check (real `canary` lane selection + canary-to-stable promotion)
 - appliance minimal profile smoke check (persisted state + auth + secure-boot/readiness contract)
+- optional bare-metal QEMU scheduler probe (scheduler reset/timeslice/task-create/policy-enable against the freestanding PVH artifact)
 - parity evidence artifacts
   - websocket smoke validates `/ws` and root compatibility route `/`, including binary-frame RPC dispatch
   - gateway-auth and websocket smokes use bounded receive timeouts to prevent hanging CI jobs
@@ -67,6 +69,7 @@ Recommended sequence:
 - appliance restart recovery smoke check in validate stage
 - appliance rollout boundary smoke check in validate stage
 - appliance minimal profile smoke check in validate stage
+- bare-metal optional QEMU scheduler probe in validate stage
 - npm package dry-run validation in release validate stage
 - python package validation (unit tests + build + twine check) in release validate stage
 - local `scripts/release-preview.ps1` mirrors parity/docs/freshness gates before artifact packaging

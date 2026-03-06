@@ -28,7 +28,8 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 - Bare-metal profile: `openclaw-zig-baremetal.elf` (`zig build baremetal`, freestanding runtime loop + Multiboot2 header)
   - smoke gate validates ELF class/endianness, Multiboot2 location/alignment, `.multiboot` section, and required exported symbols
   - smoke gate also validates Multiboot2 header field contract and checksum
-  - optional QEMU validation path available via `zig build baremetal -Dbaremetal-qemu-smoke=true`, `scripts/baremetal-qemu-smoke-check.ps1`, `scripts/baremetal-qemu-runtime-oc-tick-check.ps1`, and `scripts/baremetal-qemu-command-loop-check.ps1` (auto-skips when QEMU/GDB or PVH toolchain pieces are unavailable)
+  - optional QEMU validation path available via `zig build baremetal -Dbaremetal-qemu-smoke=true`, `scripts/baremetal-qemu-smoke-check.ps1`, `scripts/baremetal-qemu-runtime-oc-tick-check.ps1`, `scripts/baremetal-qemu-command-loop-check.ps1`, and `scripts/baremetal-qemu-scheduler-probe-check.ps1` (auto-skips when QEMU/GDB or PVH toolchain pieces are unavailable)
+  - optional QEMU scheduler probe validates scheduler reset/timeslice/task-create/policy-enable flow end to end against the freestanding PVH artifact
   - bare-metal ABI now includes exported kernel info + command mailbox hooks (`oc_kernel_info_ptr`, `oc_command_ptr`, `oc_submit_command`, `oc_tick_n`)
   - bare-metal boot diagnostics ABI now exported with phase/command/tick telemetry and stack snapshot helpers (`oc_boot_diag_ptr`, `oc_boot_diag_capture_stack`)
   - bare-metal command history ABI now exported for mailbox execution tracing (`oc_command_history_capacity`, `oc_command_history_len`, `oc_command_history_event`, `oc_command_history_clear`)
@@ -396,6 +397,10 @@ Run local preview packaging with CI-aligned validate gates:
 - tri-baseline method/event parity enforcement (Go latest + original stable latest + original beta latest)
 - docs status drift gate (`scripts/docs-status-check.ps1`) against parity snapshot + latest release tag
 - freestanding bare-metal artifact smoke gate
+- optional bare-metal QEMU boot smoke gate
+- optional bare-metal QEMU runtime probe
+- optional bare-metal QEMU command-loop probe
+- optional bare-metal QEMU scheduler probe
 - runtime smoke gate
 - appliance control-plane smoke gate (`system.boot.*`, `system.rollback.*`, secure-boot-gated `update.run`)
 - appliance restart recovery smoke gate (persisted `compat-state.json` replay across stop/start)
@@ -417,6 +422,10 @@ Run local preview packaging with CI-aligned validate gates:
 - docs status drift gate (`scripts/docs-status-check.ps1`) in release validate stage
 - zig master freshness snapshot + artifact publication (`zig-master-freshness.json`)
 - freestanding bare-metal smoke validation
+- optional bare-metal QEMU boot smoke validation
+- optional bare-metal QEMU runtime validation
+- optional bare-metal QEMU command-loop validation
+- optional bare-metal QEMU scheduler validation
 - appliance control-plane smoke validation
 - appliance restart recovery validation
 - appliance rollout boundary validation

@@ -158,6 +158,10 @@ jobs:
         shell: pwsh
         run: ./scripts/appliance-minimal-profile-smoke-check.ps1 -SkipBuild
 
+      - name: Bare-metal QEMU scheduler probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-probe-check.ps1
+
   cross-targets:
     runs-on: ubuntu-latest
     strategy:
