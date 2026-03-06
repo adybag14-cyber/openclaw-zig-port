@@ -18,6 +18,7 @@ Full documentation for the OpenClaw Zig runtime port.
 
 - Getting started and local development workflow
 - Architecture and runtime composition
+- Package publishing, registry configuration, and install fallbacks
 - Full feature coverage by domain
 - RPC method family reference
 - Security, diagnostics, and remediation model
@@ -31,4 +32,5 @@ Full documentation for the OpenClaw Zig runtime port.
 
 - Repository: <https://github.com/adybag14-cyber/openclaw-zig-port>
 - Tracking issue: <https://github.com/adybag14-cyber/openclaw-zig-port/issues/1>
+- Package publishing guide: [package-publishing.md](package-publishing.md)
 - Method registry source: [`src/gateway/registry.zig`](https://github.com/adybag14-cyber/openclaw-zig-port/blob/main/src/gateway/registry.zig)

@@ -116,3 +116,19 @@ jobs:
         with:
           packages-dir: python/openclaw-zig-rpc-client/dist
           skip-existing: true
+
+      - name: Publish summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Python publish summary"
+            echo ""
+            echo "- version: \`${{ inputs.version }}\`"
+            echo "- release tag: \`${{ inputs.release_tag }}\`"
+            echo "- PyPI token configured: \`${{ steps.auth.outputs.has_pypi_token }}\`"
+            echo "- trusted publishing outcome: \`${{ steps.publish_trusted.outcome || 'not-run' }}\`"
+            if [ "${{ steps.auth.outputs.has_pypi_token }}" = "false" ] && [ "${{ steps.publish_trusted.outcome }}" = "failure" ]; then
+              echo "- public PyPI publish unavailable; wheel/sdist were still attached to the GitHub release"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

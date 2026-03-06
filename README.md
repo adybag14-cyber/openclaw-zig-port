@@ -82,6 +82,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 
 - Plan: [`docs/zig-port/PORT_PLAN.md`](docs/zig-port/PORT_PLAN.md)
 - Checklist: [`docs/zig-port/PHASE_CHECKLIST.md`](docs/zig-port/PHASE_CHECKLIST.md)
+- Package publishing and install paths: [`docs/package-publishing.md`](docs/package-publishing.md)
 - Local Zig toolchain notes: [`docs/zig-port/ZIG_TOOLCHAIN_LOCAL.md`](docs/zig-port/ZIG_TOOLCHAIN_LOCAL.md)
 - GitHub master tracking issue: <https://github.com/adybag14-cyber/openclaw-zig-port/issues/1>
 - Full method registry (source of truth): [`src/gateway/registry.zig`](src/gateway/registry.zig)

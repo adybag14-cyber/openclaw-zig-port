@@ -8,6 +8,12 @@ Node.js JSON-RPC client for OpenClaw Zig gateway endpoints.
 npm install @adybag14-cyber/openclaw-zig-rpc-client
 ```
 
+GitHub release tarball fallback for the current edge tag:
+
+```bash
+npm install "https://github.com/adybag14-cyber/openclaw-zig-port/releases/download/v0.2.0-zig-edge.26/adybag14-cyber-openclaw-zig-rpc-client-0.2.0-zig-edge.26.tgz"
+```
+
 ## Usage
 
 ```js

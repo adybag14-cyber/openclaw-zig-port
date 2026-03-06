@@ -174,3 +174,20 @@ jobs:
             exit 0
           fi
           npm publish --tag "${{ steps.meta.outputs.dist_tag }}" --registry https://npm.pkg.github.com
+
+      - name: Publish summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## npm publish summary"
+            echo ""
+            echo "- tag: \`${{ steps.meta.outputs.tag }}\`"
+            echo "- version: \`${{ steps.meta.outputs.version }}\`"
+            echo "- dist-tag: \`${{ steps.meta.outputs.dist_tag }}\`"
+            echo "- npm token configured: \`${{ steps.auth.outputs.has_npm_token }}\`"
+            echo "- npmjs trusted publishing outcome: \`${{ steps.npm_trusted.outcome || 'not-run' }}\`"
+            if [ "${{ steps.auth.outputs.has_npm_token }}" = "false" ] && [ "${{ steps.npm_trusted.outcome }}" = "failure" ]; then
+              echo "- public npmjs publish unavailable; fallback registry path used"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
