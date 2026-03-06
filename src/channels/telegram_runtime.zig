@@ -2072,7 +2072,7 @@ pub const TelegramRuntime = struct {
                 const scope = try authScopeAlloc(allocator, provider, account);
                 defer allocator.free(scope);
                 const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
-                    .type = if (std.ascii.eqlIgnoreCase(action, "url")) "auth.url" else "auth.link",
+                    .type = "auth.url",
                     .target = trimmed_target,
                     .provider = provider,
                     .account = normalizeAccount(account),
@@ -2105,7 +2105,7 @@ pub const TelegramRuntime = struct {
                 const scope = try authScopeAlloc(allocator, provider, account);
                 defer allocator.free(scope);
                 const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
-                    .type = if (std.ascii.eqlIgnoreCase(action, "url")) "auth.url" else "auth.link",
+                    .type = "auth.url",
                     .target = trimmed_target,
                     .provider = provider,
                     .account = normalizeAccount(account),
@@ -2131,7 +2131,7 @@ pub const TelegramRuntime = struct {
             const scope = try authScopeAlloc(allocator, provider, account_norm);
             defer allocator.free(scope);
             const metadata_json = try stringifyJsonAlloc(allocator, AuthCommandMetadata{
-                .type = if (std.ascii.eqlIgnoreCase(action, "url")) "auth.url" else "auth.link",
+                .type = "auth.url",
                 .target = trimmed_target,
                 .provider = provider,
                 .account = account_norm,
@@ -5015,6 +5015,7 @@ test "telegram runtime auth link command surfaces pending qwen session details" 
     try std.testing.expect(std.mem.indexOf(u8, link.reply, "Session: `") == null);
     try std.testing.expect(std.mem.indexOf(u8, link.reply, "/auth guest qwen mobile") == null);
     try std.testing.expect(std.mem.indexOf(u8, link.reply, start.loginCode) != null);
+    try std.testing.expect(std.mem.indexOf(u8, link.metadataJson.?, "\"type\":\"auth.url\"") != null);
 }
 
 test "telegram runtime auth open alias surfaces chatgpt completion command" {
@@ -5036,6 +5037,7 @@ test "telegram runtime auth open alias surfaces chatgpt completion command" {
     try std.testing.expect(std.mem.indexOf(u8, open.reply, "Status: `") == null);
     try std.testing.expect(std.mem.indexOf(u8, open.reply, "Session: `") == null);
     try std.testing.expect(std.mem.indexOf(u8, open.reply, start.loginCode) != null);
+    try std.testing.expect(std.mem.indexOf(u8, open.metadataJson.?, "\"type\":\"auth.url\"") != null);
 }
 
 test "telegram runtime auth link and open aliases use url-style missing replies" {
@@ -5050,12 +5052,14 @@ test "telegram runtime auth link and open aliases use url-style missing replies"
     defer link_none.deinit(allocator);
     try std.testing.expect(std.mem.eql(u8, link_none.authStatus, "none"));
     try std.testing.expect(std.mem.indexOf(u8, link_none.reply, "No active auth flow. Run `/auth start <provider>` first.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, link_none.metadataJson.?, "\"type\":\"auth.url\"") != null);
 
     try runtime.setAuthBinding("room-open-missing", "chatgpt", "default", "web-login-stale");
     var open_missing = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-open-missing\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-open-missing\",\"sessionId\":\"sess-open-missing\",\"message\":\"/auth open chatgpt\"}}");
     defer open_missing.deinit(allocator);
     try std.testing.expect(std.mem.eql(u8, open_missing.authStatus, "missing"));
     try std.testing.expect(std.mem.indexOf(u8, open_missing.reply, "Auth session expired or missing. Run `/auth` again.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, open_missing.metadataJson.?, "\"type\":\"auth.url\"") != null);
 
     const cleared = try runtime.getAuthBinding(allocator, "room-open-missing", "chatgpt", "default");
     try std.testing.expect(cleared.len == 0);

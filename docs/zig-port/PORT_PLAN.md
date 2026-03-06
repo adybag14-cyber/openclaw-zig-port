@@ -58,6 +58,11 @@ Full-stack replacement execution reference:
 
 - Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `193/193`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram auth-url metadata parity hardened:
+    - `/auth link`, `/auth open`, and `/auth url` now all emit the same Go-compatible nested metadata type:
+      - `type=auth.url`
+    - the older Zig-only alias metadata type (`auth.link`) is gone from success, missing-session, and no-session alias receipts.
+    - runtime and dispatcher regression coverage now assert the shared `auth.url` metadata contract directly for alias flows.
   - Phase 5 Telegram auth-link/open alias parity hardened:
     - `/auth link` and `/auth open` now reuse the same compact auth-url reply surface as `/auth url`:
       - `Auth URL: <verificationUriComplete>`

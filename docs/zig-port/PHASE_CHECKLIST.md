@@ -8,6 +8,12 @@ Historical note: milestone validation counts below are preserved as captured at 
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram `/auth link|open|url` aliases now share the same Go-compatible metadata contract:
+      - successful, missing-session, and no-session `link|open` alias receipts now emit nested `metadata.type="auth.url"` instead of the older Zig-only `auth.link`.
+      - alias reply text stays on the compact auth-url surface already aligned in the previous slice:
+        - `Auth URL: <verificationUriComplete>`
+        - `Code: <code>`
+      - runtime and dispatcher regression coverage now assert that `/auth link` aliases round-trip through the `auth.url` metadata envelope.
     - Telegram `/auth link|open` now align more closely with Go's compact auth-url surface:
       - successful `/auth link` and `/auth open` replies now reuse the same compact auth-url reply shape as `/auth url`:
         - `Auth URL: <verificationUriComplete>`
