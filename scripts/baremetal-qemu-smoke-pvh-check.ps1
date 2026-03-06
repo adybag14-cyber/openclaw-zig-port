@@ -89,21 +89,54 @@ function Resolve-LldExecutable {
     return $null
 }
 
+function Resolve-ZigGlobalCacheDir {
+    $candidates = @()
+    if ($env:ZIG_GLOBAL_CACHE_DIR -and $env:ZIG_GLOBAL_CACHE_DIR.Trim().Length -gt 0) {
+        $candidates += $env:ZIG_GLOBAL_CACHE_DIR
+    }
+    if ($env:LOCALAPPDATA -and $env:LOCALAPPDATA.Trim().Length -gt 0) {
+        $candidates += (Join-Path $env:LOCALAPPDATA "zig")
+    }
+    if ($env:XDG_CACHE_HOME -and $env:XDG_CACHE_HOME.Trim().Length -gt 0) {
+        $candidates += (Join-Path $env:XDG_CACHE_HOME "zig")
+    }
+    if ($env:HOME -and $env:HOME.Trim().Length -gt 0) {
+        $candidates += (Join-Path $env:HOME ".cache/zig")
+    }
+
+    foreach ($candidate in $candidates) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+            return $candidate
+        }
+    }
+
+    return (Join-Path $repo ".zig-global-cache")
+}
+
 function Resolve-CompilerRtArchive {
-    $localZigObjRoot = Join-Path $env:LOCALAPPDATA "zig\o"
-    if (-not (Test-Path $localZigObjRoot)) {
-        return $null
+    $cacheRoots = @()
+    $primary = Resolve-ZigGlobalCacheDir
+    if (-not [string]::IsNullOrWhiteSpace($primary)) {
+        $cacheRoots += $primary
     }
 
-    $candidate = Get-ChildItem -Path $localZigObjRoot -Recurse -Filter "libcompiler_rt.a" -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 1
+    $candidate = $null
+    foreach ($cacheRoot in $cacheRoots) {
+        $localZigObjRoot = Join-Path $cacheRoot "o"
+        if (-not (Test-Path $localZigObjRoot)) {
+            continue
+        }
 
-    if ($null -eq $candidate) {
-        return $null
+        $candidate = Get-ChildItem -Path $localZigObjRoot -Recurse -Filter "libcompiler_rt.a" -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+        if ($null -ne $candidate) {
+            return $candidate.FullName
+        }
     }
 
-    return $candidate.FullName
+    return $null
 }
 
 Set-Location $repo
@@ -114,6 +147,8 @@ $qemu = Resolve-QemuExecutable
 $clang = Resolve-ClangExecutable
 $lld = Resolve-LldExecutable
 $compilerRt = Resolve-CompilerRtArchive
+$zigGlobalCacheDir = Resolve-ZigGlobalCacheDir
+$zigLocalCacheDir = if ($env:ZIG_LOCAL_CACHE_DIR -and $env:ZIG_LOCAL_CACHE_DIR.Trim().Length -gt 0) { $env:ZIG_LOCAL_CACHE_DIR } else { Join-Path $repo ".zig-cache" }
 
 if ($null -eq $qemu) {
     Write-Output "BAREMETAL_QEMU_AVAILABLE=False"
@@ -140,6 +175,9 @@ $bootSource = Join-Path $repo "scripts\baremetal\pvh_boot.S"
 $linkerScript = Join-Path $repo "scripts\baremetal\pvh_lld.ld"
 
 if (-not $SkipBuild) {
+    New-Item -ItemType Directory -Force -Path $zigGlobalCacheDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $zigLocalCacheDir | Out-Null
+
     @"
 pub const qemu_smoke: bool = true;
 "@ | Set-Content -Path $optionsPath -Encoding Ascii
@@ -153,8 +191,8 @@ pub const qemu_smoke: bool = true;
         --dep build_options `
         "-Mroot=$repo\src\baremetal_main.zig" `
         "-Mbuild_options=$optionsPath" `
-        --cache-dir "$repo\.zig-cache" `
-        --global-cache-dir "$env:LOCALAPPDATA\zig" `
+        --cache-dir "$zigLocalCacheDir" `
+        --global-cache-dir "$zigGlobalCacheDir" `
         --name "openclaw-zig-baremetal-mainobj" `
         "-femit-bin=$mainObj"
     if ($LASTEXITCODE -ne 0) {
