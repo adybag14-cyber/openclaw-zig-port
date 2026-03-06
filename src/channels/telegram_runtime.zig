@@ -2221,7 +2221,7 @@ pub const TelegramRuntime = struct {
                     return .{
                         .is_command = true,
                         .command_name = "auth",
-                        .reply = try std.fmt.allocPrint(allocator, "Unknown option `{s}`. Usage: `/auth start <provider> [account] [--force]`", .{token}),
+                        .reply = try std.fmt.allocPrint(allocator, "Unknown start option `{s}`.", .{token}),
                         .provider = provider,
                         .model = defaultModelForProvider(provider),
                         .login_session_id = "",
@@ -2990,7 +2990,7 @@ pub const TelegramRuntime = struct {
                 const token = std.mem.trim(u8, rest[index], " \t\r\n");
                 if (token.len == 0) continue;
                 if (std.ascii.startsWithIgnoreCase(token, "--")) {
-                    return self.authInvalidOutcome(allocator, trimmed_target, "auth.cancel", provider, account, try std.fmt.allocPrint(allocator, "Unknown cancel option `{s}`.", .{token}), "invalid_cancel_args", "invalid", "", null);
+                    return self.authInvalidOutcome(allocator, trimmed_target, "auth.cancel", provider, account, try std.fmt.allocPrint(allocator, "Unknown status option `{s}`.", .{token}), "invalid_cancel_args", "invalid", "", null);
                 }
                 if (session_token.len == 0 and looksLikeLoginSessionID(token)) {
                     session_token = token;
@@ -3000,7 +3000,7 @@ pub const TelegramRuntime = struct {
                     account = token;
                     continue;
                 }
-                return self.authInvalidOutcome(allocator, trimmed_target, "auth.cancel", provider, account, try allocator.dupe(u8, "Usage: /auth cancel [provider] [account] [session_id]"), "invalid_cancel_args", "invalid", "", null);
+                return self.authInvalidOutcome(allocator, trimmed_target, "auth.cancel", provider, account, try allocator.dupe(u8, "Usage: `/auth status [provider] [account] [session_id]`"), "invalid_cancel_args", "invalid", "", null);
             }
             const bound_session = try self.getAuthBinding(allocator, target, provider, account);
             const login_session = if (std.mem.trim(u8, session_token, " \t\r\n").len > 0) session_token else bound_session;
@@ -5379,7 +5379,7 @@ test "telegram runtime auth parser rejects invalid options and trailing args" {
     var bad_start_option = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-bad-start-option-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth start qwen mobile --bogus\"}}");
     defer bad_start_option.deinit(allocator);
     try std.testing.expect(std.mem.eql(u8, bad_start_option.authStatus, "invalid"));
-    try std.testing.expect(std.mem.indexOf(u8, bad_start_option.reply, "Unknown option `--bogus`. Usage: `/auth start <provider> [account] [--force]`") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_start_option.reply, "Unknown start option `--bogus`.") != null);
     try std.testing.expect(bad_start_option.metadataJson != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_start_option.metadataJson.?, "\"type\":\"auth.start\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_start_option.metadataJson.?, "\"error\":\"invalid_start_args\"") != null);
@@ -5455,10 +5455,18 @@ test "telegram runtime auth parser rejects invalid options and trailing args" {
     var bad_cancel = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-bad-cancel-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth cancel qwen mobile --bogus\"}}");
     defer bad_cancel.deinit(allocator);
     try std.testing.expect(std.mem.eql(u8, bad_cancel.authStatus, "invalid"));
-    try std.testing.expect(std.mem.indexOf(u8, bad_cancel.reply, "Unknown cancel option `--bogus`") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_cancel.reply, "Unknown status option `--bogus`") != null);
     try std.testing.expect(bad_cancel.metadataJson != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_cancel.metadataJson.?, "\"type\":\"auth.cancel\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_cancel.metadataJson.?, "\"error\":\"invalid_cancel_args\"") != null);
+
+    var cancel_usage = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-cancel-usage-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth cancel qwen mobile extra\"}}");
+    defer cancel_usage.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, cancel_usage.authStatus, "invalid"));
+    try std.testing.expect(std.mem.indexOf(u8, cancel_usage.reply, "Usage: `/auth status [provider] [account] [session_id]`") != null);
+    try std.testing.expect(cancel_usage.metadataJson != null);
+    try std.testing.expect(std.mem.indexOf(u8, cancel_usage.metadataJson.?, "\"type\":\"auth.cancel\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, cancel_usage.metadataJson.?, "\"error\":\"invalid_cancel_args\"") != null);
 }
 
 test "telegram runtime auth invalid action and missing code use go-style help text" {

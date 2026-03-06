@@ -13149,7 +13149,7 @@ test "dispatch send invalid auth parser replies preserve metadata envelope" {
     defer allocator.free(bad_start_option);
     const bad_start_option_reply = try extractResultStringField(allocator, bad_start_option, "reply");
     defer allocator.free(bad_start_option_reply);
-    try std.testing.expect(std.mem.indexOf(u8, bad_start_option_reply, "Unknown option `--bogus`. Usage: `/auth start <provider> [account] [--force]`") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_start_option_reply, "Unknown start option `--bogus`.") != null);
     const bad_start_option_type = try extractResultObjectStringField(allocator, bad_start_option, "metadata", "type");
     defer allocator.free(bad_start_option_type);
     try std.testing.expect(std.mem.eql(u8, bad_start_option_type, "auth.start"));
@@ -13243,12 +13243,24 @@ test "dispatch send invalid auth parser replies preserve metadata envelope" {
 
     const bad_cancel = try dispatch(allocator, "{\"id\":\"tg-auth-bad-cancel-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth cancel qwen mobile --bogus\"}}");
     defer allocator.free(bad_cancel);
+    const bad_cancel_reply = try extractResultStringField(allocator, bad_cancel, "reply");
+    defer allocator.free(bad_cancel_reply);
+    try std.testing.expect(std.mem.indexOf(u8, bad_cancel_reply, "Unknown status option `--bogus`.") != null);
     const bad_cancel_type = try extractResultObjectStringField(allocator, bad_cancel, "metadata", "type");
     defer allocator.free(bad_cancel_type);
     try std.testing.expect(std.mem.eql(u8, bad_cancel_type, "auth.cancel"));
     const bad_cancel_error = try extractResultObjectStringField(allocator, bad_cancel, "metadata", "error");
     defer allocator.free(bad_cancel_error);
     try std.testing.expect(std.mem.eql(u8, bad_cancel_error, "invalid_cancel_args"));
+
+    const cancel_usage = try dispatch(allocator, "{\"id\":\"tg-auth-cancel-usage-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth cancel qwen mobile extra\"}}");
+    defer allocator.free(cancel_usage);
+    const cancel_usage_reply = try extractResultStringField(allocator, cancel_usage, "reply");
+    defer allocator.free(cancel_usage_reply);
+    try std.testing.expect(std.mem.indexOf(u8, cancel_usage_reply, "Usage: `/auth status [provider] [account] [session_id]`") != null);
+    const cancel_usage_error = try extractResultObjectStringField(allocator, cancel_usage, "metadata", "error");
+    defer allocator.free(cancel_usage_error);
+    try std.testing.expect(std.mem.eql(u8, cancel_usage_error, "invalid_cancel_args"));
 }
 
 test "dispatch send cancel without active auth session returns none status metadata" {

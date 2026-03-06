@@ -58,6 +58,14 @@ Full-stack replacement execution reference:
 
 - Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `195/195`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram auth parser-wording parity hardened:
+    - invalid `/auth start` unknown-flag replies now use the Go-style operator wording:
+      - `Unknown start option \`--bogus\`.`
+    - invalid `/auth cancel|logout` unknown-flag replies now use the same Go-style status-parser wording as `/auth status`:
+      - `Unknown status option \`--bogus\`.`
+    - malformed `/auth cancel|logout` extra-argument replies now use the same Go-style status usage string:
+      - `Usage: \`/auth status [provider] [account] [session_id]\``
+    - runtime and dispatcher regression coverage now assert those exact reply strings while preserving the structured `auth.cancel` metadata envelope (`type=auth.cancel`, `error=invalid_cancel_args`).
   - Phase 5 Telegram auth-start metadata parity hardened:
     - auth-start success metadata now includes the explicit Go-style `expiresAt` field at the top level instead of leaving expiry only inside the nested login payload.
     - repeat auth-start metadata for already-pending sessions now includes the same `expiresAt` field.

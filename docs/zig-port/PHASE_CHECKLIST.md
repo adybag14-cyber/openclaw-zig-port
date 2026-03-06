@@ -8,6 +8,14 @@ Historical note: milestone validation counts below are preserved as captured at 
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram auth parser wording now matches Go more closely on the remaining `/auth start` and `/auth cancel` invalid-input paths:
+      - invalid `/auth start` unknown-flag replies now use the Go-style operator wording:
+        - `Unknown start option \`--bogus\`.`
+      - invalid `/auth cancel|logout` unknown-flag replies now now use the same Go-style status-parser wording as `/auth status`:
+        - `Unknown status option \`--bogus\`.`
+      - malformed `/auth cancel|logout` extra-argument replies now use the same Go-style status usage string:
+        - `Usage: \`/auth status [provider] [account] [session_id]\``
+      - runtime and dispatcher regression coverage now assert those exact reply strings while preserving the existing structured `metadata.type="auth.cancel"` and `error="invalid_cancel_args"` envelope.
     - Telegram auth-start metadata now includes the explicit Go-style `expiresAt` field:
       - `/auth start` success metadata now exposes RFC3339 `expiresAt` alongside the existing login/session fields.
       - repeat `/auth start` against an already-pending session now also exposes the same top-level `expiresAt` field, instead of leaving it only inside the nested login object.
