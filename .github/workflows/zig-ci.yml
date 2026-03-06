@@ -166,6 +166,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-timer-wake-probe-check.ps1
 
+      - name: Bare-metal QEMU allocator syscall probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-allocator-syscall-probe-check.ps1
+
   cross-targets:
     runs-on: ubuntu-latest
     strategy:
