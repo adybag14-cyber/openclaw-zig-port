@@ -77,6 +77,10 @@ That means the npm side still needs one of:
 1. the `@adybag14-cyber` scope/package provisioned on npmjs with publish permission for this repo/workflow
 2. a valid `NPM_TOKEN` configured in repo secrets
 
+Reference:
+
+- npm docs note that publishing a public organization-scoped package requires the scope organization to exist on npmjs and the publisher to have the right permissions.
+
 ### PyPI public publish
 
 The workflow supports two public-publish paths:
@@ -100,6 +104,8 @@ Fix either by:
 
 1. adding a matching trusted publisher in PyPI for `openclaw-zig-rpc-client`
 2. setting `PYPI_API_TOKEN` in repo secrets
+
+The workflow now uses the GitHub Actions environment `pypi`, which is the common trusted-publisher configuration shape documented by GitHub and PyPI. If the PyPI publisher entry was created with environment `pypi`, rerunning the workflow should now satisfy that claim.
 
 ## Workflow Outputs
 

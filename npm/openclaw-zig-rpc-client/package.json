@@ -27,6 +27,9 @@
   "engines": {
     "node": ">=18.17"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "index.js",
     "index.d.ts",
