@@ -58,6 +58,14 @@ Full-stack replacement execution reference:
 
 - Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `192/192`.
 - Full-stack replacement kickoff (2026-03-05):
+  - Phase 5 Telegram auth-usage parity hardened:
+    - invalid `/auth status` parser replies now use the backticked Go-style usage string:
+      - `Usage: \`/auth status [provider] [account] [session_id]\``
+    - invalid `/auth wait` parser replies now use the backticked Go-style usage string:
+      - `Usage: \`/auth wait <provider> [session_id] [account] [--timeout <seconds>]\``
+    - invalid `/auth complete` parser replies now use the backticked Go-style usage string:
+      - `Usage: \`/auth complete <provider> <callback_url_or_code> [session_id] [account]\``
+    - runtime and dispatcher regression coverage now assert those exact reply strings together with the existing `invalid_status_args`, `invalid_wait_args`, and `invalid_complete_args` metadata paths.
   - Phase 5 Telegram auth operator-text parity hardened:
     - `/auth cancel` success replies now use the generic Go-style wording:
       - `Auth session \`<id>\` cancelled.`

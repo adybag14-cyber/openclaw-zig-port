@@ -8,6 +8,14 @@ Historical note: milestone validation counts below are preserved as captured at 
 - [ ] FS1 - Runtime/core consolidation
 - [ ] FS2 - Provider + channel completion
   - Latest delivered slice:
+    - Telegram auth parser usage text now matches Go more closely on invalid `status|wait|complete` flows:
+      - invalid `/auth status` parser replies now use the backticked Go-style usage string:
+        - `Usage: \`/auth status [provider] [account] [session_id]\``
+      - invalid `/auth wait` parser replies now use the backticked Go-style usage string:
+        - `Usage: \`/auth wait <provider> [session_id] [account] [--timeout <seconds>]\``
+      - invalid `/auth complete` parser replies now use the backticked Go-style usage string:
+        - `Usage: \`/auth complete <provider> <callback_url_or_code> [session_id] [account]\``
+      - regression coverage tightened at both runtime and dispatcher layers for these exact reply strings and their metadata errors.
     - Telegram auth operator text now matches Go more closely on the remaining command-surface wording:
       - `/auth cancel` success replies now use the generic Go-style wording:
         - `Auth session <id> cancelled.`

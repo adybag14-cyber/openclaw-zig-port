@@ -13101,6 +13101,15 @@ test "dispatch send invalid auth parser replies preserve metadata envelope" {
     defer allocator.free(bad_status_error);
     try std.testing.expect(std.mem.eql(u8, bad_status_error, "unknown_status_option"));
 
+    const status_usage = try dispatch(allocator, "{\"id\":\"tg-auth-status-usage-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth status qwen mobile extra\"}}");
+    defer allocator.free(status_usage);
+    const status_usage_reply = try extractResultStringField(allocator, status_usage, "reply");
+    defer allocator.free(status_usage_reply);
+    try std.testing.expect(std.mem.indexOf(u8, status_usage_reply, "Usage: `/auth status [provider] [account] [session_id]`") != null);
+    const status_usage_error = try extractResultObjectStringField(allocator, status_usage, "metadata", "error");
+    defer allocator.free(status_usage_error);
+    try std.testing.expect(std.mem.eql(u8, status_usage_error, "invalid_status_args"));
+
     const bad_wait = try dispatch(allocator, "{\"id\":\"tg-auth-bad-wait-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth wait qwen mobile --timeout 0\"}}");
     defer allocator.free(bad_wait);
     const bad_wait_type = try extractResultObjectStringField(allocator, bad_wait, "metadata", "type");
@@ -13110,8 +13119,20 @@ test "dispatch send invalid auth parser replies preserve metadata envelope" {
     defer allocator.free(bad_wait_error);
     try std.testing.expect(std.mem.eql(u8, bad_wait_error, "invalid_timeout"));
 
+    const wait_usage = try dispatch(allocator, "{\"id\":\"tg-auth-wait-usage-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth wait session\"}}");
+    defer allocator.free(wait_usage);
+    const wait_usage_reply = try extractResultStringField(allocator, wait_usage, "reply");
+    defer allocator.free(wait_usage_reply);
+    try std.testing.expect(std.mem.indexOf(u8, wait_usage_reply, "Usage: `/auth wait <provider> [session_id] [account] [--timeout <seconds>]`") != null);
+    const wait_usage_error = try extractResultObjectStringField(allocator, wait_usage, "metadata", "error");
+    defer allocator.free(wait_usage_error);
+    try std.testing.expect(std.mem.eql(u8, wait_usage_error, "invalid_wait_args"));
+
     const bad_complete = try dispatch(allocator, "{\"id\":\"tg-auth-bad-complete-meta\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-meta-invalid-auth\",\"sessionId\":\"tg-meta-invalid-auth\",\"message\":\"/auth complete qwen code123 missing extra tail\"}}");
     defer allocator.free(bad_complete);
+    const bad_complete_reply = try extractResultStringField(allocator, bad_complete, "reply");
+    defer allocator.free(bad_complete_reply);
+    try std.testing.expect(std.mem.indexOf(u8, bad_complete_reply, "Usage: `/auth complete <provider> <callback_url_or_code> [session_id] [account]`") != null);
     const bad_complete_type = try extractResultObjectStringField(allocator, bad_complete, "metadata", "type");
     defer allocator.free(bad_complete_type);
     try std.testing.expect(std.mem.eql(u8, bad_complete_type, "auth.complete"));

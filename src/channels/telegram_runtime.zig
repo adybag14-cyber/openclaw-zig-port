@@ -2342,9 +2342,9 @@ pub const TelegramRuntime = struct {
         if (std.ascii.eqlIgnoreCase(action, "status") or std.ascii.eqlIgnoreCase(action, "wait")) {
             const is_wait = std.ascii.eqlIgnoreCase(action, "wait");
             const usage = if (is_wait)
-                "Usage: /auth wait <provider> [session_id] [account] [--timeout <seconds>]"
+                "Usage: `/auth wait <provider> [session_id] [account] [--timeout <seconds>]`"
             else
-                "Usage: /auth status [provider] [account] [session_id]";
+                "Usage: `/auth status [provider] [account] [session_id]`";
             var provider = default_provider;
             var account: []const u8 = "default";
             var session_token: []const u8 = "";
@@ -2817,7 +2817,7 @@ pub const TelegramRuntime = struct {
                     account = token;
                     continue;
                 }
-                return self.authInvalidOutcome(allocator, trimmed_target, "auth.complete", provider, account, try allocator.dupe(u8, "Usage: /auth complete <provider> <callback_url_or_code> [session_id] [account]"), "invalid_complete_args", "invalid", "", null);
+                return self.authInvalidOutcome(allocator, trimmed_target, "auth.complete", provider, account, try allocator.dupe(u8, "Usage: `/auth complete <provider> <callback_url_or_code> [session_id] [account]`"), "invalid_complete_args", "invalid", "", null);
             }
 
             if (code_token.len == 0) {
@@ -5313,6 +5313,13 @@ test "telegram runtime auth parser rejects invalid options and trailing args" {
     try std.testing.expect(std.mem.indexOf(u8, bad_status.metadataJson.?, "\"type\":\"auth.status\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_status.metadataJson.?, "\"error\":\"unknown_status_option\"") != null);
 
+    var status_usage = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-status-usage-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth status qwen mobile extra\"}}");
+    defer status_usage.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, status_usage.authStatus, "invalid"));
+    try std.testing.expect(std.mem.indexOf(u8, status_usage.reply, "Usage: `/auth status [provider] [account] [session_id]`") != null);
+    try std.testing.expect(status_usage.metadataJson != null);
+    try std.testing.expect(std.mem.indexOf(u8, status_usage.metadataJson.?, "\"error\":\"invalid_status_args\"") != null);
+
     var bad_wait = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-bad-wait-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth wait qwen mobile --timeout 0\"}}");
     defer bad_wait.deinit(allocator);
     try std.testing.expect(std.mem.eql(u8, bad_wait.authStatus, "invalid"));
@@ -5320,6 +5327,13 @@ test "telegram runtime auth parser rejects invalid options and trailing args" {
     try std.testing.expect(bad_wait.metadataJson != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_wait.metadataJson.?, "\"type\":\"auth.wait\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_wait.metadataJson.?, "\"error\":\"invalid_timeout\"") != null);
+
+    var wait_usage = try runtime.sendFromFrame(allocator, "{\"id\":\"tg-wait-usage-auth\",\"method\":\"send\",\"params\":{\"channel\":\"telegram\",\"to\":\"room-invalid-auth\",\"sessionId\":\"sess-invalid-auth\",\"message\":\"/auth wait session\"}}");
+    defer wait_usage.deinit(allocator);
+    try std.testing.expect(std.mem.eql(u8, wait_usage.authStatus, "invalid"));
+    try std.testing.expect(std.mem.indexOf(u8, wait_usage.reply, "Usage: `/auth wait <provider> [session_id] [account] [--timeout <seconds>]`") != null);
+    try std.testing.expect(wait_usage.metadataJson != null);
+    try std.testing.expect(std.mem.indexOf(u8, wait_usage.metadataJson.?, "\"error\":\"invalid_wait_args\"") != null);
 
     const bad_complete_frame = try std.fmt.allocPrint(
         allocator,
@@ -5330,7 +5344,7 @@ test "telegram runtime auth parser rejects invalid options and trailing args" {
     var bad_complete = try runtime.sendFromFrame(allocator, bad_complete_frame);
     defer bad_complete.deinit(allocator);
     try std.testing.expect(std.mem.eql(u8, bad_complete.authStatus, "invalid"));
-    try std.testing.expect(std.mem.indexOf(u8, bad_complete.reply, "Usage: /auth complete") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bad_complete.reply, "Usage: `/auth complete <provider> <callback_url_or_code> [session_id] [account]`") != null);
     try std.testing.expect(bad_complete.metadataJson != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_complete.metadataJson.?, "\"type\":\"auth.complete\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, bad_complete.metadataJson.?, "\"error\":\"invalid_complete_args\"") != null);
