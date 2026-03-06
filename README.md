@@ -357,6 +357,7 @@ Run smoke checks:
 ./scripts/baremetal-qemu-command-loop-check.ps1
 ./scripts/runtime-smoke-check.ps1
 ./scripts/appliance-control-plane-smoke-check.ps1
+./scripts/appliance-restart-recovery-smoke-check.ps1
 ./scripts/gateway-auth-smoke-check.ps1
 ./scripts/websocket-smoke-check.ps1
 ./scripts/web-login-smoke-check.ps1
@@ -392,6 +393,7 @@ Run local preview packaging with CI-aligned validate gates:
 - freestanding bare-metal artifact smoke gate
 - runtime smoke gate
 - appliance control-plane smoke gate (`system.boot.*`, `system.rollback.*`, secure-boot-gated `update.run`)
+- appliance restart recovery smoke gate (persisted `compat-state.json` replay across stop/start)
 - parity evidence artifact publication (`parity-go-zig.json`, `parity-go-zig.md`)
 
 `docs-pages` workflow (`.github/workflows/docs-pages.yml`):
@@ -409,6 +411,7 @@ Run local preview packaging with CI-aligned validate gates:
 - zig master freshness snapshot + artifact publication (`zig-master-freshness.json`)
 - freestanding bare-metal smoke validation
 - appliance control-plane smoke validation
+- appliance restart recovery validation
 - full preview artifact matrix build and publish
 - includes bare-metal release artifact: `openclaw-zig-<version>-x86_64-freestanding-none.elf`
 - duplicate release tag guard

@@ -945,6 +945,10 @@ Full-stack replacement execution reference:
   - added system maintenance smoke script (`scripts/system-maintenance-smoke-check.ps1`) and made it a required gate in both `zig-ci` and `release-preview` validate jobs (`system.maintenance.plan`, `system.maintenance.run`, `system.maintenance.status` lifecycle checks).
   - added appliance control-plane smoke script (`scripts/appliance-control-plane-smoke-check.ps1`) and made it a required gate in both `zig-ci` and `release-preview` validate jobs.
     - validates `system.boot.status`, `system.boot.policy.get/set`, `system.boot.verify` failure/success paths, signed `system.boot.attest` + `system.boot.attest.verify`, `system.rollback.plan/cancel/run`, and secure-boot-gated `update.run` block/allow behavior over real HTTP RPC.
+  - compat persistence depth corrected for appliance state:
+    - `compat-state.json` now persists boot policy, boot verification telemetry, boot slot state, and rollback plan/run fields instead of only generic compat metadata.
+    - added restart acceptance script (`scripts/appliance-restart-recovery-smoke-check.ps1`) and made it a required gate in both `zig-ci` and `release-preview` validate jobs.
+    - the restart gate proves persisted boot policy + verification + update head + rollback plan survive stop/start and remain actionable after recovery.
   - added bare-metal runtime profile (`src/baremetal_main.zig`) and build target (`zig build baremetal`) plus smoke gate (`scripts/baremetal-smoke-check.ps1`) in both `zig-ci` and `release-preview` validate jobs.
   - release-preview packaging now ships the freestanding image artifact (`openclaw-zig-<version>-x86_64-freestanding-none.elf`) alongside desktop/android zips + checksums.
   - bare-metal runtime now embeds Multiboot2 header and smoke gate checks ELF magic + Multiboot2 magic bytes to reduce boot-regression risk.

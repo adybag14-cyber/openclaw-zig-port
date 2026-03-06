@@ -146,6 +146,10 @@ jobs:
         shell: pwsh
         run: ./scripts/appliance-control-plane-smoke-check.ps1 -SkipBuild
 
+      - name: Appliance restart recovery smoke check (persisted control-plane replay)
+        shell: pwsh
+        run: ./scripts/appliance-restart-recovery-smoke-check.ps1 -SkipBuild
+
   cross-targets:
     runs-on: ubuntu-latest
     strategy:

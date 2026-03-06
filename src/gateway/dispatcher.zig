@@ -406,6 +406,22 @@ const PersistedCompatState = struct {
     wizardActive: bool = false,
     wizardStep: u32 = 0,
     wizardFlow: []const u8 = "",
+    bootSecureEnabled: bool = true,
+    bootPolicy: []const u8 = "signature-required",
+    bootEnforceUpdateGate: bool = false,
+    bootVerificationMaxAgeMs: i64 = 300_000,
+    bootRequiredSigner: []const u8 = "sigstore",
+    bootSigner: []const u8 = "",
+    bootLastMeasurement: []const u8 = "",
+    bootLastVerified: bool = false,
+    bootLastVerifiedAtMs: i64 = 0,
+    bootActiveSlot: []const u8 = "A",
+    bootPreviousSlot: []const u8 = "B",
+    rollbackPending: bool = false,
+    rollbackTargetSlot: []const u8 = "",
+    rollbackReason: []const u8 = "",
+    rollbackPlannedAtMs: i64 = 0,
+    rollbackLastRunAtMs: i64 = 0,
     updateCurrentVersion: []const u8 = "",
     updateChannel: []const u8 = "",
     updateNpmPackage: []const u8 = "",
@@ -809,6 +825,14 @@ const CompatState = struct {
         self.voicewake_enabled = parsed.value.voicewakeEnabled;
         self.wizard_active = parsed.value.wizardActive;
         self.wizard_step = parsed.value.wizardStep;
+        self.boot_secure_enabled = parsed.value.bootSecureEnabled;
+        self.boot_enforce_update_gate = parsed.value.bootEnforceUpdateGate;
+        self.boot_verification_max_age_ms = parsed.value.bootVerificationMaxAgeMs;
+        self.boot_last_verified = parsed.value.bootLastVerified;
+        self.boot_last_verified_at_ms = parsed.value.bootLastVerifiedAtMs;
+        self.rollback_pending = parsed.value.rollbackPending;
+        self.rollback_planned_at_ms = parsed.value.rollbackPlannedAtMs;
+        self.rollback_last_run_at_ms = parsed.value.rollbackLastRunAtMs;
 
         try self.setOwnedStringIfPresent(&self.presence_mode, parsed.value.presenceMode);
         try self.setOwnedStringIfPresent(&self.presence_source, parsed.value.presenceSource);
@@ -819,6 +843,14 @@ const CompatState = struct {
         try self.setOwnedStringIfPresent(&self.voice_output_device, parsed.value.voiceOutputDevice);
         try self.setOwnedStringIfPresent(&self.voicewake_phrase, parsed.value.voicewakePhrase);
         try self.setOwnedStringIfPresent(&self.wizard_flow, parsed.value.wizardFlow);
+        try self.setOwnedStringIfPresent(&self.boot_policy, parsed.value.bootPolicy);
+        try self.setOwnedStringIfPresent(&self.boot_required_signer, parsed.value.bootRequiredSigner);
+        try self.setOwnedStringIfPresent(&self.boot_signer, parsed.value.bootSigner);
+        try self.setOwnedStringIfPresent(&self.boot_last_measurement, parsed.value.bootLastMeasurement);
+        try self.setOwnedStringIfPresent(&self.boot_active_slot, parsed.value.bootActiveSlot);
+        try self.setOwnedStringIfPresent(&self.boot_previous_slot, parsed.value.bootPreviousSlot);
+        try self.setOwnedStringIfPresent(&self.rollback_target_slot, parsed.value.rollbackTargetSlot);
+        try self.setOwnedStringIfPresent(&self.rollback_reason, parsed.value.rollbackReason);
         try self.setOwnedStringIfPresent(&self.update_current_version, parsed.value.updateCurrentVersion);
         try self.setOwnedStringIfPresent(&self.update_channel, parsed.value.updateChannel);
         try self.setOwnedStringIfPresent(&self.update_npm_package, parsed.value.updateNpmPackage);
@@ -972,6 +1004,22 @@ const CompatState = struct {
             .wizardActive = self.wizard_active,
             .wizardStep = self.wizard_step,
             .wizardFlow = self.wizard_flow,
+            .bootSecureEnabled = self.boot_secure_enabled,
+            .bootPolicy = self.boot_policy,
+            .bootEnforceUpdateGate = self.boot_enforce_update_gate,
+            .bootVerificationMaxAgeMs = self.boot_verification_max_age_ms,
+            .bootRequiredSigner = self.boot_required_signer,
+            .bootSigner = self.boot_signer,
+            .bootLastMeasurement = self.boot_last_measurement,
+            .bootLastVerified = self.boot_last_verified,
+            .bootLastVerifiedAtMs = self.boot_last_verified_at_ms,
+            .bootActiveSlot = self.boot_active_slot,
+            .bootPreviousSlot = self.boot_previous_slot,
+            .rollbackPending = self.rollback_pending,
+            .rollbackTargetSlot = self.rollback_target_slot,
+            .rollbackReason = self.rollback_reason,
+            .rollbackPlannedAtMs = self.rollback_planned_at_ms,
+            .rollbackLastRunAtMs = self.rollback_last_run_at_ms,
             .updateCurrentVersion = self.update_current_version,
             .updateChannel = self.update_channel,
             .updateNpmPackage = self.update_npm_package,
@@ -15099,6 +15147,11 @@ test "compat state persistence roundtrip restores core runtime settings and hist
         try state.setTTSProvider("kittentts");
         try state.setVoiceDevices("mic-usb", "speaker-usb");
         try state.setVoicewake(true, "hey zig");
+        try state.setBootPolicy("signature-required", true, true, 300_000, "sigstore");
+        try state.setBootVerification("hash-1", "sigstore", true);
+        try state.setRollbackPlan("B", "canary-failure");
+        state.rollback_last_run_at_ms = 1_700_000_234_567;
+        try state.setUpdateHead("v0.2.1-zig-edge", "edge", "edge");
         try state.mergeConfigEntry("talk.apiKey", "sk-zig-local");
         try state.markSessionDeleted("session-z1");
         try state.upsertSessionChannel("session-z2", "cli");
@@ -15128,10 +15181,27 @@ test "compat state persistence roundtrip restores core runtime settings and hist
         try std.testing.expect(std.mem.eql(u8, restored.voice_output_device, "speaker-usb"));
         try std.testing.expect(restored.voicewake_enabled);
         try std.testing.expect(std.mem.eql(u8, restored.voicewake_phrase, "hey zig"));
+        try std.testing.expect(restored.boot_secure_enabled);
+        try std.testing.expect(std.mem.eql(u8, restored.boot_policy, "signature-required"));
+        try std.testing.expect(restored.boot_enforce_update_gate);
+        try std.testing.expectEqual(@as(i64, 300_000), restored.boot_verification_max_age_ms);
+        try std.testing.expect(std.mem.eql(u8, restored.boot_required_signer, "sigstore"));
+        try std.testing.expect(std.mem.eql(u8, restored.boot_signer, "sigstore"));
+        try std.testing.expect(std.mem.eql(u8, restored.boot_last_measurement, "hash-1"));
+        try std.testing.expect(restored.boot_last_verified);
+        try std.testing.expect(std.mem.eql(u8, restored.boot_active_slot, "A"));
+        try std.testing.expect(std.mem.eql(u8, restored.boot_previous_slot, "B"));
+        try std.testing.expect(restored.rollback_pending);
+        try std.testing.expect(std.mem.eql(u8, restored.rollback_target_slot, "B"));
+        try std.testing.expect(std.mem.eql(u8, restored.rollback_reason, "canary-failure"));
+        try std.testing.expectEqual(@as(i64, 1_700_000_234_567), restored.rollback_last_run_at_ms);
         try std.testing.expectEqual(@as(usize, 1), restored.events.items.len);
         try std.testing.expect(std.mem.eql(u8, restored.events.items[0].kind, "runtime-replay"));
         try std.testing.expectEqual(@as(usize, 1), restored.update_jobs.items.len);
         try std.testing.expect(std.mem.eql(u8, restored.update_jobs.items[0].target_version, "v0.2.1-zig-edge"));
+        try std.testing.expect(std.mem.eql(u8, restored.update_current_version, "v0.2.1-zig-edge"));
+        try std.testing.expect(std.mem.eql(u8, restored.update_channel, "edge"));
+        try std.testing.expect(std.mem.eql(u8, restored.update_npm_dist_tag, "edge"));
         try std.testing.expectEqual(@as(usize, 1), restored.config_overlay.count());
         try std.testing.expectEqual(@as(usize, 1), restored.session_channels.count());
         const restored_session_channel = restored.getSessionChannel("session-z2") orelse unreachable;

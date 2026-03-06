@@ -840,6 +840,7 @@ Phase 6 progress notes:
 - [x] `scripts/web-login-smoke-check.ps1` re-run after browser-probe changes (`start/wait/complete/status` still HTTP 200 with authorized completion).
 - [x] `scripts/system-maintenance-smoke-check.ps1` (`system.maintenance.plan -> run(dry-run+apply) -> status` all HTTP 200 with lifecycle contract checks)
 - [x] `scripts/appliance-control-plane-smoke-check.ps1` (`system.boot.status -> policy.get/set -> verify(fail/ok) -> attest/attest.verify(signature-required) -> rollback.plan/cancel/run(dry-run+apply) -> secure-boot-gated update.run` all HTTP 200 with contract checks)
+- [x] `scripts/appliance-restart-recovery-smoke-check.ps1` (persisted `compat-state.json` replay across restart: boot policy + verification + update head + rollback plan survive stop/start and remain actionable after recovery)
 - [x] `scripts/baremetal-smoke-check.ps1` (`zig build baremetal` + artifact presence/size checks for freestanding image)
 - [x] `scripts/baremetal-smoke-check.ps1` now validates ELF + Multiboot2 magic in the freestanding image.
 - [x] `scripts/baremetal-smoke-check.ps1` now validates `.multiboot` section + required exported symbols (`_start`, `oc_tick`, `oc_tick_n`, `oc_status_ptr`, `oc_command_ptr`, `oc_kernel_info_ptr`, `oc_submit_command`, `kernel_info`, `multiboot2_header`) from ELF symtab.
@@ -1001,6 +1002,7 @@ Phase 6 progress notes:
 - [x] Added update lifecycle smoke gate (`scripts/update-lifecycle-smoke-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (`update.plan`, `update.run`, `update.status` contract checks).
 - [x] Added system maintenance smoke gate (`scripts/system-maintenance-smoke-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (`system.maintenance.plan`, `system.maintenance.run`, `system.maintenance.status` contract checks).
 - [x] Added appliance control-plane smoke gate (`scripts/appliance-control-plane-smoke-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (`system.boot.*`, `system.rollback.*`, signed `system.boot.attest.verify`, and secure-boot-gated `update.run` contract checks).
+- [x] Added appliance restart recovery smoke gate (`scripts/appliance-restart-recovery-smoke-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs (persisted `compat-state.json` replay of boot policy, boot verification, update head, and rollback plan across restart).
 - [x] Added bare-metal smoke gate (`scripts/baremetal-smoke-check.ps1`) and wired it into `zig-ci` + `release-preview` validate jobs.
 - [x] Added bare-metal release packaging to `release-preview` (publishes `openclaw-zig-<version>-x86_64-freestanding-none.elf` with checksums).
 - [x] CI regression fixed for Zig master environ API mismatch (`std.process.Environ`):
