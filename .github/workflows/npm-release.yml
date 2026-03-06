@@ -135,15 +135,32 @@ jobs:
           fi
           npm publish --access public --tag "${{ steps.meta.outputs.dist_tag }}" --provenance
 
-      - name: Setup Node for GitHub Packages fallback
+      - name: Publish npm package (npmjs trusted publishing)
         if: ${{ steps.auth.outputs.has_npm_token == 'false' }}
+        id: npm_trusted
+        continue-on-error: true
+        shell: bash
+        working-directory: npm/openclaw-zig-rpc-client
+        run: |
+          set -euo pipefail
+          PACKAGE_NAME="$(node -p "require('./package.json').name")"
+          VERSION="${{ steps.meta.outputs.version }}"
+          if npm view "${PACKAGE_NAME}@${VERSION}" --registry https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "${PACKAGE_NAME}@${VERSION} already exists on npmjs. Skipping trusted publish."
+            exit 0
+          fi
+          unset NODE_AUTH_TOKEN
+          npm publish --access public --tag "${{ steps.meta.outputs.dist_tag }}" --provenance
+
+      - name: Setup Node for GitHub Packages fallback
+        if: ${{ steps.auth.outputs.has_npm_token == 'false' && steps.npm_trusted.outcome == 'failure' }}
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           registry-url: "https://npm.pkg.github.com"
 
       - name: Publish npm package (GitHub Packages fallback)
-        if: ${{ steps.auth.outputs.has_npm_token == 'false' }}
+        if: ${{ steps.auth.outputs.has_npm_token == 'false' && steps.npm_trusted.outcome == 'failure' }}
         env:
           NODE_AUTH_TOKEN: ${{ github.token }}
         shell: bash

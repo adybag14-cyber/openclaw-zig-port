@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   publish:
@@ -106,3 +107,12 @@ jobs:
         run: |
           set -euo pipefail
           python -m twine upload python/openclaw-zig-rpc-client/dist/*
+
+      - name: Publish to PyPI (trusted publishing)
+        if: ${{ steps.auth.outputs.has_pypi_token == 'false' }}
+        id: publish_trusted
+        continue-on-error: true
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/openclaw-zig-rpc-client/dist
+          skip-existing: true
