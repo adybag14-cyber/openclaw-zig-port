@@ -91,6 +91,24 @@ jobs:
           echo "tarball=$(pwd)/${PACK_FILE}" >> "$GITHUB_OUTPUT"
           echo "Built tarball: ${PACK_FILE}"
 
+      - name: Package registry preflight
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          ./scripts/package-registry-status.ps1 `
+            -Repository "${{ github.repository }}" `
+            -ReleaseTag "${{ steps.meta.outputs.tag }}" `
+            -NpmPackageName "@adybag14-cyber/openclaw-zig-rpc-client" `
+            -NpmVersion "${{ steps.meta.outputs.version }}" `
+            -OutputJsonPath "./release/package-registry-status-npm.json"
+
+      - name: Upload package registry preflight
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-registry-status-npm
+          path: release/package-registry-status-npm.json
+
       - name: Detect npm token availability
         id: auth
         env:
@@ -187,6 +205,7 @@ jobs:
             echo "- dist-tag: \`${{ steps.meta.outputs.dist_tag }}\`"
             echo "- npm token configured: \`${{ steps.auth.outputs.has_npm_token }}\`"
             echo "- npmjs trusted publishing outcome: \`${{ steps.npm_trusted.outcome || 'not-run' }}\`"
+            echo "- preflight artifact: \`package-registry-status-npm.json\`"
             if [ "${{ steps.auth.outputs.has_npm_token }}" = "false" ] && [ "${{ steps.npm_trusted.outcome }}" = "failure" ]; then
               echo "- public npmjs publish unavailable; fallback registry path used"
             fi

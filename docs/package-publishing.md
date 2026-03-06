@@ -124,9 +124,32 @@ The workflow now uses the GitHub Actions environment `pypi`, and the repo-side O
   - attaches the built `.tgz` to the GitHub release
   - attempts npmjs publish first
   - falls back to GitHub Packages when public publish is unavailable
+  - uploads `package-registry-status-npm.json` preflight evidence for the target version/tag
 - `python-release.yml`
   - attaches the built wheel and sdist to the GitHub release
   - attempts PyPI publish when token or trusted publisher is available
+  - uploads `package-registry-status-python.json` preflight evidence for the target version/tag
+
+## Registry Preflight Script
+
+Local/operator check:
+
+```powershell
+pwsh ./scripts/package-registry-status.ps1 `
+  -ReleaseTag v0.2.0-zig-edge.26 `
+  -NpmPackageName @adybag14-cyber/openclaw-zig-rpc-client `
+  -NpmVersion 0.2.0-zig-edge.26 `
+  -PythonPackageName openclaw-zig-rpc-client `
+  -PythonVersion 0.2.0.dev26 `
+  -OutputJsonPath ./release/package-registry-status.json
+```
+
+This emits a machine-readable report covering:
+
+- release asset presence on GitHub
+- npmjs package/version visibility
+- PyPI package/version visibility
+- whether the GitHub release already contains the Python artifacts needed for the documented `uvx` fallback
 
 ## Operator Rule
 

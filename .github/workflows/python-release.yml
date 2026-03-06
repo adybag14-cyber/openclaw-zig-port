@@ -66,11 +66,29 @@ jobs:
           python -m build --sdist --wheel --outdir dist
           python -m twine check dist/*
 
+      - name: Package registry preflight
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          ./scripts/package-registry-status.ps1 `
+            -Repository "${{ github.repository }}" `
+            -ReleaseTag "${{ inputs.release_tag }}" `
+            -PythonPackageName "openclaw-zig-rpc-client" `
+            -PythonVersion "${{ inputs.version }}" `
+            -OutputJsonPath "./release/package-registry-status-python.json"
+
       - name: Upload python dist artifact
         uses: actions/upload-artifact@v4
         with:
           name: python-dist
           path: python/openclaw-zig-rpc-client/dist/*
+
+      - name: Upload package registry preflight
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-registry-status-python
+          path: release/package-registry-status-python.json
 
       - name: Attach python distributions to release
         if: ${{ inputs.release_tag != '' }}
@@ -130,6 +148,7 @@ jobs:
             echo "- release tag: \`${{ inputs.release_tag }}\`"
             echo "- PyPI token configured: \`${{ steps.auth.outputs.has_pypi_token }}\`"
             echo "- trusted publishing outcome: \`${{ steps.publish_trusted.outcome || 'not-run' }}\`"
+            echo "- preflight artifact: \`package-registry-status-python.json\`"
             if [ "${{ steps.auth.outputs.has_pypi_token }}" = "false" ] && [ "${{ steps.publish_trusted.outcome }}" = "failure" ]; then
               echo "- public PyPI publish unavailable; wheel/sdist were still attached to the GitHub release"
             fi
