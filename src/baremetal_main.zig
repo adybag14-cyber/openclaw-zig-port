@@ -4324,6 +4324,92 @@ test "baremetal scheduler reset clears active state and restarts ids" {
     try std.testing.expectEqual(@as(u8, abi.task_state_ready), task.state);
 }
 
+test "baremetal scheduler policy switching stays deterministic under active load" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    status.tick_batch_hint = 1;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_scheduler_reset();
+    oc_timer_reset();
+    oc_wake_queue_clear();
+
+    _ = oc_submit_command(abi.command_scheduler_disable, 0, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_task_create, 6, 1); // low
+    oc_tick();
+    _ = oc_submit_command(abi.command_task_create, 6, 9); // high
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 2), oc_scheduler_task_count());
+
+    _ = oc_submit_command(abi.command_scheduler_enable, 0, 0);
+    oc_tick();
+    var low_task = oc_scheduler_task(0);
+    var high_task = oc_scheduler_task(1);
+    try std.testing.expectEqual(@as(u32, 1), low_task.run_count);
+    try std.testing.expectEqual(@as(u32, 0), high_task.run_count);
+    try std.testing.expectEqual(@as(u8, abi.scheduler_policy_round_robin), oc_scheduler_policy());
+
+    oc_tick();
+    low_task = oc_scheduler_task(0);
+    high_task = oc_scheduler_task(1);
+    try std.testing.expectEqual(@as(u32, 1), low_task.run_count);
+    try std.testing.expectEqual(@as(u32, 1), high_task.run_count);
+    try std.testing.expectEqual(@as(u32, 5), low_task.budget_remaining);
+    try std.testing.expectEqual(@as(u32, 5), high_task.budget_remaining);
+
+    _ = oc_submit_command(abi.command_scheduler_set_policy, abi.scheduler_policy_priority, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.scheduler_policy_priority), oc_scheduler_policy());
+    low_task = oc_scheduler_task(0);
+    high_task = oc_scheduler_task(1);
+    try std.testing.expectEqual(@as(u32, 1), low_task.run_count);
+    try std.testing.expectEqual(@as(u32, 2), high_task.run_count);
+    try std.testing.expectEqual(@as(u32, 4), high_task.budget_remaining);
+
+    const low_id = low_task.task_id;
+    _ = oc_submit_command(abi.command_task_set_priority, low_id, 15);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    low_task = oc_scheduler_task(0);
+    high_task = oc_scheduler_task(1);
+    try std.testing.expectEqual(@as(u8, 15), low_task.priority);
+    try std.testing.expectEqual(@as(u32, 2), low_task.run_count);
+    try std.testing.expectEqual(@as(u32, 2), high_task.run_count);
+    try std.testing.expectEqual(@as(u32, 4), low_task.budget_remaining);
+
+    _ = oc_submit_command(abi.command_scheduler_set_policy, abi.scheduler_policy_round_robin, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.scheduler_policy_round_robin), oc_scheduler_policy());
+    low_task = oc_scheduler_task(0);
+    high_task = oc_scheduler_task(1);
+    try std.testing.expectEqual(@as(u32, 2), low_task.run_count);
+    try std.testing.expectEqual(@as(u32, 3), high_task.run_count);
+    try std.testing.expectEqual(@as(u32, 3), high_task.budget_remaining);
+
+    _ = oc_submit_command(abi.command_scheduler_set_policy, 9, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.scheduler_policy_round_robin), oc_scheduler_policy());
+    low_task = oc_scheduler_task(0);
+    high_task = oc_scheduler_task(1);
+    try std.testing.expectEqual(@as(u32, 3), low_task.run_count);
+    try std.testing.expectEqual(@as(u32, 3), high_task.run_count);
+    try std.testing.expectEqual(@as(u32, 3), low_task.budget_remaining);
+    try std.testing.expectEqual(@as(u32, 3), high_task.budget_remaining);
+}
+
 test "baremetal task wait interrupt command honors vector filters and any mode" {
     status.mode = abi.mode_running;
     status.ticks = 0;

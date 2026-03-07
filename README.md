@@ -70,6 +70,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - optional QEMU scheduler timeslice-update probe validates live `command_scheduler_set_timeslice` changes under active load, proving budget consumption immediately follows the new timeslice (`1 -> 4 -> 2`) and invalid zero is rejected without changing the active value (`ACK=6`, `LAST_OPCODE=29`, `LAST_RESULT=-22`, task budget remaining `9 -> 5 -> 3 -> 1`)
   - optional QEMU scheduler disable-enable probe validates live `command_scheduler_disable` and `command_scheduler_enable` under active load, proving dispatch and budget burn freeze while disabled and resume immediately on re-enable (`ACK=5`, `LAST_OPCODE=24`, `DISPATCH_COUNT 1 -> 1 -> 2`, task budget remaining `4 -> 4 -> 3`)
   - optional QEMU scheduler reset probe validates live `command_scheduler_reset` under active load, proving scheduler state returns to defaults, task state is wiped, task IDs restart at `1`, and fresh dispatch resumes cleanly after re-enable (`ACK=6`, `POST_RESET_NEXT_TASK_ID=1`, `POST_CREATE_TASK0_ID=1`, final `TASK0_BUDGET_REMAINING=5`)
+  - optional QEMU scheduler policy-switch probe validates live round-robin to priority to round-robin transitions under active load, proving the dispatch strategy flips immediately, low-task reprioritization takes effect on the next priority tick, and an invalid policy request is rejected without changing the active round-robin policy (`ACK=10`, `LAST_OPCODE=55`, `LAST_RESULT=-22`, final run counts `3/3`, final budgets `3/3`)
   - optional QEMU scheduler saturation probe validates the 16-slot task-table pressure path end to end, proving the 17th `command_task_create` returns `result_no_space`, task count holds at `16`, then a terminated slot is reused cleanly with a fresh task ID (`6 -> 17`) and the requested replacement priority/budget (`99`, `7`)
   - optional QEMU timer wake probe validates timer reset/quantum/task-wait flow end to end, including fired timer entries and wake-queue telemetry against the freestanding PVH artifact
   - optional QEMU timer quantum probe validates one-shot timer quantum suppression end to end, proving the task stays waiting with an empty wake queue at the pre-boundary tick and only wakes on the next quantum boundary against the freestanding PVH artifact
@@ -480,6 +481,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU scheduler timeslice-update probe
 - optional bare-metal QEMU scheduler disable-enable probe
 - optional bare-metal QEMU scheduler reset probe
+- optional bare-metal QEMU scheduler policy-switch probe
 - optional bare-metal QEMU scheduler saturation probe
 - optional bare-metal QEMU timer wake probe
 - optional bare-metal QEMU timer quantum probe
