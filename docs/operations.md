@@ -3,9 +3,9 @@
 ## Current Snapshot
 
 - Latest published edge release: `v0.2.0-zig-edge.26`
-- Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `47/47` passing
+- Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `54/54` passing
 - Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=169`, `ZIG_EVENTS_COUNT=19`
-- Current head: `f707532`
+- Current head: `main + wake-queue reason-overflow slice`
 - Latest CI:
   - `zig-ci` `22790152153` -> success
   - `docs-pages` `22790152152` -> success
@@ -37,6 +37,7 @@ Recommended sequence:
 ./scripts/baremetal-qemu-periodic-timer-probe-check.ps1
 ./scripts/baremetal-qemu-interrupt-timeout-probe-check.ps1
 ./scripts/baremetal-qemu-wake-queue-selective-probe-check.ps1
+./scripts/baremetal-qemu-wake-queue-reason-overflow-probe-check.ps1
 ./scripts/baremetal-qemu-wake-queue-fifo-probe-check.ps1
 ./scripts/baremetal-qemu-allocator-syscall-probe-check.ps1
 ./scripts/baremetal-qemu-allocator-syscall-failure-probe-check.ps1
@@ -93,6 +94,7 @@ Recommended sequence:
 - optional bare-metal QEMU wake-queue selective probe (timer, interrupt, and manual wake generation plus `pop_reason`, `pop_vector`, `pop_reason_vector`, and `pop_before_tick` queue drains against the freestanding PVH artifact)
 - optional bare-metal QEMU wake-queue selective-overflow probe (wrapped 64-entry interrupt wake ring selective drain proof, preserving FIFO survivor ordering after `pop_vector(13,31)` and final `pop_reason_vector(interrupt@13)` against the freestanding PVH artifact)
 - optional bare-metal QEMU wake-queue before-tick-overflow probe (wrapped 64-entry interrupt wake ring deadline-drain proof, preserving FIFO survivor ordering through two `pop_before_tick` threshold drains and a final empty-queue `result_not_found` against the freestanding PVH artifact)
+- optional bare-metal QEMU wake-queue reason-overflow probe (wrapped 64-entry mixed `manual`/`interrupt` wake ring drain proof, preserving FIFO survivor ordering through `pop_reason(manual,31)` and final `pop_reason(manual,99)` against the freestanding PVH artifact)
 - optional bare-metal QEMU wake-queue FIFO probe (`command_wake_queue_pop` removes the logical oldest wake first, preserves the second queued manual wake as the new head, and returns `result_not_found` once the queue is empty)
 - optional bare-metal QEMU wake-queue summary/age probe (exported `oc_wake_queue_summary_ptr` and `oc_wake_queue_age_buckets_ptr_quantum_2` snapshots before and after selective queue drains against the freestanding PVH artifact)
 - optional bare-metal QEMU wake-queue overflow probe (sustained manual wake pressure over one waiting task, proving the 64-entry ring retains the newest window with `overflow=2` against the freestanding PVH artifact)
@@ -149,6 +151,7 @@ Recommended sequence:
 - bare-metal optional QEMU wake-queue selective probe in validate stage
 - bare-metal optional QEMU wake-queue selective-overflow probe in validate stage
 - bare-metal optional QEMU wake-queue before-tick-overflow probe in validate stage
+- bare-metal optional QEMU wake-queue reason-overflow probe in validate stage
 - bare-metal optional QEMU wake-queue FIFO probe in validate stage
 - bare-metal optional QEMU wake-queue summary/age probe in validate stage
 - bare-metal optional QEMU wake-queue overflow probe in validate stage

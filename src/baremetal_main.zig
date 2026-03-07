@@ -3537,6 +3537,63 @@ test "baremetal wake queue selective pop preserves order after overflow" {
     try std.testing.expectEqual(@as(u8, 31), last_after_reason_vector.vector);
 }
 
+test "baremetal wake queue reason pop preserves order after overflow" {
+    resetBaremetalRuntimeForTest();
+
+    const cap = oc_wake_queue_capacity();
+    var idx: u32 = 0;
+    while (idx < cap + 2) : (idx += 1) {
+        const reason: u8 = if (@mod(idx, 2) == 0) abi.wake_reason_manual else abi.wake_reason_interrupt;
+        const vector: u8 = if (reason == abi.wake_reason_interrupt) 13 else 0;
+        wakeQueuePush(8500 + idx, 0, reason, vector, 450 + idx, idx + 1);
+    }
+
+    try std.testing.expectEqual(cap, oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_overflow_count());
+    try std.testing.expectEqual(@as(u32, 32), oc_wake_queue_reason_count(abi.wake_reason_manual));
+    try std.testing.expectEqual(@as(u32, 32), oc_wake_queue_reason_count(abi.wake_reason_interrupt));
+
+    _ = oc_submit_command(abi.command_wake_queue_pop_reason, abi.wake_reason_manual, 31);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 33), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 33), oc_wake_queue_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_tail_index());
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_overflow_count());
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_reason_count(abi.wake_reason_manual));
+    try std.testing.expectEqual(@as(u32, 32), oc_wake_queue_reason_count(abi.wake_reason_interrupt));
+    const first_after_reason = oc_wake_queue_event(0);
+    try std.testing.expectEqual(@as(u32, 4), first_after_reason.seq);
+    try std.testing.expectEqual(@as(u32, 8503), first_after_reason.task_id);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_interrupt), first_after_reason.reason);
+    const retained_reason = oc_wake_queue_event(31);
+    try std.testing.expectEqual(@as(u32, 65), retained_reason.seq);
+    try std.testing.expectEqual(@as(u32, 8564), retained_reason.task_id);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_manual), retained_reason.reason);
+    const last_after_reason = oc_wake_queue_event(32);
+    try std.testing.expectEqual(@as(u32, 66), last_after_reason.seq);
+    try std.testing.expectEqual(@as(u32, 8565), last_after_reason.task_id);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_interrupt), last_after_reason.reason);
+
+    _ = oc_submit_command(abi.command_wake_queue_pop_reason, abi.wake_reason_manual, 99);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 32), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 32), oc_wake_queue_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_tail_index());
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_overflow_count());
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_reason_count(abi.wake_reason_manual));
+    try std.testing.expectEqual(@as(u32, 32), oc_wake_queue_reason_count(abi.wake_reason_interrupt));
+    const first_after_second_reason = oc_wake_queue_event(0);
+    try std.testing.expectEqual(@as(u32, 4), first_after_second_reason.seq);
+    try std.testing.expectEqual(@as(u32, 8503), first_after_second_reason.task_id);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_interrupt), first_after_second_reason.reason);
+    const last_after_second_reason = oc_wake_queue_event(31);
+    try std.testing.expectEqual(@as(u32, 66), last_after_second_reason.seq);
+    try std.testing.expectEqual(@as(u32, 8565), last_after_second_reason.task_id);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_interrupt), last_after_second_reason.reason);
+}
+
 test "baremetal wake queue before-tick pop preserves order after overflow" {
     resetBaremetalRuntimeForTest();
 
