@@ -862,7 +862,7 @@ pub export fn oc_tick_n(iterations: u32) void {
     }
 }
 
-pub export fn _start() noreturn {
+fn baremetalStart() callconv(.c) noreturn {
     if (qemu_smoke_enabled) {
         qemuExit(qemu_boot_ok_code);
     }
@@ -876,6 +876,12 @@ pub export fn _start() noreturn {
     while (true) {
         oc_tick();
         spinPause(100_000);
+    }
+}
+
+comptime {
+    if (!builtin.is_test) {
+        @export(&baremetalStart, .{ .name = "_start" });
     }
 }
 
