@@ -62,6 +62,7 @@ Recommended sequence:
 - appliance minimal profile smoke check (persisted state + auth + secure-boot/readiness contract)
 - optional bare-metal QEMU scheduler probe (scheduler reset/timeslice/task-create/policy-enable against the freestanding PVH artifact)
 - optional bare-metal QEMU descriptor bootdiag probe (boot-diagnostics reset/stack capture/boot-phase transition and descriptor reinit/load telemetry against the freestanding PVH artifact)
+- optional bare-metal QEMU bootdiag/history-clear probe (boot-diagnostics reset plus live `command_clear_command_history` and `command_clear_health_history` control semantics against the freestanding PVH artifact)
 - optional bare-metal QEMU descriptor table content probe (live `gdtr/idtr` limits+bases, code/data `gdt` entry fields, and `idt[0]/idt[255]` selector/type/stub wiring against the freestanding PVH artifact)
 - optional bare-metal QEMU descriptor dispatch probe (descriptor reinit/load plus post-load interrupt and exception dispatch coherence, including interrupt/exception history rings, against the freestanding PVH artifact)
 - optional bare-metal QEMU vector history overflow probe (interrupt/exception counter resets plus repeated dispatch saturation, proving history-ring overflow and per-vector telemetry against the freestanding PVH artifact)
@@ -102,6 +103,7 @@ Recommended sequence:
 - bare-metal optional QEMU periodic interrupt probe in validate stage
 - bare-metal optional QEMU interrupt timeout probe in validate stage
 - bare-metal optional QEMU descriptor bootdiag probe in validate stage
+- bare-metal optional QEMU bootdiag/history-clear probe in validate stage
 - bare-metal optional QEMU descriptor table content probe in validate stage
 - bare-metal optional QEMU descriptor dispatch probe in validate stage
 - bare-metal optional QEMU vector history overflow probe in validate stage

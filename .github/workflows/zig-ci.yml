@@ -126,6 +126,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-descriptor-bootdiag-probe-check.ps1
 
+      - name: Bare-metal QEMU bootdiag history clear probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-bootdiag-history-clear-probe-check.ps1
+
       - name: Bare-metal QEMU descriptor table content probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-descriptor-table-content-probe-check.ps1
