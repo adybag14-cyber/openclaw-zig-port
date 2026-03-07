@@ -4479,6 +4479,64 @@ test "baremetal task terminate command fails over cleanly under active load" {
     try std.testing.expectEqual(@as(u8, abi.task_state_terminated), low_task.state);
 }
 
+test "baremetal panic flag freezes scheduler until mode recovery under active load" {
+    resetBaremetalRuntimeForTest();
+
+    _ = oc_submit_command(abi.command_scheduler_enable, 0, 0);
+    oc_tick();
+    try std.testing.expect(oc_scheduler_enabled());
+
+    _ = oc_submit_command(abi.command_task_create, 6, 2);
+    oc_tick();
+    var task = oc_scheduler_task(0);
+    if (task.run_count == 0) {
+        oc_tick();
+        task = oc_scheduler_task(0);
+    }
+    try std.testing.expect(task.task_id != 0);
+    try std.testing.expectEqual(@as(u32, 1), task.run_count);
+    try std.testing.expectEqual(@as(u32, 5), task.budget_remaining);
+
+    const dispatch_before_panic = oc_scheduler_state_ptr().dispatch_count;
+    _ = oc_submit_command(abi.command_trigger_panic_flag, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.mode_panicked), status.mode);
+    try std.testing.expectEqual(@as(u32, 1), status.panic_count);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_panicked), boot_diagnostics.phase);
+    try std.testing.expectEqual(dispatch_before_panic, oc_scheduler_state_ptr().dispatch_count);
+    try std.testing.expectEqual(@as(u8, scheduler_no_slot), oc_scheduler_state_ptr().running_slot);
+    task = oc_scheduler_task(0);
+    try std.testing.expectEqual(@as(u32, 1), task.run_count);
+    try std.testing.expectEqual(@as(u32, 5), task.budget_remaining);
+
+    oc_tick();
+    try std.testing.expectEqual(dispatch_before_panic, oc_scheduler_state_ptr().dispatch_count);
+    try std.testing.expectEqual(@as(u8, scheduler_no_slot), oc_scheduler_state_ptr().running_slot);
+    task = oc_scheduler_task(0);
+    try std.testing.expectEqual(@as(u32, 1), task.run_count);
+    try std.testing.expectEqual(@as(u32, 5), task.budget_remaining);
+
+    _ = oc_submit_command(abi.command_set_mode, abi.mode_running, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.mode_running), status.mode);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_panicked), boot_diagnostics.phase);
+    try std.testing.expectEqual(dispatch_before_panic + 1, oc_scheduler_state_ptr().dispatch_count);
+    task = oc_scheduler_task(0);
+    try std.testing.expectEqual(@as(u32, 2), task.run_count);
+    try std.testing.expectEqual(@as(u32, 4), task.budget_remaining);
+
+    _ = oc_submit_command(abi.command_set_boot_phase, abi.boot_phase_runtime, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_runtime), boot_diagnostics.phase);
+    try std.testing.expectEqual(dispatch_before_panic + 2, oc_scheduler_state_ptr().dispatch_count);
+    task = oc_scheduler_task(0);
+    try std.testing.expectEqual(@as(u32, 3), task.run_count);
+    try std.testing.expectEqual(@as(u32, 3), task.budget_remaining);
+}
+
 test "baremetal task wait interrupt command honors vector filters and any mode" {
     status.mode = abi.mode_running;
     status.ticks = 0;

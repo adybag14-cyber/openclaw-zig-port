@@ -3,12 +3,12 @@
 ## Current Snapshot
 
 - Latest published edge release: `v0.2.0-zig-edge.26`
-- Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `54/54` passing
+- Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `64/64` passing
 - Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=169`, `ZIG_EVENTS_COUNT=19`
-- Current head: `main + wake-queue reason-overflow slice`
+- Current head: `main + panic-recovery slice`
 - Latest CI:
-  - `zig-ci` `22790152153` -> success
-  - `docs-pages` `22790152152` -> success
+  - `zig-ci` `22804683149` -> success
+  - `docs-pages` `22804683158` -> success
 
 ## Local Validation Matrix
 
@@ -99,6 +99,7 @@ Recommended sequence:
 - optional bare-metal QEMU interrupt timeout clamp probe (near-`u64::max` `task_wait_interrupt_for` deadline saturates to `18446744073709551615`, the queued wake records that saturated tick, and the live wake boundary wraps cleanly to `0` under the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt filter probe (`task_wait_interrupt(any)` wakes on vector `200`, vector-scoped `task_wait_interrupt(13)` ignores non-matching `200`, then wakes on matching `13`, and invalid vector `65536` is rejected with `-22` against the freestanding PVH artifact)
 - optional bare-metal QEMU timer-disable interrupt probe (`command_timer_disable` suppresses timer dispatch while `command_trigger_interrupt` still wakes an interrupt waiter immediately, and the deferred one-shot timer wake is only delivered after `command_timer_enable` against the freestanding PVH artifact)
+- optional bare-metal QEMU panic-recovery probe (`command_trigger_panic_flag` freezes dispatch and budget burn under active load, `command_set_mode(mode_running)` resumes the same task immediately, and `command_set_boot_phase(runtime)` restores boot diagnostics against the freestanding PVH artifact)
 - optional bare-metal QEMU manual-wait interrupt probe (`task_wait` remains blocked with `wake_queue_len=0` and manual wait-kind intact after interrupt `44`, then recovers via explicit `scheduler_wake_task` against the freestanding PVH artifact)
 - optional bare-metal QEMU wake-queue selective probe (timer, interrupt, and manual wake generation plus `pop_reason`, `pop_vector`, `pop_reason_vector`, and `pop_before_tick` queue drains against the freestanding PVH artifact)
 - optional bare-metal QEMU wake-queue selective-overflow probe (wrapped 64-entry interrupt wake ring selective drain proof, preserving FIFO survivor ordering after `pop_vector(13,31)` and final `pop_reason_vector(interrupt@13)` against the freestanding PVH artifact)
@@ -179,6 +180,7 @@ Recommended sequence:
 - bare-metal optional QEMU reset counters probe in validate stage
 - bare-metal optional QEMU task lifecycle probe in validate stage
 - bare-metal optional QEMU active-task terminate probe in validate stage
+- bare-metal optional QEMU panic-recovery probe in validate stage
 - bare-metal optional QEMU interrupt mask exception probe in validate stage
 - bare-metal optional QEMU interrupt mask profile probe in validate stage
 - npm package dry-run validation in release validate stage

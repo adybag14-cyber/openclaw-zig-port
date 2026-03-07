@@ -376,6 +376,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-active-task-terminate-probe-check.ps1
 
+      - name: Bare-metal QEMU panic recovery probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-panic-recovery-probe-check.ps1
+
       - name: Bare-metal QEMU manual wait interrupt probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-manual-wait-interrupt-probe-check.ps1
