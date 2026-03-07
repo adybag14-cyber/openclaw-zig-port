@@ -3422,6 +3422,62 @@ test "baremetal wake queue ring keeps newest manual wakes after overflow" {
     try std.testing.expectEqual(@as(u64, 165), last.tick);
 }
 
+test "baremetal wake queue batch pop recovers correctly after overflow" {
+    resetBaremetalRuntimeForTest();
+
+    const cap = oc_wake_queue_capacity();
+    var idx: u32 = 0;
+    while (idx < cap + 2) : (idx += 1) {
+        wakeQueuePush(6000 + idx, 0, abi.wake_reason_manual, 0, 200 + idx, 0);
+    }
+
+    try std.testing.expectEqual(cap, oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_overflow_count());
+
+    _ = oc_submit_command(abi.command_wake_queue_pop, cap - 2, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_overflow_count());
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_tail_index());
+    const survivor0 = oc_wake_queue_event(0);
+    const survivor1 = oc_wake_queue_event(1);
+    try std.testing.expectEqual(@as(u32, 65), survivor0.seq);
+    try std.testing.expectEqual(@as(u32, 6064), survivor0.task_id);
+    try std.testing.expectEqual(@as(u64, 264), survivor0.tick);
+    try std.testing.expectEqual(@as(u32, 66), survivor1.seq);
+    try std.testing.expectEqual(@as(u32, 6065), survivor1.task_id);
+    try std.testing.expectEqual(@as(u64, 265), survivor1.tick);
+
+    _ = oc_submit_command(abi.command_wake_queue_pop, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_tail_index());
+    const final_survivor = oc_wake_queue_event(0);
+    try std.testing.expectEqual(@as(u32, 66), final_survivor.seq);
+    try std.testing.expectEqual(@as(u32, 6065), final_survivor.task_id);
+
+    _ = oc_submit_command(abi.command_wake_queue_pop, 9, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_head_index());
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_tail_index());
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_overflow_count());
+
+    wakeQueuePush(7000, 0, abi.wake_reason_manual, 0, 300, 0);
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 3), oc_wake_queue_head_index());
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_tail_index());
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_overflow_count());
+    const reused = oc_wake_queue_event(0);
+    try std.testing.expectEqual(@as(u32, 67), reused.seq);
+    try std.testing.expectEqual(@as(u32, 7000), reused.task_id);
+    try std.testing.expectEqual(@as(u64, 300), reused.tick);
+}
+
 test "baremetal wake queue reason pop command removes only matching reasons" {
     resetBaremetalRuntimeForTest();
 

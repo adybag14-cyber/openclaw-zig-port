@@ -266,6 +266,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-wake-queue-summary-age-probe-check.ps1
 
+      - name: Bare-metal QEMU wake queue batch pop probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-batch-pop-probe-check.ps1
+
       - name: Bare-metal QEMU wake queue overflow probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-wake-queue-overflow-probe-check.ps1
