@@ -3422,6 +3422,43 @@ test "baremetal wake queue ring keeps newest manual wakes after overflow" {
     try std.testing.expectEqual(@as(u64, 165), last.tick);
 }
 
+test "baremetal wake queue clear command resets wrapped queue and reuse" {
+    resetBaremetalRuntimeForTest();
+
+    const cap = oc_wake_queue_capacity();
+    var idx: u32 = 0;
+    while (idx < cap + 2) : (idx += 1) {
+        wakeQueuePush(5500 + idx, 0, abi.wake_reason_manual, 0, 500 + idx, 0);
+    }
+
+    try std.testing.expectEqual(cap, oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_overflow_count());
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_head_index());
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_tail_index());
+
+    _ = oc_submit_command(abi.command_wake_queue_clear, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_tail_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_overflow_count());
+    const cleared = oc_wake_queue_summary();
+    try std.testing.expectEqual(@as(u32, 0), cleared.len);
+    try std.testing.expectEqual(@as(u32, 0), cleared.overflow_count);
+    try std.testing.expectEqual(@as(u32, 0), cleared.reason_manual_count);
+
+    wakeQueuePush(6600, 0, abi.wake_reason_manual, 0, 900, 0);
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_tail_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_overflow_count());
+    const reused = oc_wake_queue_event(0);
+    try std.testing.expectEqual(@as(u32, 1), reused.seq);
+    try std.testing.expectEqual(@as(u32, 6600), reused.task_id);
+    try std.testing.expectEqual(@as(u64, 900), reused.tick);
+}
+
 test "baremetal wake queue batch pop recovers correctly after overflow" {
     resetBaremetalRuntimeForTest();
 

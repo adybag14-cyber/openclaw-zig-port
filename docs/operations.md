@@ -157,6 +157,7 @@ Recommended sequence:
 - bare-metal optional QEMU wake-queue FIFO probe in validate stage
 - bare-metal optional QEMU wake-queue summary/age probe in validate stage
 - bare-metal optional QEMU wake-queue overflow probe in validate stage
+- bare-metal optional QEMU wake-queue clear probe in validate stage
 - bare-metal optional QEMU wake-queue batch-pop probe in validate stage
 - bare-metal optional QEMU allocator syscall probe in validate stage
 - bare-metal optional QEMU allocator syscall failure probe in validate stage
