@@ -75,6 +75,7 @@ Recommended sequence:
 - optional bare-metal QEMU feature-flags/tick-batch probe (`command_set_feature_flags` updates the live flag mask, `command_set_tick_batch_hint` raises runtime tick progression from `1` to `4`, and an invalid zero hint is rejected without changing the active batch size against the freestanding PVH artifact)
 - optional bare-metal QEMU vector counter reset probe (`command_reset_vector_counters` after live interrupt+exception dispatch, proving vectors `10/200/14` and exception vectors `10/14` zero while aggregate counts stay at `4/3` against the freestanding PVH artifact)
 - optional bare-metal QEMU vector history overflow probe (interrupt/exception counter resets plus repeated dispatch saturation, proving history-ring overflow and per-vector telemetry against the freestanding PVH artifact)
+- optional bare-metal QEMU vector history clear probe (dedicated mailbox clear-path proof for `command_clear_interrupt_history` and `command_clear_exception_history`, validating that history rings/overflow reset without disturbing aggregate interrupt/exception counters against the freestanding PVH artifact)
 - optional bare-metal QEMU command-health history probe (repeated `command_set_health_code` mailbox execution, proving command-history overflow, health-history overflow, and retained oldest/newest payload ordering against the freestanding PVH artifact)
 - optional bare-metal QEMU mode/boot-phase history probe (command/runtime/panic reason ordering plus post-clear saturation of the 64-entry mode-history and boot-phase-history rings against the freestanding PVH artifact)
 - optional bare-metal QEMU scheduler priority budget probe (live `command_scheduler_set_default_budget` plus `command_task_set_priority` proof, including zero-budget task inheritance and dispatch-order flip under the priority scheduler against the freestanding PVH artifact)
@@ -144,6 +145,7 @@ Recommended sequence:
 - bare-metal optional QEMU descriptor dispatch probe in validate stage
 - bare-metal optional QEMU vector counter reset probe in validate stage
 - bare-metal optional QEMU vector history overflow probe in validate stage
+- bare-metal optional QEMU vector history clear probe in validate stage
 - bare-metal optional QEMU command-health history probe in validate stage
 - bare-metal optional QEMU mode/boot-phase history probe in validate stage
 - bare-metal optional QEMU scheduler priority budget probe in validate stage

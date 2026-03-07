@@ -3979,6 +3979,56 @@ test "baremetal task wait interrupt command honors vector filters and any mode" 
     try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
 }
 
+test "baremetal interrupt and exception history clear commands preserve counters" {
+    resetBaremetalRuntimeForTest();
+
+    _ = oc_submit_command(abi.command_reset_interrupt_counters, 0, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_clear_interrupt_history, 0, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_reset_exception_counters, 0, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_clear_exception_history, 0, 0);
+    oc_tick();
+
+    _ = oc_submit_command(abi.command_trigger_interrupt, 200, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_trigger_exception, 13, 0xCAFE);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u64, 2), x86_bootstrap.oc_interrupt_count());
+    try std.testing.expectEqual(@as(u64, 1), x86_bootstrap.oc_exception_count());
+    try std.testing.expectEqual(@as(u32, 2), x86_bootstrap.oc_interrupt_history_len());
+    try std.testing.expectEqual(@as(u32, 1), x86_bootstrap.oc_exception_history_len());
+    const interrupt0 = x86_bootstrap.oc_interrupt_history_event(0);
+    try std.testing.expectEqual(@as(u8, 200), interrupt0.vector);
+    try std.testing.expectEqual(@as(u8, 0), interrupt0.is_exception);
+    try std.testing.expectEqual(@as(u64, 0), interrupt0.code);
+    const interrupt1 = x86_bootstrap.oc_interrupt_history_event(1);
+    try std.testing.expectEqual(@as(u8, 13), interrupt1.vector);
+    try std.testing.expectEqual(@as(u8, 1), interrupt1.is_exception);
+    try std.testing.expectEqual(@as(u64, 0xCAFE), interrupt1.code);
+    const exception0 = x86_bootstrap.oc_exception_history_event(0);
+    try std.testing.expectEqual(@as(u8, 13), exception0.vector);
+    try std.testing.expectEqual(@as(u64, 0xCAFE), exception0.code);
+
+    _ = oc_submit_command(abi.command_clear_interrupt_history, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 0), x86_bootstrap.oc_interrupt_history_len());
+    try std.testing.expectEqual(@as(u32, 0), x86_bootstrap.oc_interrupt_history_overflow_count());
+    try std.testing.expectEqual(@as(u64, 2), x86_bootstrap.oc_interrupt_count());
+    try std.testing.expectEqual(@as(u32, 1), x86_bootstrap.oc_exception_history_len());
+
+    _ = oc_submit_command(abi.command_clear_exception_history, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 0), x86_bootstrap.oc_exception_history_len());
+    try std.testing.expectEqual(@as(u32, 0), x86_bootstrap.oc_exception_history_overflow_count());
+    try std.testing.expectEqual(@as(u64, 2), x86_bootstrap.oc_interrupt_count());
+    try std.testing.expectEqual(@as(u64, 1), x86_bootstrap.oc_exception_count());
+}
+
 test "baremetal interrupt mask commands gate non-exception interrupt wakeups" {
     status.mode = abi.mode_running;
     status.ticks = 0;

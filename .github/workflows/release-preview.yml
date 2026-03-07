@@ -176,6 +176,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-vector-history-overflow-probe-check.ps1
 
+      - name: Bare-metal QEMU vector history clear probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-vector-history-clear-probe-check.ps1
+
       - name: Bare-metal QEMU command-health history probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-command-health-history-probe-check.ps1
