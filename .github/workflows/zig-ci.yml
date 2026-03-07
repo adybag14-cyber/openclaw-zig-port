@@ -202,6 +202,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-timer-wake-probe-check.ps1
 
+      - name: Bare-metal QEMU timer quantum probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-quantum-probe-check.ps1
+
       - name: Bare-metal QEMU periodic timer probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-periodic-timer-probe-check.ps1
