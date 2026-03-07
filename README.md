@@ -11,7 +11,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - Original OpenClaw beta baseline (`v2026.3.2-beta.1`): `94/94` covered
   - Union baseline: `135/135` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
-- Latest local validation: `zig build test --summary all` -> main `203/203` + bare-metal host `64/64` passing
+- Latest local validation: `zig build test --summary all` -> main `203/203` + bare-metal host `66/66` passing
 - Latest published edge release tag: `v0.2.0-zig-edge.26`
 - Recent FS1 progress (2026-03-06):
   - runtime recovery posture is now surfaced on live diagnostics and maintenance RPCs
@@ -31,6 +31,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - bare-metal periodic timer pause/resume behavior is now enforced by a live QEMU+GDB probe (`command_timer_schedule_periodic`, `command_timer_disable`, `command_timer_enable`) that snapshots the first resumed periodic fire against the freestanding PVH artifact
   - bare-metal periodic timer saturation behavior is now enforced by a live QEMU+GDB probe that arms a periodic timer at `u64::max-1`, proves the first fire lands at `18446744073709551615`, re-arms to the same saturated deadline instead of wrapping, and then holds stable after the runtime tick counter wraps to `0`
   - bare-metal wake-queue summary/age telemetry is now enforced by a live QEMU+GDB probe (`oc_wake_queue_summary_ptr`, `oc_wake_queue_age_buckets_ptr_quantum_2`) before and after selective queue drains over mixed timer/interrupt/manual wake queues
+  - bare-metal selective wake-queue telemetry is now enforced by a live QEMU+GDB probe through a generic count-query snapshot helper (`oc_wake_queue_count_query_ptr`, `oc_wake_queue_count_snapshot_ptr`), proving live vector counts (`13`, `31`), exact reason+vector counts (`interrupt@31`), before-tick counts, and invalid `reason+vector=0` rejection in the same selective-drain run
   - bare-metal wake-queue reason-selective overflow behavior is now enforced by a live QEMU+GDB probe that drives `66` alternating manual / interrupt wake cycles through one task and proves `command_wake_queue_pop_reason` preserves FIFO survivor ordering across the wrapped ring (`seq 3 -> 66`, then `seq 4 -> 66`, then interrupt-only `seq 4 -> 66`)
   - bare-metal wake-queue overflow retention is now enforced by a live QEMU+GDB probe that drives `66` manual wakes through one waiting task and proves the 64-entry ring retains the newest window (`seq 3 -> 66`) with `overflow=2`
   - bare-metal wake-queue clear recovery is now enforced by a live QEMU+GDB probe that clears the wrapped ring after `66` manual wakes, proves the queue resets to `count/head/tail/overflow = 0`, and then reuses the queue cleanly from `seq=1`

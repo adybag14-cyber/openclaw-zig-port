@@ -22,6 +22,19 @@ const BaremetalTimerEntry = abi.BaremetalTimerEntry;
 const BaremetalWakeEvent = abi.BaremetalWakeEvent;
 const BaremetalWakeQueueSummary = abi.BaremetalWakeQueueSummary;
 const BaremetalWakeQueueAgeBuckets = abi.BaremetalWakeQueueAgeBuckets;
+const BaremetalWakeQueueCountQuery = extern struct {
+    vector: u8,
+    reason: u8,
+    reserved0: u16,
+    reserved1: u32,
+    max_tick: u64,
+};
+const BaremetalWakeQueueCountSnapshot = extern struct {
+    vector_count: u32,
+    before_tick_count: u32,
+    reason_vector_count: u32,
+    reserved0: u32,
+};
 
 const multiboot2_magic: u32 = 0xE85250D6;
 const multiboot2_architecture_i386: u32 = 0;
@@ -226,6 +239,14 @@ var wake_queue_head: u32 = 0;
 var wake_queue_tail: u32 = 0;
 var wake_queue_overflow: u32 = 0;
 var wake_queue_seq: u32 = 0;
+var wake_queue_count_query: BaremetalWakeQueueCountQuery = .{
+    .vector = 0,
+    .reason = 0,
+    .reserved0 = 0,
+    .reserved1 = 0,
+    .max_tick = 0,
+};
+var wake_queue_count_snapshot: BaremetalWakeQueueCountSnapshot = std.mem.zeroes(BaremetalWakeQueueCountSnapshot);
 var wake_queue_summary_snapshot: BaremetalWakeQueueSummary = std.mem.zeroes(BaremetalWakeQueueSummary);
 var wake_queue_age_buckets_snapshot: BaremetalWakeQueueAgeBuckets = std.mem.zeroes(BaremetalWakeQueueAgeBuckets);
 
@@ -717,6 +738,21 @@ pub export fn oc_wake_queue_reason_vector_count(reason: u8, vector: u8) u32 {
         if (event.reason == reason and event.vector == vector) count +%= 1;
     }
     return count;
+}
+
+pub export fn oc_wake_queue_count_query_ptr() *BaremetalWakeQueueCountQuery {
+    return &wake_queue_count_query;
+}
+
+pub export fn oc_wake_queue_count_snapshot_ptr() *const BaremetalWakeQueueCountSnapshot {
+    wake_queue_count_snapshot.vector_count = oc_wake_queue_vector_count(wake_queue_count_query.vector);
+    wake_queue_count_snapshot.before_tick_count = oc_wake_queue_before_tick_count(wake_queue_count_query.max_tick);
+    wake_queue_count_snapshot.reason_vector_count = oc_wake_queue_reason_vector_count(
+        wake_queue_count_query.reason,
+        wake_queue_count_query.vector,
+    );
+    wake_queue_count_snapshot.reserved0 = 0;
+    return &wake_queue_count_snapshot;
 }
 
 pub export fn oc_wake_queue_summary() BaremetalWakeQueueSummary {
@@ -4041,6 +4077,43 @@ test "baremetal wake queue reason-vector pop command removes only exact pairs" {
     _ = oc_submit_command(abi.command_wake_queue_pop_reason_vector, 0, 1);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+}
+
+test "baremetal wake queue count snapshot ptr reflects live query" {
+    resetBaremetalRuntimeForTest();
+
+    wakeQueuePush(5001, 51, abi.wake_reason_timer, 0, 10, 0);
+    wakeQueuePush(5002, 52, abi.wake_reason_interrupt, 13, 20, 5);
+    wakeQueuePush(5003, 53, abi.wake_reason_interrupt, 13, 30, 6);
+    wakeQueuePush(5004, 54, abi.wake_reason_interrupt, 31, 40, 7);
+    wakeQueuePush(5005, 55, abi.wake_reason_manual, 0, 50, 8);
+
+    const query = oc_wake_queue_count_query_ptr();
+    query.* = .{
+        .vector = 13,
+        .reason = abi.wake_reason_interrupt,
+        .reserved0 = 0,
+        .reserved1 = 0,
+        .max_tick = 20,
+    };
+    const first_snapshot = oc_wake_queue_count_snapshot_ptr().*;
+    try std.testing.expectEqual(@as(u32, 2), first_snapshot.vector_count);
+    try std.testing.expectEqual(@as(u32, 2), first_snapshot.before_tick_count);
+    try std.testing.expectEqual(@as(u32, 2), first_snapshot.reason_vector_count);
+
+    query.vector = 31;
+    query.max_tick = 40;
+    const second_snapshot = oc_wake_queue_count_snapshot_ptr().*;
+    try std.testing.expectEqual(@as(u32, 1), second_snapshot.vector_count);
+    try std.testing.expectEqual(@as(u32, 4), second_snapshot.before_tick_count);
+    try std.testing.expectEqual(@as(u32, 1), second_snapshot.reason_vector_count);
+
+    query.reason = abi.wake_reason_manual;
+    query.max_tick = 55;
+    const third_snapshot = oc_wake_queue_count_snapshot_ptr().*;
+    try std.testing.expectEqual(@as(u32, 1), third_snapshot.vector_count);
+    try std.testing.expectEqual(@as(u32, 5), third_snapshot.before_tick_count);
+    try std.testing.expectEqual(@as(u32, 0), third_snapshot.reason_vector_count);
 }
 
 test "baremetal scheduler priority policy favors highest priority and supports updates" {

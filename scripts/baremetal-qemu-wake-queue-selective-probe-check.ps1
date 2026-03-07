@@ -60,6 +60,14 @@ $wakeEventReasonOffset = 12
 $wakeEventVectorOffset = 13
 $wakeEventTickOffset = 16
 
+$countQueryVectorOffset = 0
+$countQueryReasonOffset = 1
+$countQueryMaxTickOffset = 8
+
+$countSnapshotVectorCountOffset = 0
+$countSnapshotBeforeTickCountOffset = 4
+$countSnapshotReasonVectorCountOffset = 8
+
 $timerPendingWakeCountOffset = 2
 
 function Resolve-ZigExecutable {
@@ -381,6 +389,8 @@ $commandMailboxAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Patte
 $wakeQueueAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal_main\.wake_queue$' -SymbolName "baremetal_main.wake_queue"
 $wakeQueueCountAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal_main\.wake_queue_count$' -SymbolName "baremetal_main.wake_queue_count"
 $timerStateAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal_main\.timer_state$' -SymbolName "baremetal_main.timer_state"
+$wakeQueueCountQueryPtrAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[Tt]\soc_wake_queue_count_query_ptr$' -SymbolName "oc_wake_queue_count_query_ptr"
+$wakeQueueCountSnapshotPtrAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[Tt]\soc_wake_queue_count_snapshot_ptr$' -SymbolName "oc_wake_queue_count_snapshot_ptr"
 $artifactForGdb = $artifact.Replace('\', '/')
 
 if (Test-Path $gdbStdout) { Remove-Item -Force $gdbStdout }
@@ -616,6 +626,17 @@ if `$stage == 19
     set `$pre_task4 = *(unsigned int*)(0x$wakeQueueAddress+($wakeEventStride*4)+$wakeEventTaskIdOffset)
     set `$pre_oldest_tick = *(unsigned long long*)(0x$wakeQueueAddress+$wakeEventTickOffset)
     set `$pre_newest_tick = *(unsigned long long*)(0x$wakeQueueAddress+($wakeEventStride*4)+$wakeEventTickOffset)
+    set `$count_query_ptr = ((unsigned long long (*)())0x$wakeQueueCountQueryPtrAddress)()
+    set *(unsigned char*)(`$count_query_ptr+$countQueryVectorOffset) = $interruptVectorA
+    set *(unsigned char*)(`$count_query_ptr+$countQueryReasonOffset) = $wakeReasonInterrupt
+    set *(unsigned long long*)(`$count_query_ptr+$countQueryMaxTickOffset) = `$pre_oldest_tick
+    set `$count_snapshot_ptr = ((unsigned long long (*)())0x$wakeQueueCountSnapshotPtrAddress)()
+    set `$pre_vector_count_13 = *(unsigned int*)(`$count_snapshot_ptr+$countSnapshotVectorCountOffset)
+    set *(unsigned char*)(`$count_query_ptr+$countQueryVectorOffset) = $interruptVectorB
+    set *(unsigned char*)(`$count_query_ptr+$countQueryReasonOffset) = $wakeReasonInterrupt
+    set *(unsigned long long*)(`$count_query_ptr+$countQueryMaxTickOffset) = `$pre_oldest_tick
+    set `$count_snapshot_ptr = ((unsigned long long (*)())0x$wakeQueueCountSnapshotPtrAddress)()
+    set `$pre_vector_count_31 = *(unsigned int*)(`$count_snapshot_ptr+$countSnapshotVectorCountOffset)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $wakeQueuePopReasonOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 20
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = $wakeReasonInterrupt
@@ -640,6 +661,18 @@ if `$stage == 21
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 21 && *(unsigned int*)(0x$wakeQueueCountAddress) == 3 && *(unsigned int*)(0x$wakeQueueAddress+($wakeEventStride*1)+$wakeEventTaskIdOffset) == $taskIdInterruptB
     set `$post_vector_len = *(unsigned int*)(0x$wakeQueueCountAddress)
     set `$post_vector_task1 = *(unsigned int*)(0x$wakeQueueAddress+($wakeEventStride*1)+$wakeEventTaskIdOffset)
+    set `$count_query_ptr = ((unsigned long long (*)())0x$wakeQueueCountQueryPtrAddress)()
+    set *(unsigned char*)(`$count_query_ptr+$countQueryVectorOffset) = $interruptVectorA
+    set *(unsigned char*)(`$count_query_ptr+$countQueryReasonOffset) = $wakeReasonInterrupt
+    set *(unsigned long long*)(`$count_query_ptr+$countQueryMaxTickOffset) = `$pre_oldest_tick
+    set `$count_snapshot_ptr = ((unsigned long long (*)())0x$wakeQueueCountSnapshotPtrAddress)()
+    set `$post_vector_count_13 = *(unsigned int*)(`$count_snapshot_ptr+$countSnapshotVectorCountOffset)
+    set *(unsigned char*)(`$count_query_ptr+$countQueryVectorOffset) = $interruptVectorB
+    set *(unsigned char*)(`$count_query_ptr+$countQueryReasonOffset) = $wakeReasonInterrupt
+    set *(unsigned long long*)(`$count_query_ptr+$countQueryMaxTickOffset) = `$pre_oldest_tick
+    set `$count_snapshot_ptr = ((unsigned long long (*)())0x$wakeQueueCountSnapshotPtrAddress)()
+    set `$post_vector_count_31 = *(unsigned int*)(`$count_snapshot_ptr+$countSnapshotVectorCountOffset)
+    set `$pre_reason_vector_count_interrupt_31 = *(unsigned int*)(`$count_snapshot_ptr+$countSnapshotReasonVectorCountOffset)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $wakeQueuePopReasonVectorOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 22
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = $wakeReasonInterrupt | ($interruptVectorB << 8)
@@ -653,7 +686,14 @@ if `$stage == 22
     set `$post_reason_vector_len = *(unsigned int*)(0x$wakeQueueCountAddress)
     set `$post_reason_vector_task0 = *(unsigned int*)(0x$wakeQueueAddress+$wakeEventTaskIdOffset)
     set `$post_reason_vector_task1 = *(unsigned int*)(0x$wakeQueueAddress+($wakeEventStride*1)+$wakeEventTaskIdOffset)
+    set `$count_query_ptr = ((unsigned long long (*)())0x$wakeQueueCountQueryPtrAddress)()
     set `$before_tick_cutoff = *(unsigned long long*)(0x$wakeQueueAddress+$wakeEventTickOffset)
+    set *(unsigned char*)(`$count_query_ptr+$countQueryVectorOffset) = $interruptVectorB
+    set *(unsigned char*)(`$count_query_ptr+$countQueryReasonOffset) = $wakeReasonInterrupt
+    set *(unsigned long long*)(`$count_query_ptr+$countQueryMaxTickOffset) = `$before_tick_cutoff
+    set `$count_snapshot_ptr = ((unsigned long long (*)())0x$wakeQueueCountSnapshotPtrAddress)()
+    set `$post_reason_vector_count_interrupt_31 = *(unsigned int*)(`$count_snapshot_ptr+$countSnapshotReasonVectorCountOffset)
+    set `$pre_before_tick_count = *(unsigned int*)(`$count_snapshot_ptr+$countSnapshotBeforeTickCountOffset)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $wakeQueuePopBeforeTickOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 23
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = `$before_tick_cutoff
@@ -665,6 +705,12 @@ end
 if `$stage == 23
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 23 && *(unsigned int*)(0x$wakeQueueCountAddress) == 1 && *(unsigned int*)(0x$wakeQueueAddress+$wakeEventTaskIdOffset) == $taskIdManual && *(unsigned char*)(0x$wakeQueueAddress+$wakeEventReasonOffset) == $wakeReasonManual
     set `$post_before_tick_len = *(unsigned int*)(0x$wakeQueueCountAddress)
+    set `$count_query_ptr = ((unsigned long long (*)())0x$wakeQueueCountQueryPtrAddress)()
+    set *(unsigned char*)(`$count_query_ptr+$countQueryVectorOffset) = $interruptVectorB
+    set *(unsigned char*)(`$count_query_ptr+$countQueryReasonOffset) = $wakeReasonInterrupt
+    set *(unsigned long long*)(`$count_query_ptr+$countQueryMaxTickOffset) = `$before_tick_cutoff
+    set `$count_snapshot_ptr = ((unsigned long long (*)())0x$wakeQueueCountSnapshotPtrAddress)()
+    set `$post_before_tick_count = *(unsigned int*)(`$count_snapshot_ptr+$countSnapshotBeforeTickCountOffset)
     set `$final_tick = *(unsigned long long*)(0x$statusAddress+$statusTicksOffset)
     set `$stage = 24
   end
@@ -672,7 +718,18 @@ if `$stage == 23
 end
 if `$stage == 24
   if *(unsigned long long*)(0x$statusAddress+$statusTicksOffset) >= `$final_tick + $postDrainSlackTicks && *(unsigned int*)(0x$wakeQueueCountAddress) == 1
+    set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $wakeQueuePopReasonVectorOpcode
+    set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 24
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = 0
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg1Offset) = 1
     set `$stage = 25
+  end
+  continue
+end
+if `$stage == 25
+  if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 24 && *(unsigned int*)(0x$wakeQueueCountAddress) == 1 && *(unsigned int*)(0x$wakeQueueAddress+$wakeEventTaskIdOffset) == $taskIdManual
+    set `$invalid_reason_vector_result = *(short*)(0x$statusAddress+$statusLastCommandResultOffset)
+    set `$stage = 26
   end
   continue
 end
@@ -691,15 +748,24 @@ printf "PRE_TASK3=%u\n", `$pre_task3
 printf "PRE_TASK4=%u\n", `$pre_task4
 printf "PRE_OLDEST_TICK=%llu\n", `$pre_oldest_tick
 printf "PRE_NEWEST_TICK=%llu\n", `$pre_newest_tick
+printf "PRE_VECTOR_COUNT_13=%u\n", `$pre_vector_count_13
+printf "PRE_VECTOR_COUNT_31=%u\n", `$pre_vector_count_31
 printf "POST_REASON_LEN=%u\n", `$post_reason_len
 printf "POST_REASON_TASK1=%u\n", `$post_reason_task1
 printf "POST_VECTOR_LEN=%u\n", `$post_vector_len
 printf "POST_VECTOR_TASK1=%u\n", `$post_vector_task1
+printf "POST_VECTOR_COUNT_13=%u\n", `$post_vector_count_13
+printf "POST_VECTOR_COUNT_31=%u\n", `$post_vector_count_31
+printf "PRE_REASON_VECTOR_COUNT_INTERRUPT_31=%u\n", `$pre_reason_vector_count_interrupt_31
 printf "POST_REASON_VECTOR_LEN=%u\n", `$post_reason_vector_len
 printf "POST_REASON_VECTOR_TASK0=%u\n", `$post_reason_vector_task0
 printf "POST_REASON_VECTOR_TASK1=%u\n", `$post_reason_vector_task1
+printf "POST_REASON_VECTOR_COUNT_INTERRUPT_31=%u\n", `$post_reason_vector_count_interrupt_31
 printf "POST_BEFORE_TICK_LEN=%u\n", `$post_before_tick_len
 printf "BEFORE_TICK_CUTOFF=%llu\n", `$before_tick_cutoff
+printf "PRE_BEFORE_TICK_COUNT=%u\n", `$pre_before_tick_count
+printf "POST_BEFORE_TICK_COUNT=%u\n", `$post_before_tick_count
+printf "INVALID_REASON_VECTOR_RESULT=%d\n", `$invalid_reason_vector_result
 printf "TIMER_PENDING_WAKE_COUNT=%u\n", *(unsigned short*)(0x$timerStateAddress+$timerPendingWakeCountOffset)
 printf "WAKE_QUEUE_COUNT=%u\n", *(unsigned int*)(0x$wakeQueueCountAddress)
 printf "WAKE0_SEQ=%u\n", *(unsigned int*)(0x$wakeQueueAddress+$wakeEventSeqOffset)
@@ -763,15 +829,24 @@ $preTask3 = $null
 $preTask4 = $null
 $preOldestTick = $null
 $preNewestTick = $null
+$preVectorCount13 = $null
+$preVectorCount31 = $null
 $postReasonLen = $null
 $postReasonTask1 = $null
 $postVectorLen = $null
 $postVectorTask1 = $null
+$postVectorCount13 = $null
+$postVectorCount31 = $null
+$preReasonVectorCountInterrupt31 = $null
 $postReasonVectorLen = $null
 $postReasonVectorTask0 = $null
 $postReasonVectorTask1 = $null
+$postReasonVectorCountInterrupt31 = $null
 $postBeforeTickLen = $null
 $beforeTickCutoff = $null
+$preBeforeTickCount = $null
+$postBeforeTickCount = $null
+$invalidReasonVectorResult = $null
 $timerPendingWakeCount = $null
 $wakeQueueCount = $null
 $wake0Seq = $null
@@ -799,15 +874,24 @@ if (Test-Path $gdbStdout) {
     $preTask4 = Extract-IntValue -Text $gdbOutput -Name "PRE_TASK4"
     $preOldestTick = Extract-IntValue -Text $gdbOutput -Name "PRE_OLDEST_TICK"
     $preNewestTick = Extract-IntValue -Text $gdbOutput -Name "PRE_NEWEST_TICK"
+    $preVectorCount13 = Extract-IntValue -Text $gdbOutput -Name "PRE_VECTOR_COUNT_13"
+    $preVectorCount31 = Extract-IntValue -Text $gdbOutput -Name "PRE_VECTOR_COUNT_31"
     $postReasonLen = Extract-IntValue -Text $gdbOutput -Name "POST_REASON_LEN"
     $postReasonTask1 = Extract-IntValue -Text $gdbOutput -Name "POST_REASON_TASK1"
     $postVectorLen = Extract-IntValue -Text $gdbOutput -Name "POST_VECTOR_LEN"
     $postVectorTask1 = Extract-IntValue -Text $gdbOutput -Name "POST_VECTOR_TASK1"
+    $postVectorCount13 = Extract-IntValue -Text $gdbOutput -Name "POST_VECTOR_COUNT_13"
+    $postVectorCount31 = Extract-IntValue -Text $gdbOutput -Name "POST_VECTOR_COUNT_31"
+    $preReasonVectorCountInterrupt31 = Extract-IntValue -Text $gdbOutput -Name "PRE_REASON_VECTOR_COUNT_INTERRUPT_31"
     $postReasonVectorLen = Extract-IntValue -Text $gdbOutput -Name "POST_REASON_VECTOR_LEN"
     $postReasonVectorTask0 = Extract-IntValue -Text $gdbOutput -Name "POST_REASON_VECTOR_TASK0"
     $postReasonVectorTask1 = Extract-IntValue -Text $gdbOutput -Name "POST_REASON_VECTOR_TASK1"
+    $postReasonVectorCountInterrupt31 = Extract-IntValue -Text $gdbOutput -Name "POST_REASON_VECTOR_COUNT_INTERRUPT_31"
     $postBeforeTickLen = Extract-IntValue -Text $gdbOutput -Name "POST_BEFORE_TICK_LEN"
     $beforeTickCutoff = Extract-IntValue -Text $gdbOutput -Name "BEFORE_TICK_CUTOFF"
+    $preBeforeTickCount = Extract-IntValue -Text $gdbOutput -Name "PRE_BEFORE_TICK_COUNT"
+    $postBeforeTickCount = Extract-IntValue -Text $gdbOutput -Name "POST_BEFORE_TICK_COUNT"
+    $invalidReasonVectorResult = Extract-IntValue -Text $gdbOutput -Name "INVALID_REASON_VECTOR_RESULT"
     $timerPendingWakeCount = Extract-IntValue -Text $gdbOutput -Name "TIMER_PENDING_WAKE_COUNT"
     $wakeQueueCount = Extract-IntValue -Text $gdbOutput -Name "WAKE_QUEUE_COUNT"
     $wake0Seq = Extract-IntValue -Text $gdbOutput -Name "WAKE0_SEQ"
@@ -850,15 +934,24 @@ Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_PRE_TASK3=$preTask3"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_PRE_TASK4=$preTask4"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_PRE_OLDEST_TICK=$preOldestTick"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_PRE_NEWEST_TICK=$preNewestTick"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_PRE_VECTOR_COUNT_13=$preVectorCount13"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_PRE_VECTOR_COUNT_31=$preVectorCount31"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_POST_REASON_LEN=$postReasonLen"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_POST_REASON_TASK1=$postReasonTask1"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_POST_VECTOR_LEN=$postVectorLen"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_POST_VECTOR_TASK1=$postVectorTask1"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_POST_VECTOR_COUNT_13=$postVectorCount13"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_POST_VECTOR_COUNT_31=$postVectorCount31"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_PRE_REASON_VECTOR_COUNT_INTERRUPT_31=$preReasonVectorCountInterrupt31"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_POST_REASON_VECTOR_LEN=$postReasonVectorLen"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_POST_REASON_VECTOR_TASK0=$postReasonVectorTask0"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_POST_REASON_VECTOR_TASK1=$postReasonVectorTask1"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_POST_REASON_VECTOR_COUNT_INTERRUPT_31=$postReasonVectorCountInterrupt31"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_POST_BEFORE_TICK_LEN=$postBeforeTickLen"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_BEFORE_TICK_CUTOFF=$beforeTickCutoff"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_PRE_BEFORE_TICK_COUNT=$preBeforeTickCount"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_POST_BEFORE_TICK_COUNT=$postBeforeTickCount"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_INVALID_REASON_VECTOR_RESULT=$invalidReasonVectorResult"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_TIMER_PENDING_WAKE_COUNT=$timerPendingWakeCount"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_WAKE_QUEUE_COUNT=$wakeQueueCount"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_WAKE0_SEQ=$wake0Seq"
@@ -876,11 +969,11 @@ Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_SELECTIVE_PROBE_TIMED_OUT=$timedOut"
 $probePassed = $hitStart -and
     $hitAfterWakeQueueSelective -and
     (-not $timedOut) -and
-    ($ack -eq 23) -and
-    ($lastOpcode -eq $wakeQueuePopBeforeTickOpcode) -and
-    ($lastResult -eq 0) -and
-    ($mailboxOpcode -eq $wakeQueuePopBeforeTickOpcode) -and
-    ($mailboxSeq -eq 23) -and
+    ($ack -eq 24) -and
+    ($lastOpcode -eq $wakeQueuePopReasonVectorOpcode) -and
+    ($lastResult -eq -22) -and
+    ($mailboxOpcode -eq $wakeQueuePopReasonVectorOpcode) -and
+    ($mailboxSeq -eq 24) -and
     ($preLen -eq 5) -and
     ($preTask0 -eq $taskIdTimer) -and
     ($preTask1 -eq $taskIdInterruptA1) -and
@@ -888,14 +981,23 @@ $probePassed = $hitStart -and
     ($preTask3 -eq $taskIdInterruptB) -and
     ($preTask4 -eq $taskIdManual) -and
     ($preNewestTick -ge $preOldestTick) -and
+    ($preVectorCount13 -eq 2) -and
+    ($preVectorCount31 -eq 1) -and
     ($postReasonLen -eq 4) -and
     ($postReasonTask1 -eq $taskIdInterruptA2) -and
     ($postVectorLen -eq 3) -and
     ($postVectorTask1 -eq $taskIdInterruptB) -and
+    ($postVectorCount13 -eq 0) -and
+    ($postVectorCount31 -eq 1) -and
+    ($preReasonVectorCountInterrupt31 -eq 1) -and
     ($postReasonVectorLen -eq 2) -and
     ($postReasonVectorTask0 -eq $taskIdTimer) -and
     ($postReasonVectorTask1 -eq $taskIdManual) -and
+    ($postReasonVectorCountInterrupt31 -eq 0) -and
     ($postBeforeTickLen -eq 1) -and
+    ($preBeforeTickCount -eq 1) -and
+    ($postBeforeTickCount -eq 0) -and
+    ($invalidReasonVectorResult -eq -22) -and
     ($timerPendingWakeCount -eq 1) -and
     ($wakeQueueCount -eq 1) -and
     ($wake0TaskId -eq $taskIdManual) -and
