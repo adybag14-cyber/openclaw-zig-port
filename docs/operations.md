@@ -3,7 +3,7 @@
 ## Current Snapshot
 
 - Latest published edge release: `v0.2.0-zig-edge.26`
-- Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `67/67` passing
+- Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `68/68` passing
 - Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=169`, `ZIG_EVENTS_COUNT=19`
 - Current head: `main + panic-wake recovery slice`
 - Latest CI:
@@ -76,7 +76,7 @@ Recommended sequence:
 - optional bare-metal QEMU feature-flags/tick-batch probe (`command_set_feature_flags` updates the live flag mask, `command_set_tick_batch_hint` raises runtime tick progression from `1` to `4`, and an invalid zero hint is rejected without changing the active batch size against the freestanding PVH artifact)
 - optional bare-metal QEMU vector counter reset probe (`command_reset_vector_counters` after live interrupt+exception dispatch, proving vectors `10/200/14` and exception vectors `10/14` zero while aggregate counts stay at `4/3` against the freestanding PVH artifact)
 - optional bare-metal QEMU vector history overflow probe (interrupt/exception counter resets plus repeated dispatch saturation, proving history-ring overflow and per-vector telemetry against the freestanding PVH artifact)
-- optional bare-metal QEMU vector history clear probe (dedicated mailbox clear-path proof for `command_clear_interrupt_history` and `command_clear_exception_history`, validating that history rings/overflow reset without disturbing aggregate interrupt/exception counters against the freestanding PVH artifact)
+- optional bare-metal QEMU vector history clear probe (dedicated mailbox clear-path proof for `command_reset_interrupt_counters` / `command_reset_exception_counters` plus `command_clear_interrupt_history` / `command_clear_exception_history`, validating that aggregate counters reset first without disturbing retained history/vector tables and that the later clear only zeroes history-ring/overflow state against the freestanding PVH artifact)
 - optional bare-metal QEMU command-health history probe (repeated `command_set_health_code` mailbox execution, proving command-history overflow, health-history overflow, and retained oldest/newest payload ordering against the freestanding PVH artifact)
 - optional bare-metal QEMU mode/boot-phase history probe (command/runtime/panic reason ordering plus post-clear saturation of the 64-entry mode-history and boot-phase-history rings against the freestanding PVH artifact)
 - optional bare-metal QEMU mode/boot-phase history clear probe (dedicated mailbox clear-path proof for `command_clear_mode_history` and `command_clear_boot_phase_history`, validating clear-state reset of len/head/overflow/seq and `seq=1` restart semantics against the freestanding PVH artifact)

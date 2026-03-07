@@ -11,7 +11,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - Original OpenClaw beta baseline (`v2026.3.2-beta.1`): `94/94` covered
   - Union baseline: `135/135` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
-- Latest local validation: `zig build test --summary all` -> main `203/203` + bare-metal host `67/67` passing
+- Latest local validation: `zig build test --summary all` -> main `203/203` + bare-metal host `68/68` passing
 - Latest published edge release tag: `v0.2.0-zig-edge.26`
 - Recent FS1 progress (2026-03-06):
   - runtime recovery posture is now surfaced on live diagnostics and maintenance RPCs
@@ -61,7 +61,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - optional QEMU descriptor dispatch probe validates descriptor reinit/load plus post-load `interrupt` and `exception` dispatch coherence, including interrupt/exception counters and history-ring payloads, against the freestanding PVH artifact
   - optional QEMU vector counter reset probe validates `command_reset_vector_counters` after live dispatch, proving interrupt vectors `10/200/14` and exception vectors `10/14` collapse back to `0` while aggregate interrupt/exceptions counts stay at `4/3` and last-vector telemetry stays on vector `14`
   - optional QEMU vector history overflow probe validates interrupt/exception counter resets plus repeated dispatch saturation, proving interrupt history overflow (`35 -> len 32 / overflow 3`), exception history overflow (`19 -> len 16 / overflow 3`), and per-vector telemetry against the freestanding PVH artifact
-  - optional QEMU vector history clear probe validates the dedicated mailbox clear paths end to end, proving `command_clear_interrupt_history` and `command_clear_exception_history` zero only their history rings/overflow counters while preserving aggregate interrupt/exception counts and the pre-clear payload shapes against the freestanding PVH artifact
+  - optional QEMU vector history clear probe validates the dedicated mailbox clear paths end to end, proving `command_reset_interrupt_counters` and `command_reset_exception_counters` zero aggregate interrupt/exception counters without disturbing the retained history/vector tables, then `command_clear_interrupt_history` and `command_clear_exception_history` zero only their history rings/overflow counters against the freestanding PVH artifact
   - optional QEMU command-health history probe validates repeated `command_set_health_code` mailbox execution against the freestanding PVH artifact, proving command history overflow (`35 -> len 32 / overflow 3`), health history overflow (`71 -> len 64 / overflow 7`), and retained oldest/newest command + health payload ordering
   - optional QEMU task lifecycle probe validates `task_wait -> scheduler_wake_task -> task_resume -> task_terminate` against the freestanding PVH artifact, including post-terminate rejection (`ACK=10`, `LAST_OPCODE=45`, `LAST_RESULT=-2`, manual wake queue `1 -> 2`, terminated state `4`)
   - optional QEMU active-task terminate probe validates terminating the currently running high-priority task against the freestanding PVH artifact, proving immediate failover to the remaining ready task (`POST_TERMINATE_TASK_COUNT=1`, `POST_TERMINATE_RUNNING_SLOT=0`, `LOW_RUN=0 -> 1`), idempotent repeat terminate semantics (`REPEAT_TERMINATE_RESULT=0`), and final empty-run collapse (`ACK=10`, `LAST_OPCODE=28`, `LAST_RESULT=0`, `TASK_COUNT=0`, `RUNNING_SLOT=255`)

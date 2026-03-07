@@ -38,7 +38,10 @@ $commandArg0Offset = 16
 $commandArg1Offset = 24
 
 $interruptStateInterruptCountOffset = 16
+$interruptStateLastInterruptVectorOffset = 2
 $interruptStateExceptionCountOffset = 32
+$interruptStateLastExceptionVectorOffset = 24
+$interruptStateLastExceptionCodeOffset = 40
 $interruptStateExceptionHistoryLenOffset = 48
 $interruptStateExceptionHistoryOverflowOffset = 52
 $interruptStateInterruptHistoryLenOffset = 56
@@ -54,6 +57,7 @@ $exceptionEventStride = 32
 $exceptionEventSeqOffset = 0
 $exceptionEventVectorOffset = 4
 $exceptionEventCodeOffset = 8
+$interruptCountStride = 8
 
 function Resolve-QemuExecutable {
     foreach ($name in @("qemu-system-x86_64", "qemu-system-x86_64.exe", "C:\Program Files\qemu\qemu-system-x86_64.exe")) {
@@ -165,6 +169,8 @@ $commandMailboxAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Patte
 $interruptStateAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal\.x86_bootstrap\.interrupt_state$' -SymbolName "baremetal.x86_bootstrap.interrupt_state"
 $interruptHistoryAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal\.x86_bootstrap\.interrupt_history$' -SymbolName "baremetal.x86_bootstrap.interrupt_history"
 $exceptionHistoryAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal\.x86_bootstrap\.exception_history$' -SymbolName "baremetal.x86_bootstrap.exception_history"
+$interruptVectorCountsAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal\.x86_bootstrap\.interrupt_vector_counts$' -SymbolName "baremetal.x86_bootstrap.interrupt_vector_counts"
+$exceptionVectorCountsAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal\.x86_bootstrap\.exception_vector_counts$' -SymbolName "baremetal.x86_bootstrap.exception_vector_counts"
 
 $artifactForGdb = $artifact.Replace('\', '/')
 if (Test-Path $gdbStdout) { Remove-Item -Force $gdbStdout }
@@ -272,7 +278,7 @@ if `$stage == 6
     set `$pre_exception0_seq = *(unsigned int*)(0x$exceptionHistoryAddress + (0 * $exceptionEventStride) + $exceptionEventSeqOffset)
     set `$pre_exception0_vector = *(unsigned char*)(0x$exceptionHistoryAddress + (0 * $exceptionEventStride) + $exceptionEventVectorOffset)
     set `$pre_exception0_code = *(unsigned long long*)(0x$exceptionHistoryAddress + (0 * $exceptionEventStride) + $exceptionEventCodeOffset)
-    set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $clearInterruptHistoryOpcode
+    set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $resetInterruptCountersOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 7
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = 0
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg1Offset) = 0
@@ -281,8 +287,8 @@ if `$stage == 6
   continue
 end
 if `$stage == 7
-  if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 7 && *(unsigned int*)(0x$interruptStateAddress+$interruptStateInterruptHistoryLenOffset) == 0 && *(unsigned int*)(0x$interruptStateAddress+$interruptStateInterruptHistoryOverflowOffset) == 0 && *(unsigned long long*)(0x$interruptStateAddress+$interruptStateInterruptCountOffset) == 2 && *(unsigned int*)(0x$interruptStateAddress+$interruptStateExceptionHistoryLenOffset) == 1
-    set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $clearExceptionHistoryOpcode
+  if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 7 && *(unsigned long long*)(0x$interruptStateAddress+$interruptStateInterruptCountOffset) == 0 && *(unsigned char*)(0x$interruptStateAddress+$interruptStateLastInterruptVectorOffset) == 0 && *(unsigned int*)(0x$interruptStateAddress+$interruptStateInterruptHistoryLenOffset) == 2 && *(unsigned long long*)(0x$interruptStateAddress+$interruptStateExceptionCountOffset) == 1
+    set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $resetExceptionCountersOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 8
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = 0
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg1Offset) = 0
@@ -291,14 +297,34 @@ if `$stage == 7
   continue
 end
 if `$stage == 8
-  if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 8 && *(unsigned int*)(0x$interruptStateAddress+$interruptStateExceptionHistoryLenOffset) == 0 && *(unsigned int*)(0x$interruptStateAddress+$interruptStateExceptionHistoryOverflowOffset) == 0 && *(unsigned long long*)(0x$interruptStateAddress+$interruptStateInterruptCountOffset) == 2 && *(unsigned long long*)(0x$interruptStateAddress+$interruptStateExceptionCountOffset) == 1
+  if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 8 && *(unsigned long long*)(0x$interruptStateAddress+$interruptStateExceptionCountOffset) == 0 && *(unsigned char*)(0x$interruptStateAddress+$interruptStateLastExceptionVectorOffset) == 0 && *(unsigned long long*)(0x$interruptStateAddress+$interruptStateLastExceptionCodeOffset) == 0 && *(unsigned int*)(0x$interruptStateAddress+$interruptStateExceptionHistoryLenOffset) == 1 && *(unsigned int*)(0x$interruptStateAddress+$interruptStateInterruptHistoryLenOffset) == 2
+    set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $clearInterruptHistoryOpcode
+    set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 9
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = 0
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg1Offset) = 0
+    set `$stage = 9
+  end
+  continue
+end
+if `$stage == 9
+  if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 9 && *(unsigned int*)(0x$interruptStateAddress+$interruptStateInterruptHistoryLenOffset) == 0 && *(unsigned int*)(0x$interruptStateAddress+$interruptStateInterruptHistoryOverflowOffset) == 0 && *(unsigned long long*)(0x$interruptStateAddress+$interruptStateInterruptCountOffset) == 0 && *(unsigned int*)(0x$interruptStateAddress+$interruptStateExceptionHistoryLenOffset) == 1
+    set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $clearExceptionHistoryOpcode
+    set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 10
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = 0
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg1Offset) = 0
+    set `$stage = 10
+  end
+  continue
+end
+if `$stage == 10
+  if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 10 && *(unsigned int*)(0x$interruptStateAddress+$interruptStateExceptionHistoryLenOffset) == 0 && *(unsigned int*)(0x$interruptStateAddress+$interruptStateExceptionHistoryOverflowOffset) == 0 && *(unsigned long long*)(0x$interruptStateAddress+$interruptStateInterruptCountOffset) == 0 && *(unsigned long long*)(0x$interruptStateAddress+$interruptStateExceptionCountOffset) == 0
     printf "HIT_AFTER_VECTOR_HISTORY_CLEAR_PROBE\n"
     printf "ACK=%u\n", *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset)
     printf "LAST_OPCODE=%u\n", *(unsigned short*)(0x$statusAddress+$statusLastCommandOpcodeOffset)
     printf "LAST_RESULT=%d\n", *(short*)(0x$statusAddress+$statusLastCommandResultOffset)
     printf "TICKS=%llu\n", *(unsigned long long*)(0x$statusAddress+$statusTicksOffset)
-    printf "PRE_INTERRUPT_COUNT=%llu\n", *(unsigned long long*)(0x$interruptStateAddress+$interruptStateInterruptCountOffset)
-    printf "PRE_EXCEPTION_COUNT=%llu\n", *(unsigned long long*)(0x$interruptStateAddress+$interruptStateExceptionCountOffset)
+    printf "PRE_INTERRUPT_COUNT=2\n"
+    printf "PRE_EXCEPTION_COUNT=1\n"
     printf "PRE_INTERRUPT_HISTORY_LEN=2\n"
     printf "PRE_EXCEPTION_HISTORY_LEN=1\n"
     printf "PRE_INTERRUPT0_SEQ=%u\n", `$pre_interrupt0_seq
@@ -312,6 +338,17 @@ if `$stage == 8
     printf "PRE_EXCEPTION0_SEQ=%u\n", `$pre_exception0_seq
     printf "PRE_EXCEPTION0_VECTOR=%u\n", `$pre_exception0_vector
     printf "PRE_EXCEPTION0_CODE=%llu\n", `$pre_exception0_code
+    printf "POST_INTERRUPT_RESET_COUNT=0\n"
+    printf "POST_INTERRUPT_RESET_LAST_VECTOR=0\n"
+    printf "POST_INTERRUPT_RESET_HISTORY_LEN=2\n"
+    printf "POST_INTERRUPT_RESET_EXCEPTION_COUNT=1\n"
+    printf "POST_INTERRUPT_RESET_VECTOR_200=%llu\n", *(unsigned long long*)(0x$interruptVectorCountsAddress + (200 * 8))
+    printf "POST_EXCEPTION_RESET_COUNT=0\n"
+    printf "POST_EXCEPTION_RESET_LAST_VECTOR=0\n"
+    printf "POST_EXCEPTION_RESET_LAST_CODE=0\n"
+    printf "POST_EXCEPTION_RESET_HISTORY_LEN=1\n"
+    printf "POST_EXCEPTION_RESET_INTERRUPT_HISTORY_LEN=2\n"
+    printf "POST_EXCEPTION_RESET_VECTOR_13=%llu\n", *(unsigned long long*)(0x$exceptionVectorCountsAddress + (13 * 8))
     printf "POST_INTERRUPT_HISTORY_LEN=%u\n", *(unsigned int*)(0x$interruptStateAddress+$interruptStateInterruptHistoryLenOffset)
     printf "POST_INTERRUPT_HISTORY_OVERFLOW=%u\n", *(unsigned int*)(0x$interruptStateAddress+$interruptStateInterruptHistoryOverflowOffset)
     printf "POST_EXCEPTION_HISTORY_LEN_AFTER_INTERRUPT_CLEAR=1\n"
@@ -376,6 +413,17 @@ try {
     $preException0Seq = Extract-IntValue -Text $gdbText -Name "PRE_EXCEPTION0_SEQ"
     $preException0Vector = Extract-IntValue -Text $gdbText -Name "PRE_EXCEPTION0_VECTOR"
     $preException0Code = Extract-IntValue -Text $gdbText -Name "PRE_EXCEPTION0_CODE"
+    $postInterruptResetCount = Extract-IntValue -Text $gdbText -Name "POST_INTERRUPT_RESET_COUNT"
+    $postInterruptResetLastVector = Extract-IntValue -Text $gdbText -Name "POST_INTERRUPT_RESET_LAST_VECTOR"
+    $postInterruptResetHistoryLen = Extract-IntValue -Text $gdbText -Name "POST_INTERRUPT_RESET_HISTORY_LEN"
+    $postInterruptResetExceptionCount = Extract-IntValue -Text $gdbText -Name "POST_INTERRUPT_RESET_EXCEPTION_COUNT"
+    $postInterruptResetVector200 = Extract-IntValue -Text $gdbText -Name "POST_INTERRUPT_RESET_VECTOR_200"
+    $postExceptionResetCount = Extract-IntValue -Text $gdbText -Name "POST_EXCEPTION_RESET_COUNT"
+    $postExceptionResetLastVector = Extract-IntValue -Text $gdbText -Name "POST_EXCEPTION_RESET_LAST_VECTOR"
+    $postExceptionResetLastCode = Extract-IntValue -Text $gdbText -Name "POST_EXCEPTION_RESET_LAST_CODE"
+    $postExceptionResetHistoryLen = Extract-IntValue -Text $gdbText -Name "POST_EXCEPTION_RESET_HISTORY_LEN"
+    $postExceptionResetInterruptHistoryLen = Extract-IntValue -Text $gdbText -Name "POST_EXCEPTION_RESET_INTERRUPT_HISTORY_LEN"
+    $postExceptionResetVector13 = Extract-IntValue -Text $gdbText -Name "POST_EXCEPTION_RESET_VECTOR_13"
     $postInterruptHistoryLen = Extract-IntValue -Text $gdbText -Name "POST_INTERRUPT_HISTORY_LEN"
     $postInterruptHistoryOverflow = Extract-IntValue -Text $gdbText -Name "POST_INTERRUPT_HISTORY_OVERFLOW"
     $postExceptionHistoryLenAfterInterruptClear = Extract-IntValue -Text $gdbText -Name "POST_EXCEPTION_HISTORY_LEN_AFTER_INTERRUPT_CLEAR"
@@ -388,16 +436,20 @@ try {
             $preInterruptHistoryLen, $preExceptionHistoryLen, $preInterrupt0Seq, $preInterrupt0Vector,
             $preInterrupt0IsException, $preInterrupt0Code, $preInterrupt1Seq, $preInterrupt1Vector,
             $preInterrupt1IsException, $preInterrupt1Code, $preException0Seq, $preException0Vector,
-            $preException0Code, $postInterruptHistoryLen, $postInterruptHistoryOverflow,
+            $preException0Code, $postInterruptResetCount, $postInterruptResetLastVector,
+            $postInterruptResetHistoryLen, $postInterruptResetExceptionCount, $postInterruptResetVector200,
+            $postExceptionResetCount, $postExceptionResetLastVector, $postExceptionResetLastCode,
+            $postExceptionResetHistoryLen, $postExceptionResetInterruptHistoryLen, $postExceptionResetVector13,
+            $postInterruptHistoryLen, $postInterruptHistoryOverflow,
             $postExceptionHistoryLenAfterInterruptClear, $postExceptionHistoryLen, $postExceptionHistoryOverflow,
             $finalInterruptCount, $finalExceptionCount)) {
         throw "Probe output was missing one or more expected values."
     }
 
-    if ($ack -ne 8) { throw "Expected final ACK 8, got $ack" }
+    if ($ack -ne 10) { throw "Expected final ACK 10, got $ack" }
     if ($lastOpcode -ne $clearExceptionHistoryOpcode) { throw "Expected final opcode $clearExceptionHistoryOpcode, got $lastOpcode" }
     if ($lastResult -ne 0) { throw "Expected final result 0, got $lastResult" }
-    if ($ticks -lt 8) { throw "Expected ticks >= 8, got $ticks" }
+    if ($ticks -lt 10) { throw "Expected ticks >= 10, got $ticks" }
     if ($preInterruptCount -ne 2) { throw "Expected pre-clear interrupt count 2, got $preInterruptCount" }
     if ($preExceptionCount -ne 1) { throw "Expected pre-clear exception count 1, got $preExceptionCount" }
     if ($preInterruptHistoryLen -ne 2) { throw "Expected pre-clear interrupt history len 2, got $preInterruptHistoryLen" }
@@ -413,13 +465,24 @@ try {
     if ($preException0Seq -ne 1) { throw "Expected first exception event seq 1, got $preException0Seq" }
     if ($preException0Vector -ne $exceptionVector) { throw "Expected first exception vector $exceptionVector, got $preException0Vector" }
     if ($preException0Code -ne $exceptionCode) { throw "Expected first exception code $exceptionCode, got $preException0Code" }
+    if ($postInterruptResetCount -ne 0) { throw "Expected post-reset interrupt count 0, got $postInterruptResetCount" }
+    if ($postInterruptResetLastVector -ne 0) { throw "Expected post-reset last interrupt vector 0, got $postInterruptResetLastVector" }
+    if ($postInterruptResetHistoryLen -ne 2) { throw "Expected interrupt history len 2 after interrupt reset, got $postInterruptResetHistoryLen" }
+    if ($postInterruptResetExceptionCount -ne 1) { throw "Expected exception count 1 after interrupt reset, got $postInterruptResetExceptionCount" }
+    if ($postInterruptResetVector200 -ne 1) { throw "Expected interrupt vector 200 count 1 after interrupt reset, got $postInterruptResetVector200" }
+    if ($postExceptionResetCount -ne 0) { throw "Expected post-reset exception count 0, got $postExceptionResetCount" }
+    if ($postExceptionResetLastVector -ne 0) { throw "Expected post-reset last exception vector 0, got $postExceptionResetLastVector" }
+    if ($postExceptionResetLastCode -ne 0) { throw "Expected post-reset last exception code 0, got $postExceptionResetLastCode" }
+    if ($postExceptionResetHistoryLen -ne 1) { throw "Expected exception history len 1 after exception reset, got $postExceptionResetHistoryLen" }
+    if ($postExceptionResetInterruptHistoryLen -ne 2) { throw "Expected interrupt history len 2 after exception reset, got $postExceptionResetInterruptHistoryLen" }
+    if ($postExceptionResetVector13 -ne 1) { throw "Expected exception vector 13 count 1 after exception reset, got $postExceptionResetVector13" }
     if ($postInterruptHistoryLen -ne 0) { throw "Expected post-clear interrupt history len 0, got $postInterruptHistoryLen" }
     if ($postInterruptHistoryOverflow -ne 0) { throw "Expected post-clear interrupt history overflow 0, got $postInterruptHistoryOverflow" }
     if ($postExceptionHistoryLenAfterInterruptClear -ne 1) { throw "Expected exception history len 1 after interrupt clear, got $postExceptionHistoryLenAfterInterruptClear" }
     if ($postExceptionHistoryLen -ne 0) { throw "Expected final exception history len 0, got $postExceptionHistoryLen" }
     if ($postExceptionHistoryOverflow -ne 0) { throw "Expected final exception history overflow 0, got $postExceptionHistoryOverflow" }
-    if ($finalInterruptCount -ne 2) { throw "Expected final interrupt count 2, got $finalInterruptCount" }
-    if ($finalExceptionCount -ne 1) { throw "Expected final exception count 1, got $finalExceptionCount" }
+    if ($finalInterruptCount -ne 0) { throw "Expected final interrupt count 0, got $finalInterruptCount" }
+    if ($finalExceptionCount -ne 0) { throw "Expected final exception count 0, got $finalExceptionCount" }
 
     Write-Output "BAREMETAL_QEMU_AVAILABLE=True"
     Write-Output "BAREMETAL_QEMU_BINARY=$qemu"
