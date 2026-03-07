@@ -2613,6 +2613,90 @@ test "baremetal boot phase history captures command runtime and panic transition
     try std.testing.expectEqual(@as(u8, abi.boot_phase_init), p_after_clear.new_phase);
 }
 
+test "baremetal direct mode and boot phase setters are isolated, idempotent, and reject invalid values" {
+    resetBaremetalRuntimeForTest();
+
+    _ = oc_submit_command(abi.command_set_mode, abi.mode_running, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.mode_running), status.mode);
+    try std.testing.expectEqual(@as(u32, 0), oc_mode_history_len());
+    try std.testing.expectEqual(@as(u32, 0), status.panic_count);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_runtime), boot_diagnostics.phase);
+    try std.testing.expectEqual(@as(u32, 0), oc_boot_phase_history_len());
+
+    _ = oc_submit_command(abi.command_set_boot_phase, abi.boot_phase_runtime, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_runtime), boot_diagnostics.phase);
+    try std.testing.expectEqual(@as(u32, 0), boot_diagnostics.phase_changes);
+    try std.testing.expectEqual(@as(u32, 0), oc_boot_phase_history_len());
+
+    _ = oc_submit_command(abi.command_set_boot_phase, abi.boot_phase_init, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), boot_diagnostics.phase);
+    try std.testing.expectEqual(@as(u32, 1), oc_boot_phase_history_len());
+    const boot0 = oc_boot_phase_history_event(0);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_runtime), boot0.previous_phase);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), boot0.new_phase);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_change_reason_command), boot0.reason);
+
+    _ = oc_submit_command(abi.command_set_boot_phase, abi.boot_phase_init, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), boot_diagnostics.phase);
+    try std.testing.expectEqual(@as(u32, 1), boot_diagnostics.phase_changes);
+    try std.testing.expectEqual(@as(u32, 1), oc_boot_phase_history_len());
+
+    _ = oc_submit_command(abi.command_set_boot_phase, 99, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), boot_diagnostics.phase);
+    try std.testing.expectEqual(@as(u32, 1), oc_boot_phase_history_len());
+
+    _ = oc_submit_command(abi.command_set_mode, abi.mode_panicked, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.mode_panicked), status.mode);
+    try std.testing.expectEqual(@as(u32, 0), status.panic_count);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), boot_diagnostics.phase);
+    try std.testing.expectEqual(@as(u32, 1), oc_mode_history_len());
+    const mode0 = oc_mode_history_event(0);
+    try std.testing.expectEqual(@as(u8, abi.mode_running), mode0.previous_mode);
+    try std.testing.expectEqual(@as(u8, abi.mode_panicked), mode0.new_mode);
+    try std.testing.expectEqual(@as(u8, abi.mode_change_reason_command), mode0.reason);
+
+    _ = oc_submit_command(abi.command_set_mode, abi.mode_running, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.mode_running), status.mode);
+    try std.testing.expectEqual(@as(u32, 0), status.panic_count);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), boot_diagnostics.phase);
+    try std.testing.expectEqual(@as(u32, 2), oc_mode_history_len());
+    const mode1 = oc_mode_history_event(1);
+    try std.testing.expectEqual(@as(u8, abi.mode_panicked), mode1.previous_mode);
+    try std.testing.expectEqual(@as(u8, abi.mode_running), mode1.new_mode);
+    try std.testing.expectEqual(@as(u8, abi.mode_change_reason_command), mode1.reason);
+    try std.testing.expectEqual(@as(u32, 1), oc_boot_phase_history_len());
+
+    _ = oc_submit_command(abi.command_set_mode, 77, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.mode_running), status.mode);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), boot_diagnostics.phase);
+    try std.testing.expectEqual(@as(u32, 2), oc_mode_history_len());
+    try std.testing.expectEqual(@as(u32, 1), oc_boot_phase_history_len());
+
+    _ = oc_submit_command(abi.command_set_mode, abi.mode_running, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.mode_running), status.mode);
+    try std.testing.expectEqual(@as(u32, 2), oc_mode_history_len());
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), boot_diagnostics.phase);
+    try std.testing.expectEqual(@as(u32, 1), oc_boot_phase_history_len());
+}
+
 test "baremetal command result counters track categories and reset flow" {
     status.mode = abi.mode_running;
     status.ticks = 0;

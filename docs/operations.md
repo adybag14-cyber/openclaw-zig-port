@@ -3,9 +3,9 @@
 ## Current Snapshot
 
 - Latest published edge release: `v0.2.0-zig-edge.26`
-- Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `68/68` passing
+- Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `69/69` passing
 - Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=169`, `ZIG_EVENTS_COUNT=19`
-- Current head: `main + panic-wake recovery slice`
+- Current head: `main + mode/boot-phase setter slice`
 - Latest CI:
   - `zig-ci` `22804683149` -> success
   - `docs-pages` `22804683158` -> success
@@ -79,6 +79,7 @@ Recommended sequence:
 - optional bare-metal QEMU vector history clear probe (dedicated mailbox clear-path proof for `command_reset_interrupt_counters` / `command_reset_exception_counters` plus `command_clear_interrupt_history` / `command_clear_exception_history`, validating that aggregate counters reset first without disturbing retained history/vector tables and that the later clear only zeroes history-ring/overflow state against the freestanding PVH artifact)
 - optional bare-metal QEMU command-health history probe (repeated `command_set_health_code` mailbox execution, proving command-history overflow, health-history overflow, and retained oldest/newest payload ordering against the freestanding PVH artifact)
 - optional bare-metal QEMU mode/boot-phase history probe (command/runtime/panic reason ordering plus post-clear saturation of the 64-entry mode-history and boot-phase-history rings against the freestanding PVH artifact)
+- optional bare-metal QEMU mode/boot-phase setter probe (direct `command_set_boot_phase` / `command_set_mode` proof, validating same-value idempotence, invalid boot-phase `99` and invalid mode `77` rejection without state/history clobbering, and direct `mode_panicked` / `mode_running` transitions without panic-counter or boot-phase side effects against the freestanding PVH artifact)
 - optional bare-metal QEMU mode/boot-phase history clear probe (dedicated mailbox clear-path proof for `command_clear_mode_history` and `command_clear_boot_phase_history`, validating clear-state reset of len/head/overflow/seq and `seq=1` restart semantics against the freestanding PVH artifact)
 - optional bare-metal QEMU scheduler priority budget probe (live `command_scheduler_set_default_budget` plus `command_task_set_priority` proof, including zero-budget task inheritance and dispatch-order flip under the priority scheduler against the freestanding PVH artifact)
 - optional bare-metal QEMU scheduler round-robin probe (default scheduler policy remains round-robin under live QEMU execution, rotating dispatch `1/0 -> 1/1 -> 2/1` across a lower-priority first task and higher-priority second task while budgets decrement deterministically)

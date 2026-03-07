@@ -11,7 +11,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - Original OpenClaw beta baseline (`v2026.3.2-beta.1`): `94/94` covered
   - Union baseline: `135/135` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
-- Latest local validation: `zig build test --summary all` -> main `203/203` + bare-metal host `68/68` passing
+- Latest local validation: `zig build test --summary all` -> main `203/203` + bare-metal host `69/69` passing
 - Latest published edge release tag: `v0.2.0-zig-edge.26`
 - Recent FS1 progress (2026-03-06):
   - runtime recovery posture is now surfaced on live diagnostics and maintenance RPCs
@@ -68,6 +68,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - optional QEMU panic-recovery probe validates `command_trigger_panic_flag` under active scheduler load, proving panic mode freezes dispatch/budget burn, `command_set_mode(mode_running)` resumes the same task immediately, and `command_set_boot_phase(runtime)` restores boot diagnostics while dispatch continues (`ACK=7`, `LAST_OPCODE=16`, `LAST_RESULT=0`, `PANIC_COUNT=1`, `TASK0_RUN_COUNT=3`, `TASK0_BUDGET_REMAINING=3`)
   - optional QEMU panic-wake recovery probe validates preserved interrupt + timer wake delivery across panic mode, proving panic holds scheduler dispatch at `0` while interrupt/timer waiters become ready, then `command_set_mode(mode_running)` and `command_set_boot_phase(runtime)` resume the preserved ready queue in order (`ACK=13`, `LAST_OPCODE=16`, `TASK_COUNT=2`, `RUNNING_SLOT=1`, `TASK1_BUDGET_REMAINING=6`)
   - optional QEMU mode/boot-phase history probe validates live command/runtime/panic reason ordering, then clears and saturates both 64-entry rings against the freestanding PVH artifact, proving retained oldest/newest mode + boot-phase payload ordering (`66 -> len 64 / overflow 2`)
+  - optional QEMU mode/boot-phase setter probe validates direct `command_set_boot_phase` and `command_set_mode` mailbox control end to end, proving same-value setters stay idempotent, invalid boot-phase `99` and invalid mode `77` are rejected without clobbering retained state/history, and direct `mode_panicked` / `mode_running` transitions do not mutate panic counters or boot-phase state against the freestanding PVH artifact
   - optional QEMU mode/boot-phase history clear probe validates the dedicated mailbox clear paths end to end, proving `command_clear_mode_history` and `command_clear_boot_phase_history` zero ring len/head/overflow/seq independently, preserve the non-cleared companion ring until its own clear, and restart both histories at `seq=1` on the next live transitions
   - optional QEMU allocator/syscall failure probe validates invalid-alignment, no-space, blocked-syscall, and disabled-syscall result semantics plus command-result counters against the freestanding PVH artifact
   - optional QEMU scheduler probe validates scheduler reset/timeslice/task-create/policy-enable flow end to end against the freestanding PVH artifact

@@ -162,6 +162,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-mode-boot-phase-history-probe-check.ps1
 
+      - name: Bare-metal QEMU mode/boot-phase setter probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mode-boot-phase-setter-probe-check.ps1
+
       - name: Bare-metal QEMU mode/boot-phase history clear probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-mode-boot-phase-history-clear-probe-check.ps1
