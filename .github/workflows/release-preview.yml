@@ -216,6 +216,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-probe-check.ps1
 
+      - name: Bare-metal QEMU scheduler priority budget probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-priority-budget-probe-check.ps1
+
       - name: Bare-metal QEMU timer wake probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-timer-wake-probe-check.ps1

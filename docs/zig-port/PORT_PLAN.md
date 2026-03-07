@@ -1011,6 +1011,10 @@ Full-stack replacement execution reference:
     - new script: `scripts/baremetal-qemu-scheduler-probe-check.ps1` resolves scheduler state/task symbols from the freestanding ELF and drives scheduler commands through the mailbox under QEMU+GDB.
     - the probe validates `command_scheduler_reset`, `command_scheduler_set_timeslice`, `command_task_create`, `command_scheduler_set_policy`, and `command_scheduler_enable` end to end over the PVH freestanding artifact.
     - current proof path validates `enabled=1`, `task_count=1`, `running_slot=0`, `dispatch_count>=1`, `timeslice=3`, `policy=priority`, and a live task with `priority=5`, `budget=12`, and nonzero run-count/budget-remaining telemetry.
+  - bare-metal QEMU scheduler priority/budget validation shipped:
+    - new script: `scripts/baremetal-qemu-scheduler-priority-budget-probe-check.ps1` resolves scheduler state, policy, and multi-slot task telemetry from the freestanding ELF and drives scheduler priority-depth commands through the mailbox under QEMU+GDB.
+    - the probe validates `command_scheduler_reset`, `command_wake_queue_clear`, `command_scheduler_disable`, `command_scheduler_set_default_budget`, two `command_task_create` calls, `command_scheduler_set_policy`, `command_scheduler_enable`, and `command_task_set_priority` end to end over the PVH freestanding artifact.
+    - current proof path validates `ACK=9`, `LAST_OPCODE=56`, `LAST_RESULT=0`, `DEFAULT_BUDGET=9`, low task default-budget inheritance (`budget_ticks=9`, `budget_remaining=9`), high-priority task-first dispatch (`HIGH_RUN_BEFORE=1`, `LOW_RUN_BEFORE=0`), and successful reprioritization of the low task to `15` with a subsequent dispatch-order flip (`LOW_RUN_AFTER=1`, `HIGH_RUN_AFTER=1`).
   - bare-metal QEMU timer/wake validation shipped:
     - new script: `scripts/baremetal-qemu-timer-wake-probe-check.ps1` resolves timer state/entry and wake-queue symbols from the freestanding ELF and drives timer commands through the mailbox under QEMU+GDB.
     - the probe validates `command_timer_reset`, `command_timer_set_quantum`, `command_task_create`, and `command_task_wait_for` end to end over the PVH freestanding artifact.
