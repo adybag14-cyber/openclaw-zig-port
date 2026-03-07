@@ -122,6 +122,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-command-loop-check.ps1
 
+      - name: Bare-metal QEMU feature flags tick batch probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-feature-flags-tick-batch-probe-check.ps1
+
       - name: Bare-metal QEMU descriptor bootdiag probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-descriptor-bootdiag-probe-check.ps1

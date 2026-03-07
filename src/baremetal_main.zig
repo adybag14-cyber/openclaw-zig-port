@@ -2715,6 +2715,54 @@ test "baremetal reset counters clears representative runtime subsystems" {
     try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
 }
 
+test "baremetal feature flags and tick batch hint commands update status" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.last_health_code = 200;
+    status.feature_flags = abi.defaultFeatureFlags();
+    status.panic_count = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    status.tick_batch_hint = 1;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_command_result_counters_clear();
+
+    _ = oc_submit_command(abi.command_set_feature_flags, 0xA55AA55A, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_set_feature_flags), status.last_command_opcode);
+    try std.testing.expectEqual(@as(u32, 0xA55AA55A), status.feature_flags);
+    try std.testing.expectEqual(@as(u64, 1), status.ticks);
+
+    _ = oc_submit_command(abi.command_set_tick_batch_hint, 4, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_set_tick_batch_hint), status.last_command_opcode);
+    try std.testing.expectEqual(@as(u32, 4), status.tick_batch_hint);
+    try std.testing.expectEqual(@as(u64, 5), status.ticks);
+
+    _ = oc_submit_command(abi.command_set_tick_batch_hint, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_set_tick_batch_hint), status.last_command_opcode);
+    try std.testing.expectEqual(@as(u32, 4), status.tick_batch_hint);
+    try std.testing.expectEqual(@as(u64, 9), status.ticks);
+
+    try std.testing.expectEqual(@as(u32, 3), oc_command_result_total_count());
+    try std.testing.expectEqual(@as(u32, 2), oc_command_result_count_ok());
+    try std.testing.expectEqual(@as(u32, 1), oc_command_result_count_invalid_argument());
+    try std.testing.expectEqual(@as(u32, 0), oc_command_result_count_not_supported());
+    try std.testing.expectEqual(@as(u32, 0), oc_command_result_count_other_error());
+}
+
 test "baremetal scheduler command flow creates dispatches and completes tasks" {
     status.mode = abi.mode_running;
     status.ticks = 0;
