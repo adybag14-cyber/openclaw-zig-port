@@ -78,6 +78,7 @@ Recommended sequence:
 - optional bare-metal QEMU mode/boot-phase history probe (command/runtime/panic reason ordering plus post-clear saturation of the 64-entry mode-history and boot-phase-history rings against the freestanding PVH artifact)
 - optional bare-metal QEMU scheduler priority budget probe (live `command_scheduler_set_default_budget` plus `command_task_set_priority` proof, including zero-budget task inheritance and dispatch-order flip under the priority scheduler against the freestanding PVH artifact)
 - optional bare-metal QEMU scheduler round-robin probe (default scheduler policy remains round-robin under live QEMU execution, rotating dispatch `1/0 -> 1/1 -> 2/1` across a lower-priority first task and higher-priority second task while budgets decrement deterministically)
+- optional bare-metal QEMU scheduler saturation probe (fills the 16-slot scheduler task table, proves the 17th `command_task_create` returns `result_no_space`, then terminates one slot and reuses it with a fresh task ID plus replacement priority/budget against the freestanding PVH artifact)
 - optional bare-metal QEMU timer wake probe (timer reset/quantum/task-wait to fired timer entry + wake queue telemetry against the freestanding PVH artifact)
 - optional bare-metal QEMU timer quantum probe (one-shot `command_timer_schedule` respects `command_timer_set_quantum`, keeps the task waiting with `wake_queue_len=0` at the pre-boundary tick, and only wakes on the next quantum boundary against the freestanding PVH artifact)
 - optional bare-metal QEMU timer cancel probe (capture the live timer ID from the armed entry, cancel that exact timer via `command_timer_cancel`, preserve the canceled slot state, and get `result_not_found` on a second cancel against the freestanding PVH artifact)
@@ -119,6 +120,7 @@ Recommended sequence:
 - appliance minimal profile smoke check in validate stage
 - bare-metal optional QEMU feature-flags/tick-batch probe in validate stage
 - bare-metal optional QEMU scheduler probe in validate stage
+- bare-metal optional QEMU scheduler saturation probe in validate stage
 - bare-metal optional QEMU timer wake probe in validate stage
 - bare-metal optional QEMU timer quantum probe in validate stage
 - bare-metal optional QEMU timer cancel probe in validate stage

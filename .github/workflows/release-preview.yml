@@ -232,6 +232,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-round-robin-probe-check.ps1
 
+      - name: Bare-metal QEMU scheduler saturation probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-saturation-probe-check.ps1
+
       - name: Bare-metal QEMU timer wake probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-timer-wake-probe-check.ps1

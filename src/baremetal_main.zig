@@ -2821,6 +2821,74 @@ test "baremetal scheduler command flow creates dispatches and completes tasks" {
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_task_count());
 }
 
+test "baremetal scheduler task table saturates and reuses terminated slots" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    status.tick_batch_hint = 1;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_scheduler_reset();
+    oc_command_result_counters_clear();
+
+    const capacity = oc_scheduler_task_capacity();
+    const reuse_slot: u32 = 5;
+    var last_task_id: u32 = 0;
+    var reused_slot_previous_id: u32 = 0;
+
+    var idx: u32 = 0;
+    while (idx < capacity) : (idx += 1) {
+        _ = oc_submit_command(abi.command_task_create, 2, idx + 1);
+        oc_tick();
+        try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+        const task = oc_scheduler_task(idx);
+        try std.testing.expect(task.task_id != 0);
+        try std.testing.expectEqual(@as(u8, abi.task_state_ready), task.state);
+        if (idx == reuse_slot) reused_slot_previous_id = task.task_id;
+        last_task_id = task.task_id;
+    }
+
+    try std.testing.expectEqual(capacity, oc_scheduler_task_count());
+    try std.testing.expect(reused_slot_previous_id != 0);
+
+    _ = oc_submit_command(abi.command_task_create, 3, 99);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_no_space), status.last_command_result);
+    try std.testing.expectEqual(capacity, oc_scheduler_task_count());
+
+    _ = oc_submit_command(abi.command_task_terminate, reused_slot_previous_id, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(capacity - 1, oc_scheduler_task_count());
+    const terminated = oc_scheduler_task(reuse_slot);
+    try std.testing.expectEqual(reused_slot_previous_id, terminated.task_id);
+    try std.testing.expectEqual(@as(u8, abi.task_state_terminated), terminated.state);
+
+    _ = oc_submit_command(abi.command_task_create, 7, 99);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(capacity, oc_scheduler_task_count());
+    const reused = oc_scheduler_task(reuse_slot);
+    try std.testing.expect(reused.task_id > last_task_id);
+    try std.testing.expectEqual(@as(u8, abi.task_state_ready), reused.state);
+    try std.testing.expectEqual(@as(u8, 99), reused.priority);
+    try std.testing.expectEqual(@as(u32, 7), reused.budget_ticks);
+
+    try std.testing.expectEqual(@as(u32, capacity + 3), oc_command_result_total_count());
+    try std.testing.expectEqual(capacity + 2, oc_command_result_count_ok());
+    try std.testing.expectEqual(@as(u32, 0), oc_command_result_count_invalid_argument());
+    try std.testing.expectEqual(@as(u32, 0), oc_command_result_count_not_supported());
+    try std.testing.expectEqual(@as(u32, 1), oc_command_result_count_other_error());
+}
+
 test "baremetal allocator command flow allocates and frees mapped pages" {
     status.mode = abi.mode_running;
     status.ticks = 0;
