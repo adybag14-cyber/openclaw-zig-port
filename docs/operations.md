@@ -83,6 +83,7 @@ Recommended sequence:
 - optional bare-metal QEMU scheduler round-robin probe (default scheduler policy remains round-robin under live QEMU execution, rotating dispatch `1/0 -> 1/1 -> 2/1` across a lower-priority first task and higher-priority second task while budgets decrement deterministically)
 - optional bare-metal QEMU scheduler timeslice-update probe (live `command_scheduler_set_timeslice` updates under active load, proving budget consumption immediately follows `timeslice 1 -> 4 -> 2` and invalid zero is rejected without changing the active timeslice against the freestanding PVH artifact)
 - optional bare-metal QEMU scheduler disable-enable probe (live `command_scheduler_disable` and `command_scheduler_enable` under active load, proving dispatch count and task budget stay frozen across idle disabled ticks and resume immediately after re-enable against the freestanding PVH artifact)
+- optional bare-metal QEMU scheduler reset probe (live `command_scheduler_reset` under active load, proving scheduler state returns to defaults, active task state is cleared, task IDs restart at `1`, and a fresh task dispatches cleanly after re-enable against the freestanding PVH artifact)
 - optional bare-metal QEMU scheduler saturation probe (fills the 16-slot scheduler task table, proves the 17th `command_task_create` returns `result_no_space`, then terminates one slot and reuses it with a fresh task ID plus replacement priority/budget against the freestanding PVH artifact)
 - optional bare-metal QEMU timer wake probe (timer reset/quantum/task-wait to fired timer entry + wake queue telemetry against the freestanding PVH artifact)
 - optional bare-metal QEMU timer quantum probe (one-shot `command_timer_schedule` respects `command_timer_set_quantum`, keeps the task waiting with `wake_queue_len=0` at the pre-boundary tick, and only wakes on the next quantum boundary against the freestanding PVH artifact)
@@ -135,6 +136,7 @@ Recommended sequence:
 - bare-metal optional QEMU scheduler probe in validate stage
 - bare-metal optional QEMU scheduler timeslice-update probe in validate stage
 - bare-metal optional QEMU scheduler disable-enable probe in validate stage
+- bare-metal optional QEMU scheduler reset probe in validate stage
 - bare-metal optional QEMU scheduler saturation probe in validate stage
 - bare-metal optional QEMU timer wake probe in validate stage
 - bare-metal optional QEMU timer quantum probe in validate stage
