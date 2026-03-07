@@ -332,27 +332,53 @@ if `$stage == 9
 end
 if `$stage == 10
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 10
-    set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $allocatorFreeOpcode
+    set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $syscallSetFlagsOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 11
-    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = `$alloc_ptr
-    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg1Offset) = $allocSize
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = $syscallId
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg1Offset) = 0
     set `$stage = 11
   end
   continue
 end
 if `$stage == 11
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 11
-    set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $syscallUnregisterOpcode
+    set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $syscallInvokeOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 12
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = $syscallId
-    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg1Offset) = 0
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg1Offset) = $invokeArg
     set `$stage = 12
   end
   continue
 end
 if `$stage == 12
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 12
+    printf "REENABLED_COMMAND_RESULT=%d\n", *(short*)(0x$statusAddress+$statusLastCommandResultOffset)
+    printf "REENABLED_DISPATCH_COUNT_SNAPSHOT=%llu\n", *(unsigned long long*)(0x$syscallStateAddress+$syscallStateDispatchCountOffset)
+    printf "REENABLED_INVOKE_COUNT_SNAPSHOT=%llu\n", *(unsigned long long*)(0x$syscallEntriesAddress+$syscallEntryInvokeCountOffset)
+    printf "REENABLED_LAST_ARG_SNAPSHOT=%llu\n", *(unsigned long long*)(0x$syscallEntriesAddress+$syscallEntryLastArgOffset)
+    printf "REENABLED_ENTRY_FLAGS_SNAPSHOT=%u\n", *(unsigned char*)(0x$syscallEntriesAddress+$syscallEntryFlagsOffset)
+    printf "REENABLED_LAST_RESULT_SNAPSHOT=%lld\n", *(long long*)(0x$syscallEntriesAddress+$syscallEntryLastResultOffset)
+    set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $allocatorFreeOpcode
+    set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 13
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = `$alloc_ptr
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg1Offset) = $allocSize
     set `$stage = 13
+  end
+  continue
+end
+if `$stage == 13
+  if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 13
+    set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $syscallUnregisterOpcode
+    set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 14
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = $syscallId
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg1Offset) = 0
+    set `$stage = 14
+  end
+  continue
+end
+if `$stage == 14
+  if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 14
+    set `$stage = 15
   end
   continue
 end
@@ -425,6 +451,12 @@ $invokeLastArgSnapshot = $null
 $blockedCommandResult = $null
 $blockedInvokeCountSnapshot = $null
 $disabledCommandResult = $null
+$reenabledCommandResult = $null
+$reenabledDispatchCountSnapshot = $null
+$reenabledInvokeCountSnapshot = $null
+$reenabledLastArgSnapshot = $null
+$reenabledEntryFlagsSnapshot = $null
+$reenabledLastResultSnapshot = $null
 $heapBase = $null
 $pageSize = $null
 $freePages = $null
@@ -477,6 +509,12 @@ if (Test-Path $gdbStdout) {
     $blockedCommandResult = Extract-IntValue -Text $out -Name "BLOCKED_COMMAND_RESULT"
     $blockedInvokeCountSnapshot = Extract-IntValue -Text $out -Name "BLOCKED_INVOKE_COUNT_SNAPSHOT"
     $disabledCommandResult = Extract-IntValue -Text $out -Name "DISABLED_COMMAND_RESULT"
+    $reenabledCommandResult = Extract-IntValue -Text $out -Name "REENABLED_COMMAND_RESULT"
+    $reenabledDispatchCountSnapshot = Extract-IntValue -Text $out -Name "REENABLED_DISPATCH_COUNT_SNAPSHOT"
+    $reenabledInvokeCountSnapshot = Extract-IntValue -Text $out -Name "REENABLED_INVOKE_COUNT_SNAPSHOT"
+    $reenabledLastArgSnapshot = Extract-IntValue -Text $out -Name "REENABLED_LAST_ARG_SNAPSHOT"
+    $reenabledEntryFlagsSnapshot = Extract-IntValue -Text $out -Name "REENABLED_ENTRY_FLAGS_SNAPSHOT"
+    $reenabledLastResultSnapshot = Extract-IntValue -Text $out -Name "REENABLED_LAST_RESULT_SNAPSHOT"
     $heapBase = Extract-IntValue -Text $out -Name "HEAP_BASE"
     $pageSize = Extract-IntValue -Text $out -Name "PAGE_SIZE"
     $freePages = Extract-IntValue -Text $out -Name "FREE_PAGES"
@@ -546,6 +584,12 @@ Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE_INVOKE_LAST_ARG_SNAPSHOT=$i
 Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE_BLOCKED_COMMAND_RESULT=$blockedCommandResult"
 Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE_BLOCKED_INVOKE_COUNT_SNAPSHOT=$blockedInvokeCountSnapshot"
 Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE_DISABLED_COMMAND_RESULT=$disabledCommandResult"
+Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE_REENABLED_COMMAND_RESULT=$reenabledCommandResult"
+Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE_REENABLED_DISPATCH_COUNT_SNAPSHOT=$reenabledDispatchCountSnapshot"
+Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE_REENABLED_INVOKE_COUNT_SNAPSHOT=$reenabledInvokeCountSnapshot"
+Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE_REENABLED_LAST_ARG_SNAPSHOT=$reenabledLastArgSnapshot"
+Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE_REENABLED_ENTRY_FLAGS_SNAPSHOT=$reenabledEntryFlagsSnapshot"
+Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE_REENABLED_LAST_RESULT_SNAPSHOT=$reenabledLastResultSnapshot"
 Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE_HEAP_BASE=$heapBase"
 Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE_PAGE_SIZE=$pageSize"
 Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE_FREE_PAGES=$freePages"
@@ -582,11 +626,12 @@ Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE_QEMU_STDERR=$qemuStderr"
 Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE_TIMED_OUT=$timedOut"
 
 $pass = (
-    $hitStart -and $hitAfterAllocatorSyscall -and (-not $timedOut) -and $ack -eq 12 -and $lastOpcode -eq $syscallUnregisterOpcode -and $lastResult -eq 0 -and $ticks -ge 10 -and $mailboxOpcode -eq $syscallUnregisterOpcode -and $mailboxSeq -eq 12 -and
+    $hitStart -and $hitAfterAllocatorSyscall -and (-not $timedOut) -and $ack -eq 14 -and $lastOpcode -eq $syscallUnregisterOpcode -and $lastResult -eq 0 -and $ticks -ge 12 -and $mailboxOpcode -eq $syscallUnregisterOpcode -and $mailboxSeq -eq 14 -and
     $allocPtrSnapshot -ne 0 -and $allocFreePagesAfterAlloc -eq 254 -and $allocRecordPageLenSnapshot -eq 2 -and $allocRecordStateSnapshot -eq 1 -and $allocBitmap0AfterAlloc -eq 1 -and $allocBitmap1AfterAlloc -eq 1 -and
     $invokeLastResultSnapshot -eq $expectedInvokeResult -and $invokeDispatchCountSnapshot -eq 1 -and $invokeCountSnapshot -eq 1 -and $invokeLastArgSnapshot -eq $invokeArg -and $blockedCommandResult -eq -17 -and $blockedInvokeCountSnapshot -eq 1 -and $disabledCommandResult -eq -38 -and
+    $reenabledCommandResult -eq 0 -and $reenabledDispatchCountSnapshot -eq 2 -and $reenabledInvokeCountSnapshot -eq 2 -and $reenabledLastArgSnapshot -eq $invokeArg -and $reenabledEntryFlagsSnapshot -eq 0 -and $reenabledLastResultSnapshot -eq $expectedInvokeResult -and
     $heapBase -eq $allocPtrSnapshot -and $pageSize -eq $allocAlignment -and $freePages -eq 256 -and $allocationCount -eq 0 -and $allocOps -eq 1 -and $freeOps -eq 1 -and $bytesInUse -eq 0 -and $peakBytesInUse -eq $allocSize -and $lastAllocPtr -eq $allocPtrSnapshot -and $lastAllocSize -eq $allocSize -and $lastFreePtr -eq $allocPtrSnapshot -and $lastFreeSize -eq $allocSize -and $bitmap0 -eq 0 -and $bitmap1 -eq 0 -and $allocRecord0State -eq 0 -and $allocRecord0Ptr -eq 0 -and $allocRecord0PageLen -eq 0 -and
-    $syscallEnabled -eq 1 -and $syscallEntryCount -eq 0 -and $syscallLastId -eq $syscallId -and $syscallDispatchCount -eq 1 -and $syscallLastInvokeTick -ge 1 -and $syscallLastResult -eq $expectedInvokeResult -and $syscallEntry0State -eq 0 -and $syscallEntry0Flags -eq 0 -and $syscallEntry0Token -eq 0 -and $syscallEntry0InvokeCount -eq 0 -and $syscallEntry0LastArg -eq 0 -and $syscallEntry0LastResult -eq 0
+    $syscallEnabled -eq 1 -and $syscallEntryCount -eq 0 -and $syscallLastId -eq $syscallId -and $syscallDispatchCount -eq 2 -and $syscallLastInvokeTick -ge 1 -and $syscallLastResult -eq $expectedInvokeResult -and $syscallEntry0State -eq 0 -and $syscallEntry0Flags -eq 0 -and $syscallEntry0Token -eq 0 -and $syscallEntry0InvokeCount -eq 0 -and $syscallEntry0LastArg -eq 0 -and $syscallEntry0LastResult -eq 0
 )
 if ($pass) { Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE=pass"; exit 0 }
 Write-Output "BAREMETAL_QEMU_ALLOCATOR_SYSCALL_PROBE=fail"

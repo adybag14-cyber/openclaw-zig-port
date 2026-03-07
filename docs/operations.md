@@ -111,7 +111,7 @@ Recommended sequence:
 - optional bare-metal QEMU wake-queue summary/age probe (exported `oc_wake_queue_summary_ptr` and `oc_wake_queue_age_buckets_ptr_quantum_2` snapshots before and after selective queue drains against the freestanding PVH artifact)
 - optional bare-metal QEMU wake-queue overflow probe (sustained manual wake pressure over one waiting task, proving the 64-entry ring retains the newest window with `overflow=2` against the freestanding PVH artifact)
 - optional bare-metal QEMU wake-queue batch-pop probe (post-overflow batch-drain and refill proof over one waiting task, proving survivor ordering `65/66`, empty recovery, and reuse at `seq=67` against the freestanding PVH artifact)
-- optional bare-metal QEMU allocator syscall probe (alloc/free plus syscall register/invoke/block/disable/unregister against the freestanding PVH artifact)
+- optional bare-metal QEMU allocator syscall probe (alloc/free plus syscall register/invoke/block/disable/re-enable/clear-flags/unregister against the freestanding PVH artifact)
 - optional bare-metal QEMU allocator syscall failure probe (invalid-alignment, no-space, blocked-syscall, and disabled-syscall result semantics plus command-result counters against the freestanding PVH artifact)
 - optional bare-metal QEMU command-result counters probe (live mailbox result-category accounting plus `command_reset_command_result_counters` reset semantics against the freestanding PVH artifact)
 - optional bare-metal QEMU reset counters probe (live `command_reset_counters` proof after dirtying interrupt, exception, scheduler, allocator, syscall, timer, wake-queue, mode, boot-phase, command-history, and health-history state against the freestanding PVH artifact)
