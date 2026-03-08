@@ -57,6 +57,35 @@ Full-stack replacement execution reference:
 ## Current Progress Snapshot
 
 - Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `203/203`.
+- Current baseline status (2026-03-08):
+  - Zig method surface: `170`
+  - Tri-baseline method parity:
+    - Go latest release baseline: `134/134`
+    - Original OpenClaw latest release baseline: `94/94`
+    - Original OpenClaw latest beta baseline: `94/94`
+    - Union baseline: `135/135` (`missing_in_zig=0`)
+  - Tri-baseline gateway event parity:
+    - Original stable: `19/19`
+    - Original beta: `19/19`
+    - Union events: `19/19`
+  - Latest local validation:
+    - `zig build test --summary all` -> hosted `203/203`
+    - host bare-metal suite -> `76/76`
+    - `scripts/baremetal-qemu-wake-queue-vector-pop-probe-check.ps1` -> pass
+    - `scripts/baremetal-qemu-wake-queue-reason-vector-pop-probe-check.ps1` -> pass
+    - pinned parity gate -> pass (`v2.14.0-go`, `v2026.3.2`, `v2026.3.2-beta.1`)
+    - `docs-status-check.ps1` -> pass
+  - Current head: `a5f96dc`
+  - Latest CI:
+    - `zig-ci` run `22815468072` -> `success`
+    - `docs-pages` run `22815468064` -> `success`
+  - Zig freshness snapshot:
+    - Codeberg `master`: `f16eb18ce8c24ed743aae1faa4980052cb9f4f36`
+    - local Zig: `0.16.0-dev.2703+0a412853a`
+    - local toolchain still trails Codeberg `master`
+  - Latest release/package status:
+    - GitHub prerelease tag: `v0.2.0-zig-edge.26`
+    - Release assets include desktop/android/bare-metal builds, parity reports, manifest, `sbom.spdx.json`, `provenance.intoto.json`
 - Release/package lane status (2026-03-06):
   - GitHub prerelease `v0.2.0-zig-edge.26` is live with desktop/android/bare-metal artifacts, parity reports, manifest, SBOM, provenance, npm tarball, wheel, and sdist.
   - release evidence now also includes `release-status.json` + `release-status.md` so every edge cut carries a frozen workflow-status + registry-status snapshot in addition to package preflight evidence.
