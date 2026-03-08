@@ -330,6 +330,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-wake-queue-vector-pop-probe-check.ps1
 
+      - name: Bare-metal QEMU wake queue reason-vector pop probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-reason-vector-pop-probe-check.ps1
+
       - name: Bare-metal QEMU wake queue overflow probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-wake-queue-overflow-probe-check.ps1

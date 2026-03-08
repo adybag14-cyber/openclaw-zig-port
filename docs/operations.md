@@ -115,6 +115,7 @@ Recommended sequence:
 - optional bare-metal QEMU wake-queue summary/age probe (exported `oc_wake_queue_summary_ptr` and `oc_wake_queue_age_buckets_ptr_quantum_2` snapshots before and after selective queue drains against the freestanding PVH artifact)
 - optional bare-metal QEMU wake-queue overflow probe (sustained manual wake pressure over one waiting task, proving the 64-entry ring retains the newest window with `overflow=2` against the freestanding PVH artifact)
 - optional bare-metal QEMU wake-queue batch-pop probe (post-overflow batch-drain and refill proof over one waiting task, proving survivor ordering `65/66`, empty recovery, and reuse at `seq=67` against the freestanding PVH artifact)
+- optional bare-metal QEMU wake-queue reason-vector-pop probe (dedicated exact-pair drain proof over a four-entry `manual` / `interrupt@13` / `interrupt@13` / `interrupt@19` queue, preserving surrounding FIFO survivors while rejecting `reason+vector=0` against the freestanding PVH artifact)
 - optional bare-metal QEMU wake-queue vector-pop probe (dedicated `command_wake_queue_pop_vector` proof over a four-entry mixed queue, proving only vector `13` wakes are removed in FIFO order and the final vector `255` drain returns `result_not_found` against the freestanding PVH artifact)
 - optional bare-metal QEMU allocator syscall probe (alloc/free plus syscall register/invoke/block/disable/re-enable/clear-flags/unregister, then live `command_allocator_reset` + `command_syscall_reset` recovery proof against the freestanding PVH artifact)
 - optional bare-metal QEMU syscall saturation probe (fill the 64-entry syscall table, reject the 65th `register`, reclaim one slot with `unregister`, reuse it with a fresh syscall ID/token, and prove the reused slot invokes cleanly against the freestanding PVH artifact)
@@ -183,6 +184,7 @@ Recommended sequence:
 - bare-metal optional QEMU wake-queue selective-overflow probe in validate stage
 - bare-metal optional QEMU wake-queue before-tick-overflow probe in validate stage
 - bare-metal optional QEMU wake-queue reason-overflow probe in validate stage
+- bare-metal optional QEMU wake-queue reason-vector-pop probe in validate stage
 - bare-metal optional QEMU wake-queue FIFO probe in validate stage
 - bare-metal optional QEMU wake-queue summary/age probe in validate stage
 - bare-metal optional QEMU wake-queue overflow probe in validate stage
