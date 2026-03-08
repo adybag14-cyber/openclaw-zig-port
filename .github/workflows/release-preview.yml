@@ -403,6 +403,18 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-timer-disable-interrupt-probe-check.ps1
 
+      - name: Bare-metal QEMU timer-disable reenable probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-disable-reenable-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt-timeout disable-enable probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-timeout-disable-enable-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt-timeout disable-interrupt probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-timeout-disable-interrupt-probe-check.ps1
+
       - name: Bare-metal QEMU interrupt mask profile probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-mask-profile-probe-check.ps1
