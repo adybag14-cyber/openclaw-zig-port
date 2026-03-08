@@ -2552,6 +2552,47 @@ test "baremetal clear command history preserves health history and restarts comm
     try std.testing.expectEqual(@as(u64, 512), restarted_event.arg0);
 }
 
+test "baremetal command history overflow clear resets ring and restarts from the clear command" {
+    resetBaremetalRuntimeForTest();
+
+    const cap = oc_command_history_capacity();
+    var idx: u32 = 0;
+    while (idx < cap + 3) : (idx += 1) {
+        _ = oc_submit_command(abi.command_set_health_code, 600 + idx, 0);
+        oc_tick();
+    }
+
+    try std.testing.expectEqual(cap, oc_command_history_len());
+    try std.testing.expectEqual(@as(u32, 3), oc_command_history_overflow_count());
+    try std.testing.expectEqual(@as(u32, 4), oc_command_history_event(0).seq);
+    try std.testing.expectEqual(@as(u64, 603), oc_command_history_event(0).arg0);
+
+    const pre_health_len = oc_health_history_len();
+    const pre_health_overflow = oc_health_history_overflow_count();
+
+    _ = oc_submit_command(abi.command_clear_command_history, 0, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u32, 1), oc_command_history_len());
+    try std.testing.expectEqual(@as(u32, 1), oc_command_history_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_command_history_overflow_count());
+    const clear_event = oc_command_history_event(0);
+    try std.testing.expectEqual(status.command_seq_ack, clear_event.seq);
+    try std.testing.expectEqual(@as(u16, abi.command_clear_command_history), clear_event.opcode);
+    try std.testing.expectEqual(@as(i16, abi.result_ok), clear_event.result);
+    try std.testing.expectEqual(pre_health_len, oc_health_history_len());
+    try std.testing.expectEqual(pre_health_overflow + 1, oc_health_history_overflow_count());
+
+    _ = oc_submit_command(abi.command_set_health_code, 999, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u32, 2), oc_command_history_len());
+    const restarted_event = oc_command_history_event(1);
+    try std.testing.expectEqual(status.command_seq_ack, restarted_event.seq);
+    try std.testing.expectEqual(@as(u16, abi.command_set_health_code), restarted_event.opcode);
+    try std.testing.expectEqual(@as(u64, 999), restarted_event.arg0);
+}
+
 test "baremetal health history captures tick health and clear control" {
     status.mode = abi.mode_running;
     status.ticks = 0;
@@ -2626,6 +2667,44 @@ test "baremetal clear health history preserves command history and restarts heal
     try std.testing.expectEqual(@as(u16, 777), restarted_health.health_code);
 }
 
+test "baremetal health history overflow clear resets ring and restarts from seq one" {
+    resetBaremetalRuntimeForTest();
+
+    const cap = oc_health_history_capacity();
+    var idx: u32 = 0;
+    while (oc_health_history_len() < cap or oc_health_history_overflow_count() == 0) : (idx += 1) {
+        _ = oc_submit_command(abi.command_set_health_code, 700 + idx, 0);
+        oc_tick();
+    }
+
+    try std.testing.expectEqual(cap, oc_health_history_len());
+    try std.testing.expect(oc_health_history_overflow_count() > 0);
+    try std.testing.expect(oc_health_history_event(0).seq > 1);
+
+    const pre_command_len = oc_command_history_len();
+    const pre_command_overflow = oc_command_history_overflow_count();
+
+    _ = oc_submit_command(abi.command_clear_health_history, 0, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u32, 1), oc_health_history_len());
+    try std.testing.expectEqual(@as(u32, 1), oc_health_history_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_health_history_overflow_count());
+    const clear_health = oc_health_history_event(0);
+    try std.testing.expectEqual(@as(u32, 1), clear_health.seq);
+    try std.testing.expectEqual(@as(u16, 200), clear_health.health_code);
+    try std.testing.expectEqual(pre_command_len, oc_command_history_len());
+    try std.testing.expectEqual(pre_command_overflow + 1, oc_command_history_overflow_count());
+
+    _ = oc_submit_command(abi.command_set_health_code, 777, 0);
+    oc_tick();
+
+    try std.testing.expect(oc_health_history_len() >= 3);
+    const restarted_health = oc_health_history_event(1);
+    try std.testing.expectEqual(@as(u32, 2), restarted_health.seq);
+    try std.testing.expectEqual(@as(u16, 777), restarted_health.health_code);
+}
+
 test "baremetal mode history captures command and panic transitions and clear control" {
     status.mode = abi.mode_running;
     status.ticks = 0;
@@ -2686,6 +2765,43 @@ test "baremetal mode history captures command and panic transitions and clear co
     try std.testing.expectEqual(@as(u32, 1), m_after_clear.seq);
     try std.testing.expectEqual(@as(u8, abi.mode_running), m_after_clear.previous_mode);
     try std.testing.expectEqual(@as(u8, abi.mode_booting), m_after_clear.new_mode);
+}
+
+test "baremetal mode history overflow clear resets ring and restarts from seq one" {
+    resetBaremetalRuntimeForTest();
+
+    const cap = oc_mode_history_capacity();
+    var iteration: u32 = 0;
+    while (iteration < (cap / 2) + 1) : (iteration += 1) {
+        _ = oc_submit_command(abi.command_set_mode, abi.mode_booting, 0);
+        oc_tick();
+    }
+
+    try std.testing.expectEqual(cap, oc_mode_history_len());
+    try std.testing.expectEqual(@as(u32, 2), oc_mode_history_overflow_count());
+    try std.testing.expectEqual(@as(u32, 3), oc_mode_history_event(0).seq);
+    try std.testing.expectEqual(@as(u8, abi.mode_running), oc_mode_history_event(0).previous_mode);
+    try std.testing.expectEqual(@as(u8, abi.mode_booting), oc_mode_history_event(0).new_mode);
+
+    _ = oc_submit_command(abi.command_clear_mode_history, 0, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u32, 0), oc_mode_history_len());
+    try std.testing.expectEqual(@as(u32, 0), oc_mode_history_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_mode_history_overflow_count());
+    try std.testing.expectEqual(@as(u32, 0), mode_history_seq);
+
+    status.mode = abi.mode_running;
+    status.panic_count = 0;
+    _ = oc_submit_command(abi.command_set_mode, abi.mode_booting, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u32, 2), oc_mode_history_len());
+    try std.testing.expectEqual(@as(u32, 2), oc_mode_history_head_index());
+    const restarted_mode = oc_mode_history_event(0);
+    try std.testing.expectEqual(@as(u32, 1), restarted_mode.seq);
+    try std.testing.expectEqual(@as(u8, abi.mode_running), restarted_mode.previous_mode);
+    try std.testing.expectEqual(@as(u8, abi.mode_booting), restarted_mode.new_mode);
 }
 
 test "baremetal boot phase history captures command runtime and panic transitions" {
@@ -2755,6 +2871,47 @@ test "baremetal boot phase history captures command runtime and panic transition
     try std.testing.expectEqual(@as(u32, 1), p_after_clear.seq);
     try std.testing.expectEqual(@as(u8, abi.boot_phase_runtime), p_after_clear.previous_phase);
     try std.testing.expectEqual(@as(u8, abi.boot_phase_init), p_after_clear.new_phase);
+}
+
+test "baremetal boot phase history overflow clear resets ring and restarts from seq one" {
+    resetBaremetalRuntimeForTest();
+
+    const cap = oc_boot_phase_history_capacity();
+    var iteration: u32 = 0;
+    while (iteration < (cap / 2) + 1) : (iteration += 1) {
+        _ = oc_submit_command(abi.command_set_boot_phase, abi.boot_phase_init, 0);
+        oc_tick();
+        _ = oc_submit_command(abi.command_set_mode, abi.mode_booting, 0);
+        oc_tick();
+    }
+
+    try std.testing.expectEqual(cap, oc_boot_phase_history_len());
+    try std.testing.expectEqual(@as(u32, 2), oc_boot_phase_history_overflow_count());
+    try std.testing.expectEqual(@as(u32, 3), oc_boot_phase_history_event(0).seq);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_runtime), oc_boot_phase_history_event(0).previous_phase);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), oc_boot_phase_history_event(0).new_phase);
+
+    _ = oc_submit_command(abi.command_clear_boot_phase_history, 0, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u32, 0), oc_boot_phase_history_len());
+    try std.testing.expectEqual(@as(u32, 0), oc_boot_phase_history_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_boot_phase_history_overflow_count());
+    try std.testing.expectEqual(@as(u32, 0), boot_phase_history_seq);
+
+    status.mode = abi.mode_running;
+    status.panic_count = 0;
+    boot_diagnostics.phase = abi.boot_phase_runtime;
+    boot_diagnostics.phase_changes = 0;
+    _ = oc_submit_command(abi.command_set_boot_phase, abi.boot_phase_init, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u32, 1), oc_boot_phase_history_len());
+    try std.testing.expectEqual(@as(u32, 1), oc_boot_phase_history_head_index());
+    const restarted_phase = oc_boot_phase_history_event(0);
+    try std.testing.expectEqual(@as(u32, 1), restarted_phase.seq);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_runtime), restarted_phase.previous_phase);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), restarted_phase.new_phase);
 }
 
 test "baremetal direct mode and boot phase setters are isolated, idempotent, and reject invalid values" {

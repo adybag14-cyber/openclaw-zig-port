@@ -3,9 +3,9 @@
 ## Current Snapshot
 
 - Latest published edge release: `v0.2.0-zig-edge.26`
-- Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `94/94` passing
+- Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `98/98` passing
 - Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=170`, `ZIG_EVENTS_COUNT=19`
-- Current head: `main + FS6 bare-metal recovery probes`
+- Current head: `main + FS6 history-control probes`
 - Toolchain lane: Codeberg `master` is canonical; `adybag14-cyber/zig` is the Windows release mirror with rolling `latest-master` plus immutable `upstream-<sha>` releases.
 - Latest CI:
   - `zig-ci` `22813604542` -> success
@@ -88,9 +88,13 @@ Recommended sequence:
 - optional bare-metal QEMU vector history overflow probe (interrupt/exception counter resets plus repeated dispatch saturation, proving history-ring overflow and per-vector telemetry against the freestanding PVH artifact)
 - optional bare-metal QEMU vector history clear probe (dedicated mailbox clear-path proof for `command_reset_interrupt_counters` / `command_reset_exception_counters` plus `command_clear_interrupt_history` / `command_clear_exception_history`, validating that aggregate counters reset first without disturbing retained history/vector tables and that the later clear only zeroes history-ring/overflow state against the freestanding PVH artifact)
 - optional bare-metal QEMU command-health history probe (repeated `command_set_health_code` mailbox execution, proving command-history overflow, health-history overflow, and retained oldest/newest payload ordering against the freestanding PVH artifact)
+- optional bare-metal QEMU command-history overflow clear probe (combined overflow + clear + restart proof for the command-history ring, validating retained `seq 4 -> 35`, single-receipt clear collapse, and clean restart semantics without disturbing health-history overflow state)
+- optional bare-metal QEMU health-history overflow clear probe (combined overflow + clear + restart proof for the health-history ring, validating retained `seq 8 -> 71`, single-receipt clear collapse at `seq 1`, and clean restart semantics without disturbing command-history overflow state)
 - optional bare-metal QEMU mode/boot-phase history probe (command/runtime/panic reason ordering plus post-clear saturation of the 64-entry mode-history and boot-phase-history rings against the freestanding PVH artifact)
 - optional bare-metal QEMU mode/boot-phase setter probe (direct `command_set_boot_phase` / `command_set_mode` proof, validating same-value idempotence, invalid boot-phase `99` and invalid mode `77` rejection without state/history clobbering, and direct `mode_panicked` / `mode_running` transitions without panic-counter or boot-phase side effects against the freestanding PVH artifact)
 - optional bare-metal QEMU mode/boot-phase history clear probe (dedicated mailbox clear-path proof for `command_clear_mode_history` and `command_clear_boot_phase_history`, validating clear-state reset of len/head/overflow/seq and `seq=1` restart semantics against the freestanding PVH artifact)
+- optional bare-metal QEMU mode-history overflow clear probe (combined overflow + clear + restart proof for the mode-history ring, validating retained `seq 3 -> 66`, dedicated clear collapse, and `seq=1` restart semantics while the boot-phase ring stays intact until its own clear)
+- optional bare-metal QEMU boot-phase-history overflow clear probe (combined overflow + clear + restart proof for the boot-phase-history ring, validating retained `seq 3 -> 66`, dedicated clear collapse, and `seq=1` restart semantics while the mode ring stays intact until its own clear)
 - optional bare-metal QEMU scheduler priority budget probe (live `command_scheduler_set_default_budget` plus `command_task_set_priority` proof, including zero-budget task inheritance and dispatch-order flip under the priority scheduler against the freestanding PVH artifact)
 - optional bare-metal QEMU scheduler round-robin probe (default scheduler policy remains round-robin under live QEMU execution, rotating dispatch `1/0 -> 1/1 -> 2/1` across a lower-priority first task and higher-priority second task while budgets decrement deterministically)
 - optional bare-metal QEMU scheduler timeslice-update probe (live `command_scheduler_set_timeslice` updates under active load, proving budget consumption immediately follows `timeslice 1 -> 4 -> 2` and invalid zero is rejected without changing the active timeslice against the freestanding PVH artifact)
@@ -208,8 +212,12 @@ Recommended sequence:
 - bare-metal optional QEMU vector history overflow probe in validate stage
 - bare-metal optional QEMU vector history clear probe in validate stage
 - bare-metal optional QEMU command-health history probe in validate stage
+- bare-metal optional QEMU command-history overflow clear probe in validate stage
+- bare-metal optional QEMU health-history overflow clear probe in validate stage
 - bare-metal optional QEMU mode/boot-phase history probe in validate stage
 - bare-metal optional QEMU mode/boot-phase history clear probe in validate stage
+- bare-metal optional QEMU mode-history overflow clear probe in validate stage
+- bare-metal optional QEMU boot-phase-history overflow clear probe in validate stage
 - bare-metal optional QEMU scheduler priority budget probe in validate stage
 - bare-metal optional QEMU scheduler round-robin probe in validate stage
 - bare-metal optional QEMU wake-queue selective probe in validate stage

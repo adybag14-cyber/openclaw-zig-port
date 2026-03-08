@@ -173,6 +173,14 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-command-health-history-probe-check.ps1
 
+      - name: Bare-metal QEMU command-history overflow clear probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-command-history-overflow-clear-probe-check.ps1
+
+      - name: Bare-metal QEMU health-history overflow clear probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-health-history-overflow-clear-probe-check.ps1
+
       - name: Bare-metal QEMU mode/boot-phase history probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-mode-boot-phase-history-probe-check.ps1
@@ -184,6 +192,14 @@ jobs:
       - name: Bare-metal QEMU mode/boot-phase history clear probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-mode-boot-phase-history-clear-probe-check.ps1
+
+      - name: Bare-metal QEMU mode-history overflow clear probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mode-history-overflow-clear-probe-check.ps1
+
+      - name: Bare-metal QEMU boot-phase-history overflow clear probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-boot-phase-history-overflow-clear-probe-check.ps1
 
       - name: Runtime smoke check (serve + rpc)
         shell: pwsh
