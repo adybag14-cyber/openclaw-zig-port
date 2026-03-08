@@ -3262,6 +3262,102 @@ test "baremetal syscall abi v2 supports enable disable and entry flags" {
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
 }
 
+test "baremetal syscall control commands isolate mutation and invoke paths" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    status.tick_batch_hint = 1;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_syscall_reset();
+    oc_timer_reset();
+    oc_scheduler_reset();
+
+    _ = oc_submit_command(abi.command_syscall_register, 11, 0xBEEF);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 1), oc_syscall_entry_count());
+    try std.testing.expectEqual(@as(u64, 0xBEEF), oc_syscall_entry(0).handler_token);
+    try std.testing.expectEqual(@as(u8, 0), oc_syscall_entry(0).flags);
+
+    _ = oc_submit_command(abi.command_syscall_register, 11, 0xCAFE);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 1), oc_syscall_entry_count());
+    try std.testing.expectEqual(@as(u64, 0xCAFE), oc_syscall_entry(0).handler_token);
+    try std.testing.expectEqual(@as(u64, 0), oc_syscall_entry(0).invoke_count);
+
+    _ = oc_submit_command(abi.command_syscall_set_flags, 11, abi.syscall_entry_flag_blocked);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(abi.syscall_entry_flag_blocked, oc_syscall_entry(0).flags);
+
+    _ = oc_submit_command(abi.command_syscall_invoke, 11, 0x1234);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_conflict), status.last_command_result);
+    try std.testing.expectEqual(@as(u64, 0), oc_syscall_entry(0).invoke_count);
+    try std.testing.expectEqual(@as(u64, 0), oc_syscall_state_ptr().dispatch_count);
+    try std.testing.expectEqual(@as(u32, 0), oc_syscall_state_ptr().last_syscall_id);
+
+    _ = oc_submit_command(abi.command_syscall_disable, 0, 0);
+    oc_tick();
+    try std.testing.expect(!oc_syscall_enabled());
+
+    _ = oc_submit_command(abi.command_syscall_set_flags, 11, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, 0), oc_syscall_entry(0).flags);
+
+    _ = oc_submit_command(abi.command_syscall_invoke, 11, 0x1234);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_not_supported), status.last_command_result);
+    try std.testing.expectEqual(@as(u64, 0), oc_syscall_entry(0).invoke_count);
+    try std.testing.expectEqual(@as(u64, 0), oc_syscall_state_ptr().dispatch_count);
+
+    _ = oc_submit_command(abi.command_syscall_enable, 0, 0);
+    oc_tick();
+    try std.testing.expect(oc_syscall_enabled());
+
+    _ = oc_submit_command(abi.command_syscall_invoke, 11, 0x1234);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    const invoke_expected: i64 = @as(i64, @bitCast(@as(u64, 0xCAFE ^ 0x1234 ^ 11)));
+    try std.testing.expectEqual(@as(u64, 1), oc_syscall_entry(0).invoke_count);
+    try std.testing.expectEqual(@as(u64, 0x1234), oc_syscall_entry(0).last_arg);
+    try std.testing.expectEqual(invoke_expected, oc_syscall_entry(0).last_result);
+    const syscall_state_after_invoke = oc_syscall_state_ptr().*;
+    try std.testing.expectEqual(@as(u32, 11), syscall_state_after_invoke.last_syscall_id);
+    try std.testing.expectEqual(@as(u64, 1), syscall_state_after_invoke.dispatch_count);
+    try std.testing.expect(syscall_state_after_invoke.last_invoke_tick > 0);
+    try std.testing.expectEqual(invoke_expected, syscall_state_after_invoke.last_result);
+
+    _ = oc_submit_command(abi.command_syscall_unregister, 11, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 0), oc_syscall_entry_count());
+    try std.testing.expectEqual(@as(u8, abi.syscall_entry_state_unused), oc_syscall_entry(0).state);
+
+    _ = oc_submit_command(abi.command_syscall_set_flags, 11, abi.syscall_entry_flag_blocked);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_not_found), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 0), oc_syscall_entry_count());
+
+    _ = oc_submit_command(abi.command_syscall_unregister, 11, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_not_found), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 0), oc_syscall_entry_count());
+    try std.testing.expect(oc_syscall_enabled());
+    try std.testing.expectEqual(@as(u64, 1), oc_syscall_state_ptr().dispatch_count);
+}
+
 test "baremetal allocator and syscall reset commands clear dirty runtime state" {
     status.mode = abi.mode_running;
     status.ticks = 0;
