@@ -8,8 +8,8 @@ Full documentation for the OpenClaw Zig runtime port.
 - Tri-baseline parity gate:
   - Go baseline (`v2.14.0-go`): `134/134`
   - Original OpenClaw baseline (`v2026.3.2`): `94/94`
-  - Original OpenClaw beta baseline (`v2026.3.7-beta.1`): `95/95`
-  - Union baseline: `136/136` (`MISSING_IN_ZIG=0`)
+  - Original OpenClaw beta baseline (`v2026.3.2-beta.1`): `94/94`
+  - Union baseline: `135/135` (`MISSING_IN_ZIG=0`)
   - Gateway events union baseline: `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
 - Latest local validation: `203/203` tests passing
 - Latest published edge release tag: `v0.2.0-zig-edge.26`

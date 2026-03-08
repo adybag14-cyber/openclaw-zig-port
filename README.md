@@ -8,8 +8,8 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 - Latest parity gate (tri-baseline):
   - Go baseline (`v2.14.0-go`): `134/134` covered
   - Original OpenClaw baseline (`v2026.3.2`): `94/94` covered
-  - Original OpenClaw beta baseline (`v2026.3.7-beta.1`): `95/95` covered
-  - Union baseline: `136/136` covered (`MISSING_IN_ZIG=0`)
+  - Original OpenClaw beta baseline (`v2026.3.2-beta.1`): `94/94` covered
+  - Union baseline: `135/135` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
 - Latest local validation: `zig build test --summary all` -> main `203/203` + bare-metal host `76/76` passing
 - Latest published edge release tag: `v0.2.0-zig-edge.26`
