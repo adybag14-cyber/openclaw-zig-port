@@ -21,7 +21,7 @@ Source of truth: [`src/gateway/registry.zig`](https://github.com/adybag14-cyber/
 
 ## Summary
 
-- Total methods: **169**
+- Total methods: **170**
 - Prefix groups: **33**
 
 ## Prefix Overview
@@ -36,7 +36,7 @@ Source of truth: [`src/gateway/registry.zig`](https://github.com/adybag14-cyber/
 | canvas | 1 |
 | channels | 4 |
 | chat | 4 |
-| config | 5 |
+| config | 6 |
 | cron | 7 |
 | device | 6 |
 | doctor | 1 |
@@ -332,3 +332,4 @@ Source of truth: [`src/gateway/registry.zig`](https://github.com/adybag14-cyber/
 - wizard.next
 - wizard.start
 - wizard.status
+
