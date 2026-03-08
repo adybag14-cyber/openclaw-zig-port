@@ -1362,6 +1362,12 @@ Full-stack replacement execution reference:
     - live PVH/QEMU+GDB sequence proves a timer-backed wait resumes through exactly one manual wake, the armed timer entry is canceled in place, no ghost timer wake appears after idle ticks, timer quantum is preserved, and fresh timer scheduling restarts from the preserved `next_timer_id`.
     - key probe evidence: `ACK=8`, `LAST_OPCODE=27`, `LAST_RESULT=0`, `PRE_TIMER_COUNT=1`, `POST_RESUME_TIMER_COUNT=0`, `POST_RESUME_WAKE_COUNT=1`, `POST_RESUME_WAKE_REASON=3`, `POST_IDLE_WAKE_COUNT=1`, `POST_IDLE_TIMER_COUNT=0`, `REARM_TIMER_ID=2`, `REARM_NEXT_TIMER_ID=3`.
     - probe is wired into both `zig-ci` and `release-preview` validate stages so timer-backed task-resume regressions now block CI.
+  - bare-metal task-resume interrupt-timeout validation shipped:
+    - new script: `scripts/baremetal-qemu-task-resume-interrupt-timeout-probe-check.ps1`.
+    - added matching host regression in `src/baremetal_main.zig`.
+    - live PVH/QEMU+GDB sequence proves `command_task_resume` on a `task_wait_interrupt_for` waiter clears the pending timeout back to `none`, queues exactly one manual wake, prevents any delayed timer wake after additional slack ticks, and leaves the timer subsystem at `next_timer_id=1`.
+    - key probe evidence: `ACK=7`, `LAST_OPCODE=51`, `LAST_RESULT=0`, `WAIT_KIND0=0`, `WAIT_TIMEOUT0=0`, `TIMER_ENTRY_COUNT=0`, `TIMER_NEXT_TIMER_ID=1`, `WAKE_QUEUE_COUNT=1`, `WAKE0_REASON=3`.
+    - probe is wired into both `zig-ci` and `release-preview` validate stages so interrupt-timeout task-resume regressions now block CI.
   - Week-3 control-plane completion slice shipped:
     - gateway now exposes `GET /ui` for minimal bootstrap control operations (`status`, `doctor`, `logs.tail`, `node.pair.list`) through a token-aware browser panel.
     - node-pair protocol handling consolidated across payload variants: request aliases (`node_id/deviceId`) and action aliases (`pair_id/nodePairId/id` + optional `status|decision`) now normalize into the same state transitions and response schema.
