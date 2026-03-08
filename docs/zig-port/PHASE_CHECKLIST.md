@@ -7,6 +7,10 @@ Registry status:
 - npm public publish still requires npm-side scope/package permission or `NPM_TOKEN`; GitHub release asset + GitHub Packages fallback are available now.
 - PyPI public publish still requires a matching trusted publisher or `PYPI_API_TOKEN`; workflow claim shape is now confirmed as `repo:adybag14-cyber/openclaw-zig-port:environment:pypi`.
 - release evidence now also includes `release-status.json` + `release-status.md`, which snapshot package visibility plus the latest `zig-ci` / `docs-pages` / `release-preview` / `npm-release` / `python-release` workflow state for the target tag.
+- mirror-aware Zig toolchain evidence is now part of the release lane:
+  - `scripts/zig-github-mirror-release-check.ps1` snapshots the `adybag14-cyber/zig` release target/digest for the rolling `latest-master` lane.
+  - `scripts/zig-bootstrap-from-github-mirror.ps1` provides the Windows bootstrap path for both `latest-master` and immutable `upstream-<sha>` releases.
+  - `scripts/zig-codeberg-master-check.ps1` now compares Codeberg `master`, the local Zig binary, and the GitHub mirror release in one report.
 
 ## Full-Stack Replacement Track (FS0..FS7)
 - [x] FS0 - Scope lock + baseline freeze (`docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`, issue `#2`)
@@ -390,6 +394,7 @@ Registry status:
 - [ ] FS4 - Security + trust hardening
 - [ ] FS5 - Edge/WASM/marketplace depth
 - [ ] FS6 - Appliance/bare-metal maturity track
+  - mirror-aware toolchain bootstrap/reproducibility is now required operator evidence for Windows-hosted FS6 work.
   - rollout boundary is now defined at the runtime contract level: `stable`, `canary`, and `edge` are separate update lanes, with `canary` no longer collapsing into `edge`.
   - latest required evidence now includes `scripts/appliance-rollout-boundary-smoke-check.ps1` (secure-boot block, canary apply, stable promotion).
   - latest required bare-metal evidence now also includes `scripts/baremetal-qemu-interrupt-timeout-manual-wake-probe-check.ps1` (live `command_task_wait_interrupt_for` + `command_scheduler_wake_task` proof, clearing interrupt-timeout wait state to `none`, queueing exactly one manual wake, and proving no delayed timer wake appears against the freestanding PVH artifact).

@@ -1,26 +1,64 @@
 # Local Zig Toolchain Setup
 
-This workspace is configured to use a local Zig master toolchain.
+This workspace uses a local Zig `master` toolchain with an explicit mirror-aware refresh policy.
 
-## Installed toolchain
+## Canonical Source vs Distribution Mirror
+
+- Canonical upstream source of truth: `https://codeberg.org/ziglang/zig.git`
+- Windows release/distribution mirror: `https://github.com/adybag14-cyber/zig`
+- Mirror release modes:
+  - `latest-master`: rolling Windows refresh lane
+  - `upstream-<sha>`: immutable reproducible lane for CI, bisects, and release recreation
+
+The Zig OpenClaw port uses Codeberg `master` for freshness decisions, but the GitHub mirror helps by publishing a Windows asset URL, SHA256 digest, and target commitish that can be compared directly against the local toolchain.
+
+## Installed Toolchain Layout
 
 - Toolchain root: `C:\users\ady\documents\toolchains\zig-master`
 - Active junction: `C:\users\ady\documents\toolchains\zig-master\current`
-- Zig binary: `C:\users\ady\documents\toolchains\zig-master\current\zig.exe`
-- Zig version: `0.16.0-dev.2703+0a412853a`
+- Default Zig binary: `C:\users\ady\documents\toolchains\zig-master\current\zig.exe`
 
-## Zig source (latest master commit from Codeberg)
+## Current Snapshot
 
-- Source checkout: `C:\users\ady\documents\zig-master-src`
-- Remote: `https://codeberg.org/ziglang/zig.git`
-- Local checkout commit: `2d88a5a10334bddf3bd0b8bc98744ea6f239ce3a`
-- Local commit subject: `Merge pull request 'Another dll dependency bites the dust (advapi32.dll)' (#31384) from squeek502/zig:delete-advapi32 into master`
-- Latest remote `master` (Codeberg): `0ae1c6b54acf112c7bbcc63a19f7ad8fa9842d2a`
-- Current status: local toolchain hash does **not** match latest remote master hash
+- Local Zig version: `0.16.0-dev.2703+0a412853a`
+- Current Codeberg `master`: `f16eb18ce8c24ed743aae1faa4980052cb9f4f36`
+- Current GitHub mirror `latest-master` target: `f16eb18ce8c24ed743aae1faa4980052cb9f4f36`
+- Current GitHub mirror Windows asset digest: `3103b272d64a93a8fdce0ca7f3c8856bf8a33c1d42d745fdbfbec2ca9fb69642`
+- Current status: local toolchain hash does **not** match the current Codeberg/mirror target
 
-## Syntax and build check command
+## Required Checks
 
 From `openclaw-zig-port`:
+
+```powershell
+./scripts/zig-codeberg-master-check.ps1
+./scripts/zig-github-mirror-release-check.ps1
+./scripts/zig-bootstrap-from-github-mirror.ps1 -DryRun
+```
+
+`zig-codeberg-master-check.ps1` reports:
+
+- latest Codeberg `master` commit hash
+- local Zig toolchain version/hash
+- whether the local toolchain matches Codeberg `master`
+- GitHub mirror release target commitish
+- whether the mirror release matches Codeberg `master`
+- Windows asset digest and download URL from the mirror
+
+`zig-github-mirror-release-check.ps1` reports:
+
+- GitHub mirror release tag
+- target commitish
+- Windows asset name, digest, and URL
+- whether the release is rolling or immutable
+
+`zig-bootstrap-from-github-mirror.ps1` supports:
+
+- `-DryRun` to plan a refresh without changing the workstation
+- default `latest-master` refresh for fast Windows catch-up
+- `-UpstreamSha <sha>` to install from the immutable `upstream-<sha>` release
+
+## Local Validation Command
 
 ```powershell
 ./scripts/zig-syntax-check.ps1
@@ -32,16 +70,3 @@ This runs:
 2. `zig build`
 3. `zig build test`
 4. `zig build run`
-
-## Master Freshness Check
-
-From `openclaw-zig-port`:
-
-```powershell
-./scripts/zig-codeberg-master-check.ps1
-```
-
-This reports:
-- latest Codeberg `master` commit hash
-- local Zig toolchain version/hash
-- whether hashes match

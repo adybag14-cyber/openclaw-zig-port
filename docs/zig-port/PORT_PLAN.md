@@ -60,6 +60,13 @@ Full-stack replacement execution reference:
 - Release/package lane status (2026-03-06):
   - GitHub prerelease `v0.2.0-zig-edge.26` is live with desktop/android/bare-metal artifacts, parity reports, manifest, SBOM, provenance, npm tarball, wheel, and sdist.
   - release evidence now also includes `release-status.json` + `release-status.md` so every edge cut carries a frozen workflow-status + registry-status snapshot in addition to package preflight evidence.
+  - Zig toolchain evidence is now mirror-aware:
+    - `scripts/zig-github-mirror-release-check.ps1` snapshots the `adybag14-cyber/zig` release target commitish, Windows asset URL, and SHA256 digest.
+    - `scripts/zig-bootstrap-from-github-mirror.ps1` provides the Windows bootstrap/reinstall path for both rolling `latest-master` and immutable `upstream-<sha>` releases.
+    - `scripts/zig-codeberg-master-check.ps1` now compares Codeberg `master`, the local Zig binary, and the GitHub mirror release in a single report.
+  - Toolchain policy:
+    - `latest-master` is the fast Windows refresh lane.
+    - `upstream-<sha>` is the reproducible lane for CI, bisects, and release recreation.
   - `uvx` fallback from the tagged Git repo was validated locally:
     - `uvx --from "git+https://github.com/adybag14-cyber/openclaw-zig-port@v0.2.0-zig-edge.26#subdirectory=python/openclaw-zig-rpc-client" openclaw-zig-rpc --help`
   - npm public publish remains externally blocked by npm scope/package permission on npmjs; GitHub Packages fallback remains available.

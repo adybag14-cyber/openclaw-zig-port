@@ -121,6 +121,8 @@ $defaultByproducts = @(
     "parity-go-zig.json",
     "parity-go-zig.md",
     "zig-master-freshness.json",
+    "zig-github-mirror-release.json",
+    "zig-github-mirror-release.md",
     "package-registry-status.json",
     "release-status.json",
     "release-status.md"

@@ -113,6 +113,33 @@ if (Test-Path $freshnessScript) {
     }
 }
 
+$mirrorReleaseScript = Join-Path $repoRoot "scripts\zig-github-mirror-release-check.ps1"
+$mirrorReleaseJsonPath = Join-Path $releaseRoot "zig-github-mirror-release.json"
+$mirrorReleaseMarkdownPath = Join-Path $releaseRoot "zig-github-mirror-release.md"
+if (Test-Path $mirrorReleaseScript) {
+    try {
+        $mirrorArgs = @{
+            OutputJsonPath     = $mirrorReleaseJsonPath
+            OutputMarkdownPath = $mirrorReleaseMarkdownPath
+        }
+        if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
+            $mirrorArgs.GitHubToken = $env:GITHUB_TOKEN
+        }
+        & $mirrorReleaseScript @mirrorArgs
+        if ($LASTEXITCODE -eq 0) {
+            if (Test-Path $mirrorReleaseJsonPath) {
+                $assets.Add($mirrorReleaseJsonPath) | Out-Null
+            }
+            if (Test-Path $mirrorReleaseMarkdownPath) {
+                $assets.Add($mirrorReleaseMarkdownPath) | Out-Null
+            }
+        }
+    }
+    catch {
+        Write-Warning "GitHub mirror release snapshot failed; continuing local release flow: $($_.Exception.Message)"
+    }
+}
+
 $parityScript = Join-Path $repoRoot "scripts\check-go-method-parity.ps1"
 $parityJsonPath = Join-Path $releaseRoot "parity-go-zig.json"
 $parityMdPath = Join-Path $releaseRoot "parity-go-zig.md"

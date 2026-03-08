@@ -66,6 +66,11 @@ jobs:
         continue-on-error: true
         run: ./scripts/zig-codeberg-master-check.ps1 -OutputJsonPath zig-master-freshness.json
 
+      - name: Zig GitHub mirror release snapshot
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/zig-github-mirror-release-check.ps1 -GitHubToken "${{ github.token }}" -OutputJsonPath zig-github-mirror-release.json -OutputMarkdownPath zig-github-mirror-release.md
+
       - name: Validate npm package (dry-run)
         working-directory: npm/openclaw-zig-rpc-client
         run: npm pack --dry-run
@@ -125,6 +130,16 @@ jobs:
         with:
           name: zig-master-freshness
           path: zig-master-freshness.json
+          if-no-files-found: ignore
+
+      - name: Upload Zig GitHub mirror release snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zig-github-mirror-release
+          path: |
+            zig-github-mirror-release.json
+            zig-github-mirror-release.md
           if-no-files-found: ignore
 
       - name: Build and test baseline
@@ -664,6 +679,13 @@ jobs:
           path: dist
         continue-on-error: true
 
+      - name: Download Zig GitHub mirror release snapshot
+        uses: actions/download-artifact@v4
+        with:
+          name: zig-github-mirror-release
+          path: dist
+        continue-on-error: true
+
       - name: Download package registry preflight
         uses: actions/download-artifact@v4
         with:
@@ -737,6 +759,12 @@ jobs:
           fi
           if [ -f dist/zig-master-freshness.json ]; then
             ASSETS+=(dist/zig-master-freshness.json)
+          fi
+          if [ -f dist/zig-github-mirror-release.json ]; then
+            ASSETS+=(dist/zig-github-mirror-release.json)
+          fi
+          if [ -f dist/zig-github-mirror-release.md ]; then
+            ASSETS+=(dist/zig-github-mirror-release.md)
           fi
           if [ -f dist/package-registry-status.json ]; then
             ASSETS+=(dist/package-registry-status.json)

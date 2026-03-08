@@ -11,8 +11,9 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - Original OpenClaw beta baseline (`v2026.3.7-beta.1`): `95/95` covered
   - Union baseline: `136/136` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
-- Latest local validation: `zig build test --summary all` -> main `203/203` + bare-metal host `78/78` passing
+- Latest local validation: `zig build test --summary all` -> main `203/203` + bare-metal host `90/90` passing
 - Latest published edge release tag: `v0.2.0-zig-edge.26`
+- Toolchain policy: Codeberg `master` is canonical; `adybag14-cyber/zig` publishes rolling `latest-master` and immutable `upstream-<sha>` Windows releases for refresh and reproducibility.
 - Recent FS1 progress (2026-03-06):
   - runtime recovery posture is now surfaced on live diagnostics and maintenance RPCs
   - `doctor.memory.status` now includes Go-visible health envelope fields
@@ -448,6 +449,20 @@ Check Zig Codeberg freshness against local toolchain:
 ./scripts/zig-codeberg-master-check.ps1 -OutputJsonPath .\release\zig-master-freshness.json
 ```
 
+Check the GitHub Windows release mirror and plan a refresh:
+
+```powershell
+./scripts/zig-github-mirror-release-check.ps1 -OutputJsonPath .\release\zig-github-mirror-release.json -OutputMarkdownPath .\release\zig-github-mirror-release.md
+./scripts/zig-bootstrap-from-github-mirror.ps1 -DryRun -OutputJsonPath .\release\zig-bootstrap-dry-run.json
+./scripts/zig-bootstrap-from-github-mirror.ps1 -UpstreamSha <codeberg-master-sha>
+```
+
+Mirror policy:
+
+- `latest-master` is the fast Windows refresh lane.
+- `upstream-<sha>` is the reproducible lane for CI, bisects, and release recreation.
+- `scripts/zig-codeberg-master-check.ps1` compares Codeberg `master`, the local Zig binary, and the GitHub mirror release target/digest in one report.
+
 Run parity gate and emit evidence artifacts:
 
 ```powershell
@@ -497,6 +512,7 @@ Run local preview packaging with CI-aligned validate gates:
 
 - Zig master build/test gates
 - Zig master freshness snapshot (`scripts/zig-codeberg-master-check.ps1`) with Codeberg->GitHub mirror fallback
+- Zig GitHub mirror release snapshot (`scripts/zig-github-mirror-release-check.ps1`) for rolling/immutable Windows asset evidence
 - tri-baseline method/event parity enforcement (Go latest + original stable latest + original beta latest)
 - docs status drift gate (`scripts/docs-status-check.ps1`) against parity snapshot + latest release tag
 - freestanding bare-metal artifact smoke gate
@@ -579,6 +595,7 @@ Run local preview packaging with CI-aligned validate gates:
 - upfront validate job (build + test + parity)
 - docs status drift gate (`scripts/docs-status-check.ps1`) in release validate stage
 - zig master freshness snapshot + artifact publication (`zig-master-freshness.json`)
+- GitHub mirror release snapshot + artifact publication (`zig-github-mirror-release.json`, `zig-github-mirror-release.md`)
 - freestanding bare-metal smoke validation
 - optional bare-metal QEMU boot smoke validation
 - optional bare-metal QEMU runtime validation
@@ -632,6 +649,7 @@ Run local preview packaging with CI-aligned validate gates:
 - duplicate release tag guard
 - release asset parity evidence attachment
 - release asset zig freshness evidence attachment
+- release asset GitHub mirror release evidence attachment
 - release trust evidence attachment (`release-manifest.json`, `sbom.spdx.json`, `provenance.intoto.json`)
 - npm package dry-run validation gate in validate stage
 - local `scripts/release-preview.ps1` mirrors parity/docs/freshness gates before packaging
