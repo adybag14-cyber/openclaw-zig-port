@@ -834,6 +834,7 @@ Phase 6 progress notes:
   - runtime behavior: masked non-exception interrupts are ignored while exception vectors remain non-maskable
   - interrupt-mask profiles now supported: `none`, `external_all`, `external_high`, and automatic `custom` profile tracking on manual mask edits
   - regression coverage added for masked wake suppression, per-vector ignored-interrupt telemetry, reset semantics, profile application windows, and command argument validation
+- [x] `scripts/baremetal-qemu-interrupt-mask-control-probe-check.ps1` (optional PVH/QEMU probe proves direct `command_interrupt_mask_set`, invalid vector/state rejection, ignored-count reset, and final `command_interrupt_mask_clear_all` recovery against the freestanding artifact)
 - [x] `scripts/zig-codeberg-master-check.ps1` (reports local vs remote master hash)
 - [x] Multi-baseline method diff check: `Go(latest)=134`, `Original(latest)=94`, `OriginalBeta(latest)=94`, `Union=135`, `Zig=169`, `missing_in_zig=0`, `union_extras=34`
 - [x] Multi-baseline gateway event diff check: `OriginalEvents(latest)=19`, `OriginalBetaEvents(latest)=19`, `UnionEvents=19`, `ZigEvents=19`, `union_events_missing_in_zig=0`

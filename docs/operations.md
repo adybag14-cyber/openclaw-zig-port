@@ -134,6 +134,7 @@ Recommended sequence:
 - optional bare-metal QEMU active-task terminate probe (live `command_task_terminate` against the currently running high-priority task, proving immediate failover to the remaining ready task, idempotent repeat terminate semantics, and final empty-run collapse against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt mask exception probe (masked external vector remains blocked while an exception vector still wakes the waiting task and records history telemetry against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt mask profile probe (external-all, custom unmask/remask, ignored-count reset, external-high, invalid profile rejection, and clear-all recovery against the freestanding PVH artifact)
+- optional bare-metal QEMU interrupt mask control probe (direct `command_interrupt_mask_set`, invalid vector/state rejection, ignored-count reset, and final `clear_all` recovery against the freestanding PVH artifact)
 - parity evidence artifacts
   - websocket smoke validates `/ws` and root compatibility route `/`, including binary-frame RPC dispatch
   - gateway-auth and websocket smokes use bounded receive timeouts to prevent hanging CI jobs
@@ -212,6 +213,7 @@ Recommended sequence:
 - bare-metal optional QEMU panic-wake recovery probe in validate stage
 - bare-metal optional QEMU interrupt mask exception probe in validate stage
 - bare-metal optional QEMU interrupt mask profile probe in validate stage
+- bare-metal optional QEMU interrupt mask control probe in validate stage
 - npm package dry-run validation in release validate stage
 - python package validation (unit tests + build + twine check) in release validate stage
 - local `scripts/release-preview.ps1` mirrors parity/docs/freshness gates before artifact packaging
