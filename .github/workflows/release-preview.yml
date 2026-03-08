@@ -296,6 +296,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-task-resume-timer-clear-probe-check.ps1
 
+      - name: Bare-metal QEMU task resume interrupt probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-resume-interrupt-probe-check.ps1
+
       - name: Bare-metal QEMU task resume interrupt-timeout probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-task-resume-interrupt-timeout-probe-check.ps1
@@ -315,6 +319,10 @@ jobs:
       - name: Bare-metal QEMU interrupt timeout probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-timeout-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt manual wake probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-manual-wake-probe-check.ps1
 
       - name: Bare-metal QEMU interrupt timeout manual wake probe (optional)
         shell: pwsh

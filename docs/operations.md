@@ -101,11 +101,13 @@ Recommended sequence:
 - optional bare-metal QEMU timer reset recovery probe (dirty live timer entries plus `task_wait_interrupt_for` timeout state, then `command_timer_reset` proving timer state collapses back to baseline, stale timeout wakes do not leak after reset, manual/interrupt wake recovery still works, and the next timer re-arms from `timer_id=1` against the freestanding PVH artifact)
 - optional bare-metal QEMU task-resume timer-clear probe (`command_task_resume` on a timer-backed wait cancels the armed timer entry, queues exactly one manual wake, prevents a later ghost timer wake after idle ticks, preserves timer quantum, and restarts fresh timer scheduling from the preserved `next_timer_id` against the freestanding PVH artifact)
 - optional bare-metal QEMU task-resume interrupt-timeout probe (`command_task_resume` on a `task_wait_interrupt_for` waiter clears the pending timeout to `none`, queues exactly one manual wake, prevents any delayed timer wake after additional slack ticks, and leaves the timer subsystem at `next_timer_id=1` against the freestanding PVH artifact)
+- optional bare-metal QEMU task-resume interrupt probe (`command_task_resume` on a pure `task_wait_interrupt` waiter clears the interrupt wait back to `none`, queues exactly one manual wake, prevents a later interrupt from creating a second wake, and leaves the timer subsystem idle at `next_timer_id=1` against the freestanding PVH artifact)
 - optional bare-metal QEMU periodic timer probe (periodic schedule + timer disable/enable pause-resume, capturing the first resumed periodic fire and queued wake telemetry against the freestanding PVH artifact)
 - optional bare-metal QEMU periodic timer clamp probe (periodic timer armed at `u64::max-1`, proving the first fire lands at `18446744073709551615`, the periodic deadline re-arms to the same saturated tick instead of wrapping, and the runtime holds stable after the tick counter wraps to `0`)
 - optional bare-metal QEMU periodic interrupt probe (mixed periodic timer + interrupt wake ordering, proving the interrupt arrives before deadline while the periodic source keeps cadence and timer cancellation prevents a later timeout leak against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt timeout probe (`task_wait_interrupt_for` wakes on interrupt before deadline, clears the timeout arm, and does not later leak a second timer wake against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt timeout manual-wake probe (`command_scheduler_wake_task` clears a pending `task_wait_interrupt_for` timeout, queues exactly one manual wake, and no delayed timer wake appears after additional slack ticks against the freestanding PVH artifact)
+- optional bare-metal QEMU interrupt manual-wake probe (`command_scheduler_wake_task` on a pure `task_wait_interrupt` waiter clears the interrupt wait back to `none`, queues exactly one manual wake, and a later interrupt only advances telemetry without adding a second wake against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt timeout timer probe (`task_wait_interrupt_for` remains blocked with no wake queue entry at the deadline-preceding boundary, then wakes on the timer path with `reason=timer`, `vector=0`, and zero interrupt telemetry against the freestanding PVH artifact)
 - optional bare-metal QEMU masked interrupt timeout probe (`command_interrupt_mask_apply_profile(external_all)` suppresses vector `200`, preserves the waiting task with no wake queue entry and zero interrupt telemetry, and then allows the timeout path to wake with `reason=timer`, `vector=0` against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt timeout clamp probe (near-`u64::max` `task_wait_interrupt_for` deadline saturates to `18446744073709551615`, the queued wake records that saturated tick, and the live wake boundary wraps cleanly to `0` under the freestanding PVH artifact)
@@ -174,10 +176,12 @@ Recommended sequence:
 - bare-metal optional QEMU timer reset recovery probe in validate stage
 - bare-metal optional QEMU task-resume timer-clear probe in validate stage
 - bare-metal optional QEMU task-resume interrupt-timeout probe in validate stage
+- bare-metal optional QEMU task-resume interrupt probe in validate stage
 - bare-metal optional QEMU periodic timer probe in validate stage
 - bare-metal optional QEMU periodic interrupt probe in validate stage
 - bare-metal optional QEMU interrupt timeout probe in validate stage
 - bare-metal optional QEMU interrupt timeout manual-wake probe in validate stage
+- bare-metal optional QEMU interrupt manual-wake probe in validate stage
 - bare-metal optional QEMU interrupt timeout timer probe in validate stage
 - bare-metal optional QEMU masked interrupt timeout probe in validate stage
 - bare-metal optional QEMU interrupt timeout clamp probe in validate stage

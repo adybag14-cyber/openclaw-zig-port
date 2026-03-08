@@ -1368,6 +1368,12 @@ Full-stack replacement execution reference:
     - live PVH/QEMU+GDB sequence proves `command_task_resume` on a `task_wait_interrupt_for` waiter clears the pending timeout back to `none`, queues exactly one manual wake, prevents any delayed timer wake after additional slack ticks, and leaves the timer subsystem at `next_timer_id=1`.
     - key probe evidence: `ACK=7`, `LAST_OPCODE=51`, `LAST_RESULT=0`, `WAIT_KIND0=0`, `WAIT_TIMEOUT0=0`, `TIMER_ENTRY_COUNT=0`, `TIMER_NEXT_TIMER_ID=1`, `WAKE_QUEUE_COUNT=1`, `WAKE0_REASON=3`.
     - probe is wired into both `zig-ci` and `release-preview` validate stages so interrupt-timeout task-resume regressions now block CI.
+  - bare-metal pure-interrupt recovery validation shipped:
+    - new scripts: `scripts/baremetal-qemu-task-resume-interrupt-probe-check.ps1` and `scripts/baremetal-qemu-interrupt-manual-wake-probe-check.ps1`.
+    - added matching host regressions in `src/baremetal_main.zig`.
+    - live PVH/QEMU+GDB sequence proves `command_task_resume` and `command_scheduler_wake_task` both clear a pure `command_task_wait_interrupt` waiter back to `none`, queue exactly one manual wake, and prevent a later interrupt from creating a second wake while still incrementing interrupt telemetry.
+    - key probe evidence: task-resume path `ACK=8`, `LAST_OPCODE=7`, `LAST_RESULT=0`, `WAIT_KIND0=0`, `WAIT_TIMEOUT0=0`, `TIMER_ENTRY_COUNT=0`, `TIMER_NEXT_TIMER_ID=1`, `WAKE_QUEUE_COUNT=1`, `WAKE0_REASON=3`, `INTERRUPT_COUNT=1`; manual-wake path `ACK=8`, `LAST_OPCODE=7`, `LAST_RESULT=0`, `WAIT_KIND0=0`, `WAIT_TIMEOUT0=0`, `TIMER_ENTRY_COUNT=0`, `WAKE_QUEUE_COUNT=1`, `WAKE0_REASON=3`, `INTERRUPT_COUNT=1`.
+    - both probes are wired into `zig-ci` and `release-preview` validate stages so pure-interrupt recovery regressions now block CI.
   - Week-3 control-plane completion slice shipped:
     - gateway now exposes `GET /ui` for minimal bootstrap control operations (`status`, `doctor`, `logs.tail`, `node.pair.list`) through a token-aware browser panel.
     - node-pair protocol handling consolidated across payload variants: request aliases (`node_id/deviceId`) and action aliases (`pair_id/nodePairId/id` + optional `status|decision`) now normalize into the same state transitions and response schema.
