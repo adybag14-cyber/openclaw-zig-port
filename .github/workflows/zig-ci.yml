@@ -278,6 +278,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-timeout-timer-probe-check.ps1
 
+      - name: Bare-metal QEMU masked interrupt timeout probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-masked-interrupt-timeout-probe-check.ps1
+
       - name: Bare-metal QEMU interrupt timeout clamp probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-timeout-clamp-probe-check.ps1

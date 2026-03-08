@@ -5710,6 +5710,68 @@ test "baremetal interrupt wait with timeout wakes on timer when no interrupt arr
     try std.testing.expectEqual(@as(u8, abi.wake_reason_timer), evt.reason);
 }
 
+test "baremetal masked interrupt wait with timeout falls back to timer wake" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    status.tick_batch_hint = 1;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_scheduler_reset();
+    oc_timer_reset();
+    oc_wake_queue_clear();
+    x86_bootstrap.oc_reset_interrupt_counters();
+    x86_bootstrap.oc_interrupt_mask_clear_all();
+    x86_bootstrap.oc_interrupt_mask_reset_ignored_counts();
+
+    _ = oc_submit_command(abi.command_scheduler_disable, 0, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_interrupt_mask_apply_profile, abi.interrupt_mask_profile_external_all, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+
+    _ = oc_submit_command(abi.command_task_create, 5, 0);
+    oc_tick();
+    const task_id = oc_scheduler_task(0).task_id;
+    try std.testing.expect(task_id != 0);
+
+    _ = oc_submit_command(abi.command_task_wait_interrupt_for, task_id, 3);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_waiting_count());
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_interrupt_count());
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_timeout_count());
+
+    _ = oc_submit_command(abi.command_trigger_interrupt, 200, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_waiting_count());
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_interrupt_count());
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_timeout_count());
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u64, 0), x86_bootstrap.oc_interrupt_count());
+
+    var wake_spin: u8 = 0;
+    while (oc_wake_queue_len() == 0 and wake_spin < 4) : (wake_spin += 1) {
+        oc_tick();
+    }
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 0), oc_scheduler_waiting_count());
+    try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_interrupt_count());
+    try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_timeout_count());
+    const evt = oc_wake_queue_event(0);
+    try std.testing.expectEqual(task_id, evt.task_id);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_timer), evt.reason);
+    try std.testing.expectEqual(@as(u8, 0), evt.vector);
+}
+
 test "baremetal interrupt wait with timeout wakes on interrupt before deadline" {
     status.mode = abi.mode_running;
     status.ticks = 0;

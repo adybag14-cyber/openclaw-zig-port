@@ -3,9 +3,9 @@
 ## Current Snapshot
 
 - Latest published edge release: `v0.2.0-zig-edge.26`
-- Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `75/75` passing
-- Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=169`, `ZIG_EVENTS_COUNT=19`
-- Current head: `main + allocator free failure slice`
+- Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `76/76` passing
+- Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=170`, `ZIG_EVENTS_COUNT=19`
+- Current head: `main + masked interrupt timeout slice`
 - Latest CI:
   - `zig-ci` `22813604542` -> success
   - `docs-pages` `22813604538` -> success
@@ -100,6 +100,7 @@ Recommended sequence:
 - optional bare-metal QEMU periodic interrupt probe (mixed periodic timer + interrupt wake ordering, proving the interrupt arrives before deadline while the periodic source keeps cadence and timer cancellation prevents a later timeout leak against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt timeout probe (`task_wait_interrupt_for` wakes on interrupt before deadline, clears the timeout arm, and does not later leak a second timer wake against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt timeout timer probe (`task_wait_interrupt_for` remains blocked with no wake queue entry at the deadline-preceding boundary, then wakes on the timer path with `reason=timer`, `vector=0`, and zero interrupt telemetry against the freestanding PVH artifact)
+- optional bare-metal QEMU masked interrupt timeout probe (`command_interrupt_mask_apply_profile(external_all)` suppresses vector `200`, preserves the waiting task with no wake queue entry and zero interrupt telemetry, and then allows the timeout path to wake with `reason=timer`, `vector=0` against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt timeout clamp probe (near-`u64::max` `task_wait_interrupt_for` deadline saturates to `18446744073709551615`, the queued wake records that saturated tick, and the live wake boundary wraps cleanly to `0` under the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt filter probe (`task_wait_interrupt(any)` wakes on vector `200`, vector-scoped `task_wait_interrupt(13)` ignores non-matching `200`, then wakes on matching `13`, and invalid vector `65536` is rejected with `-22` against the freestanding PVH artifact)
 - optional bare-metal QEMU timer-disable interrupt probe (`command_timer_disable` suppresses timer dispatch while `command_trigger_interrupt` still wakes an interrupt waiter immediately, and the deferred one-shot timer wake is only delivered after `command_timer_enable` against the freestanding PVH artifact)
@@ -161,6 +162,7 @@ Recommended sequence:
 - bare-metal optional QEMU periodic interrupt probe in validate stage
 - bare-metal optional QEMU interrupt timeout probe in validate stage
 - bare-metal optional QEMU interrupt timeout timer probe in validate stage
+- bare-metal optional QEMU masked interrupt timeout probe in validate stage
 - bare-metal optional QEMU interrupt timeout clamp probe in validate stage
 - bare-metal optional QEMU interrupt filter probe in validate stage
 - bare-metal optional QEMU manual-wait interrupt probe in validate stage
@@ -238,4 +240,3 @@ Run:
 Track local/remote mismatch in:
 
 - `docs/zig-port/ZIG_TOOLCHAIN_LOCAL.md`
-

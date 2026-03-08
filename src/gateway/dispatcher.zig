@@ -16,6 +16,71 @@ const security_guard = @import("../security/guard.zig");
 const security_audit = @import("../security/audit.zig");
 const time_util = @import("../util/time.zig");
 
+const compat_config_schema_json =
+    \\{
+    \\  "type": "object",
+    \\  "title": "OpenClaw Zig Runtime Config",
+    \\  "properties": {
+    \\    "gateway": {
+    \\      "type": "object",
+    \\      "properties": {
+    \\        "bind": {
+    \\          "type": "string",
+    \\          "description": "Gateway bind address."
+    \\        },
+    \\        "authToken": {
+    \\          "type": "string",
+    \\          "writeOnly": true,
+    \\          "description": "Gateway bearer token."
+    \\        }
+    \\      }
+    \\    },
+    \\    "runtime": {
+    \\      "type": "object",
+    \\      "properties": {
+    \\        "statePath": {
+    \\          "type": "string",
+    \\          "description": "Persisted runtime state location."
+    \\        },
+    \\        "modelCatalogRefreshTtlSeconds": {
+    \\          "type": "integer",
+    \\          "minimum": 0,
+    \\          "description": "Model catalog refresh TTL in seconds."
+    \\        }
+    \\      }
+    \\    },
+    \\    "channels": {
+    \\      "type": "object",
+    \\      "properties": {
+    \\        "telegram": {
+    \\          "type": "object",
+    \\          "properties": {
+    \\            "enabled": {
+    \\              "type": "boolean"
+    \\            },
+    \\            "botToken": {
+    \\              "type": "string",
+    \\              "writeOnly": true
+    \\            }
+    \\          }
+    \\        }
+    \\      }
+    \\    },
+    \\    "security": {
+    \\      "type": "object",
+    \\      "properties": {
+    \\        "policyBundle": {
+    \\          "type": "string"
+    \\        },
+    \\        "bindPolicy": {
+    \\          "type": "string"
+    \\        }
+    \\      }
+    \\    }
+    \\  }
+    \\}
+;
+
 var runtime_instance: ?tool_runtime.ToolRuntime = null;
 var runtime_io_threaded: std.Io.Threaded = undefined;
 var runtime_io_ready: bool = false;
@@ -5617,14 +5682,50 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
     }
 
     if (std.ascii.eqlIgnoreCase(req.method, "config.schema")) {
+        var parsed_schema = try parseCompatConfigSchemaValue(allocator);
+        defer parsed_schema.deinit();
+        const generated_at = try time_util.unixMsToRfc3339Alloc(allocator, time_util.nowMs());
+        defer allocator.free(generated_at);
+        const schema_type = parsed_schema.value.object.get("type").?.string;
+        const schema_properties = parsed_schema.value.object.get("properties").?;
         return protocol.encodeResult(allocator, req.id, .{
-            .type = "object",
-            .properties = .{
-                .gateway = .{ .type = "object" },
-                .runtime = .{ .type = "object" },
-                .channels = .{ .type = "object" },
-                .security = .{ .type = "object" },
-            },
+            .type = schema_type,
+            .properties = schema_properties,
+            .schema = parsed_schema.value,
+            .version = "zig-parity-1",
+            .generatedAt = generated_at,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "config.schema.lookup")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const path = firstParamString(params, "path", firstParamString(params, "refPath", firstParamString(params, "key", "")));
+        if (path.len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "config.schema.lookup requires path",
+            });
+        }
+
+        var parsed_schema = try parseCompatConfigSchemaValue(allocator);
+        defer parsed_schema.deinit();
+        const schema_value = lookupCompatConfigSchemaValue(&parsed_schema.value, path) orelse {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32004,
+                .message = "config schema path not found",
+            });
+        };
+        const generated_at = try time_util.unixMsToRfc3339Alloc(allocator, time_util.nowMs());
+        defer allocator.free(generated_at);
+        return protocol.encodeResult(allocator, req.id, .{
+            .ok = true,
+            .found = true,
+            .path = path,
+            .schema = schema_value,
+            .version = "zig-parity-1",
+            .generatedAt = generated_at,
         });
     }
 
@@ -9861,6 +9962,40 @@ fn firstParamString(params: ?std.json.ObjectMap, key: []const u8, fallback: []co
         }
     }
     return fallback;
+}
+
+fn parseCompatConfigSchemaValue(allocator: std.mem.Allocator) !std.json.Parsed(std.json.Value) {
+    return try std.json.parseFromSlice(std.json.Value, allocator, compat_config_schema_json, .{});
+}
+
+fn lookupCompatConfigSchemaValue(root: *const std.json.Value, raw_path: []const u8) ?std.json.Value {
+    var trimmed = std.mem.trim(u8, raw_path, " \t\r\n/");
+    if (trimmed.len == 0) return root.*;
+    if (std.mem.eql(u8, trimmed, "schema")) return root.*;
+    if (std.mem.startsWith(u8, trimmed, "schema.")) trimmed = trimmed["schema.".len..];
+    if (std.mem.startsWith(u8, trimmed, "schema/")) trimmed = trimmed["schema/".len..];
+    if (trimmed.len == 0) return root.*;
+
+    var cursor = root.*;
+    var it = std.mem.tokenizeAny(u8, trimmed, "./");
+    while (it.next()) |segment| {
+        if (cursor != .object) return null;
+        const obj = cursor.object;
+        if (obj.get(segment)) |direct| {
+            cursor = direct;
+            continue;
+        }
+        if (obj.get("properties")) |properties| {
+            if (properties == .object) {
+                if (properties.object.get(segment)) |nested| {
+                    cursor = nested;
+                    continue;
+                }
+            }
+        }
+        return null;
+    }
+    return cursor;
 }
 
 fn firstParamInt(params: ?std.json.ObjectMap, key: []const u8, fallback: i64) i64 {
@@ -14826,6 +14961,29 @@ test "dispatch compat config wizard and sessions patch resolve methods return co
     const config_schema = try dispatch(allocator, "{\"id\":\"compat-config-schema\",\"method\":\"config.schema\",\"params\":{}}");
     defer allocator.free(config_schema);
     try std.testing.expect(std.mem.indexOf(u8, config_schema, "\"properties\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, config_schema, "\"version\":\"zig-parity-1\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, config_schema, "\"generatedAt\"") != null);
+
+    const config_schema_lookup = try dispatch(allocator, "{\"id\":\"compat-config-schema-lookup\",\"method\":\"config.schema.lookup\",\"params\":{\"path\":\"channels.telegram.botToken\"}}");
+    defer allocator.free(config_schema_lookup);
+    try std.testing.expect(std.mem.indexOf(u8, config_schema_lookup, "\"found\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, config_schema_lookup, "\"path\":\"channels.telegram.botToken\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, config_schema_lookup, "\"writeOnly\":true") != null);
+
+    const config_schema_lookup_root = try dispatch(allocator, "{\"id\":\"compat-config-schema-lookup-root\",\"method\":\"config.schema.lookup\",\"params\":{\"path\":\"schema.runtime\"}}");
+    defer allocator.free(config_schema_lookup_root);
+    try std.testing.expect(std.mem.indexOf(u8, config_schema_lookup_root, "\"path\":\"schema.runtime\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, config_schema_lookup_root, "\"modelCatalogRefreshTtlSeconds\"") != null);
+
+    const config_schema_lookup_missing = try dispatch(allocator, "{\"id\":\"compat-config-schema-lookup-missing\",\"method\":\"config.schema.lookup\",\"params\":{\"path\":\"channels.discord.token\"}}");
+    defer allocator.free(config_schema_lookup_missing);
+    try std.testing.expect(std.mem.indexOf(u8, config_schema_lookup_missing, "\"code\":-32004") != null);
+    try std.testing.expect(std.mem.indexOf(u8, config_schema_lookup_missing, "config schema path not found") != null);
+
+    const config_schema_lookup_invalid = try dispatch(allocator, "{\"id\":\"compat-config-schema-lookup-invalid\",\"method\":\"config.schema.lookup\",\"params\":{}}");
+    defer allocator.free(config_schema_lookup_invalid);
+    try std.testing.expect(std.mem.indexOf(u8, config_schema_lookup_invalid, "\"code\":-32602") != null);
+    try std.testing.expect(std.mem.indexOf(u8, config_schema_lookup_invalid, "config.schema.lookup requires path") != null);
 
     const secrets_reload = try dispatch(allocator, "{\"id\":\"compat-secrets\",\"method\":\"secrets.reload\",\"params\":{\"keys\":[\"A\",\"B\"]}}");
     defer allocator.free(secrets_reload);

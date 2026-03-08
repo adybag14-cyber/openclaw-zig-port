@@ -133,6 +133,7 @@ Source of truth: [`src/gateway/registry.zig`](https://github.com/adybag14-cyber/
 - config.get
 - config.patch
 - config.schema
+- config.schema.lookup
 - config.set
 
 ### cron
@@ -331,4 +332,3 @@ Source of truth: [`src/gateway/registry.zig`](https://github.com/adybag14-cyber/
 - wizard.next
 - wizard.start
 - wizard.status
-

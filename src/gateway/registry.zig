@@ -81,6 +81,7 @@ pub const supported_methods = [_][]const u8{
     "config.patch",
     "config.apply",
     "config.schema",
+    "config.schema.lookup",
     "tools.catalog",
     "exec.run",
     "file.read",

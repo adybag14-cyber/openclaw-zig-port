@@ -4,14 +4,14 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 
 ## Current Status
 
-- RPC method surface in Zig: `169`
+- RPC method surface in Zig: `170`
 - Latest parity gate (tri-baseline):
   - Go baseline (`v2.14.0-go`): `134/134` covered
   - Original OpenClaw baseline (`v2026.3.2`): `94/94` covered
-  - Original OpenClaw beta baseline (`v2026.3.2-beta.1`): `94/94` covered
-  - Union baseline: `135/135` covered (`MISSING_IN_ZIG=0`)
+  - Original OpenClaw beta baseline (`v2026.3.7-beta.1`): `95/95` covered
+  - Union baseline: `136/136` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
-- Latest local validation: `zig build test --summary all` -> main `203/203` + bare-metal host `70/70` passing
+- Latest local validation: `zig build test --summary all` -> main `203/203` + bare-metal host `76/76` passing
 - Latest published edge release tag: `v0.2.0-zig-edge.26`
 - Recent FS1 progress (2026-03-06):
   - runtime recovery posture is now surfaced on live diagnostics and maintenance RPCs
@@ -97,6 +97,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - optional QEMU periodic interrupt probe validates mixed periodic timer plus interrupt wake ordering end to end, proving the interrupt wake lands before the deadline, the periodic source keeps its cadence, and cancellation prevents a later timeout leak against the freestanding PVH artifact
   - optional QEMU interrupt-timeout probe validates `task_wait_interrupt_for` wakeup precedence end to end, proving an interrupt wake clears the timeout arm and does not later leak a second timer wake against the freestanding PVH artifact
   - optional QEMU interrupt-timeout timer probe validates the no-interrupt timeout path end to end, proving the waiter stays blocked until the deadline, then wakes with `reason=timer`, `vector=0`, and zero interrupt telemetry against the freestanding PVH artifact
+  - optional QEMU masked-interrupt timeout probe validates the masked-interrupt timeout path end to end, proving `command_interrupt_mask_apply_profile(external_all)` suppresses vector `200`, preserves the waiting task with no wake-queue entry, and then falls through to a timer wake with `reason=timer`, `vector=0` against the freestanding PVH artifact
   - optional QEMU interrupt-timeout clamp probe validates the near-`u64::max` timeout path end to end, proving the armed deadline saturates at `18446744073709551615`, the wake event records that saturated tick, and the runtime wake boundary wraps cleanly to `0` without losing the queued timer wake
   - optional QEMU periodic timer clamp probe validates the periodic helper saturation path end to end, proving a timer armed at `u64::max-1` first fires at `18446744073709551615`, re-arms to the same saturated deadline, and then remains stable after the runtime tick counter wraps to `0`
   - optional QEMU interrupt-filter probe validates `command_task_wait_interrupt` vector filtering end to end, proving interrupt-any waiters wake on `200`, vector-scoped waiters ignore non-matching `200`, then wake on matching `13`, and invalid vector `65536` is rejected with `LAST_RESULT=-22` against the freestanding PVH artifact
@@ -514,6 +515,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU periodic interrupt probe
 - optional bare-metal QEMU interrupt timeout probe
 - optional bare-metal QEMU interrupt timeout timer probe
+- optional bare-metal QEMU masked interrupt timeout probe
 - optional bare-metal QEMU interrupt timeout clamp probe
 - optional bare-metal QEMU interrupt filter probe
 - optional bare-metal QEMU timer-disable interrupt probe
@@ -577,6 +579,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU periodic timer validation
 - optional bare-metal QEMU interrupt timeout validation
 - optional bare-metal QEMU interrupt timeout timer validation
+- optional bare-metal QEMU masked interrupt timeout validation
 - optional bare-metal QEMU interrupt timeout clamp validation
 - optional bare-metal QEMU interrupt filter validation
 - optional bare-metal QEMU manual wait interrupt validation
@@ -644,4 +647,3 @@ Manual python release trigger:
 ```powershell
 gh workflow run python-release.yml -R adybag14-cyber/openclaw-zig-port -f version=<pep440-version> -f release_tag=<release-tag>
 ```
-
