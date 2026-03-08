@@ -2467,6 +2467,41 @@ test "baremetal command history ring keeps newest mailbox entries" {
     try std.testing.expectEqual(@as(u64, 100 + (cap + 2)), last.arg0);
 }
 
+test "baremetal clear command history preserves health history and restarts command sequence" {
+    resetBaremetalRuntimeForTest();
+
+    _ = oc_submit_command(abi.command_set_health_code, 418, 0);
+    oc_tick();
+
+    const pre_health_len = oc_health_history_len();
+    const pre_health_seq = health_history_seq;
+    const pre_boot_seq = boot_diagnostics.boot_seq;
+
+    _ = oc_submit_command(abi.command_clear_command_history, 0, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u32, 1), oc_command_history_len());
+    try std.testing.expectEqual(@as(u32, 1), oc_command_history_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_command_history_overflow_count());
+    const clear_event = oc_command_history_event(0);
+    try std.testing.expectEqual(status.command_seq_ack, clear_event.seq);
+    try std.testing.expectEqual(@as(u16, abi.command_clear_command_history), clear_event.opcode);
+    try std.testing.expectEqual(@as(i16, abi.result_ok), clear_event.result);
+    try std.testing.expectEqual(pre_health_len + 1, oc_health_history_len());
+    try std.testing.expectEqual(pre_health_seq + 1, health_history_seq);
+    try std.testing.expectEqual(pre_boot_seq, boot_diagnostics.boot_seq);
+    try std.testing.expectEqual(@as(u16, 200), oc_health_history_event(oc_health_history_len() - 1).health_code);
+
+    _ = oc_submit_command(abi.command_set_health_code, 512, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u32, 2), oc_command_history_len());
+    const restarted_event = oc_command_history_event(1);
+    try std.testing.expectEqual(status.command_seq_ack, restarted_event.seq);
+    try std.testing.expectEqual(@as(u16, abi.command_set_health_code), restarted_event.opcode);
+    try std.testing.expectEqual(@as(u64, 512), restarted_event.arg0);
+}
+
 test "baremetal health history captures tick health and clear control" {
     status.mode = abi.mode_running;
     status.ticks = 0;
@@ -2507,6 +2542,38 @@ test "baremetal health history captures tick health and clear control" {
     try std.testing.expectEqual(@as(u32, 1), oc_health_history_len());
     const clear_latest = oc_health_history_event(0);
     try std.testing.expectEqual(@as(u16, 200), clear_latest.health_code);
+}
+
+test "baremetal clear health history preserves command history and restarts health sequence" {
+    resetBaremetalRuntimeForTest();
+
+    _ = oc_submit_command(abi.command_set_health_code, 418, 0);
+    oc_tick();
+
+    const pre_command_len = oc_command_history_len();
+    const pre_boot_seq = boot_diagnostics.boot_seq;
+
+    _ = oc_submit_command(abi.command_clear_health_history, 0, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(pre_command_len + 1, oc_command_history_len());
+    const clear_command = oc_command_history_event(oc_command_history_len() - 1);
+    try std.testing.expectEqual(@as(u16, abi.command_clear_health_history), clear_command.opcode);
+    try std.testing.expectEqual(@as(u32, 1), oc_health_history_len());
+    try std.testing.expectEqual(@as(u32, 1), oc_health_history_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_health_history_overflow_count());
+    const clear_health = oc_health_history_event(0);
+    try std.testing.expectEqual(@as(u32, 1), clear_health.seq);
+    try std.testing.expectEqual(@as(u16, 200), clear_health.health_code);
+    try std.testing.expectEqual(pre_boot_seq, boot_diagnostics.boot_seq);
+
+    _ = oc_submit_command(abi.command_set_health_code, 777, 0);
+    oc_tick();
+
+    try std.testing.expect(oc_health_history_len() >= 3);
+    const restarted_health = oc_health_history_event(1);
+    try std.testing.expectEqual(@as(u32, 2), restarted_health.seq);
+    try std.testing.expectEqual(@as(u16, 777), restarted_health.health_code);
 }
 
 test "baremetal mode history captures command and panic transitions and clear control" {
@@ -2773,6 +2840,43 @@ test "baremetal command result counters track categories and reset flow" {
     try std.testing.expectEqual(@as(u16, abi.command_reset_command_result_counters), reset_counters.last_opcode);
 }
 
+test "baremetal reset command result counters preserves runtime state and restarts cleanly" {
+    resetBaremetalRuntimeForTest();
+
+    _ = oc_submit_command(abi.command_set_health_code, 418, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_set_mode, 77, 0);
+    oc_tick();
+    _ = oc_submit_command(65535, 0, 0);
+    oc_tick();
+
+    const pre_command_len = oc_command_history_len();
+    const pre_health_len = oc_health_history_len();
+    const pre_health = status.last_health_code;
+    const pre_mode = status.mode;
+
+    _ = oc_submit_command(abi.command_reset_command_result_counters, 0, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(pre_mode, status.mode);
+    try std.testing.expectEqual(pre_health, status.last_health_code);
+    try std.testing.expectEqual(pre_command_len + 1, oc_command_history_len());
+    try std.testing.expectEqual(pre_health_len + 1, oc_health_history_len());
+    try std.testing.expectEqual(@as(u32, 1), oc_command_result_total_count());
+    try std.testing.expectEqual(@as(u32, 1), oc_command_result_count_ok());
+    try std.testing.expectEqual(@as(u32, 0), oc_command_result_count_invalid_argument());
+    try std.testing.expectEqual(@as(u32, 0), oc_command_result_count_not_supported());
+    try std.testing.expectEqual(@as(u16, abi.command_reset_command_result_counters), oc_command_result_counters_ptr().last_opcode);
+
+    _ = oc_submit_command(abi.command_set_mode, 77, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u32, 2), oc_command_result_total_count());
+    try std.testing.expectEqual(@as(u32, 1), oc_command_result_count_ok());
+    try std.testing.expectEqual(@as(u32, 1), oc_command_result_count_invalid_argument());
+    try std.testing.expectEqual(@as(u16, abi.command_set_mode), oc_command_result_counters_ptr().last_opcode);
+}
+
 test "baremetal reset counters clears representative runtime subsystems" {
     status.mode = abi.mode_running;
     status.ticks = 0;
@@ -2892,6 +2996,30 @@ test "baremetal reset counters clears representative runtime subsystems" {
     try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
 }
 
+test "baremetal reset counters preserves feature flags and tick batch hint configuration" {
+    resetBaremetalRuntimeForTest();
+
+    _ = oc_submit_command(abi.command_set_feature_flags, 0xA55AA55A, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_set_tick_batch_hint, 4, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_set_health_code, 123, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_task_create, 8, 2);
+    oc_tick();
+
+    _ = oc_submit_command(abi.command_reset_counters, 0, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u32, 0xA55AA55A), status.feature_flags);
+    try std.testing.expectEqual(@as(u32, 4), status.tick_batch_hint);
+    try std.testing.expectEqual(@as(u64, 4), status.ticks);
+    try std.testing.expectEqual(@as(u32, 1), oc_command_history_len());
+    try std.testing.expectEqual(@as(u16, abi.command_reset_counters), oc_command_history_event(0).opcode);
+    try std.testing.expectEqual(@as(u32, 1), oc_health_history_len());
+    try std.testing.expectEqual(@as(u16, 200), oc_health_history_event(0).health_code);
+}
+
 test "baremetal feature flags and tick batch hint commands update status" {
     status.mode = abi.mode_running;
     status.ticks = 0;
@@ -2938,6 +3066,72 @@ test "baremetal feature flags and tick batch hint commands update status" {
     try std.testing.expectEqual(@as(u32, 1), oc_command_result_count_invalid_argument());
     try std.testing.expectEqual(@as(u32, 0), oc_command_result_count_not_supported());
     try std.testing.expectEqual(@as(u32, 0), oc_command_result_count_other_error());
+}
+
+test "baremetal capture stack pointer refreshes diagnostics without resetting boot state" {
+    resetBaremetalRuntimeForTest();
+
+    _ = oc_submit_command(abi.command_set_boot_phase, abi.boot_phase_init, 0);
+    oc_tick();
+
+    const boot_seq_before = boot_diagnostics.boot_seq;
+    const phase_changes_before = boot_diagnostics.phase_changes;
+    const history_len_before = oc_boot_phase_history_len();
+
+    _ = oc_submit_command(abi.command_capture_stack_pointer, 0, 0);
+    oc_tick();
+
+    const first_snapshot = boot_diagnostics.stack_pointer_snapshot;
+    const first_observed = boot_diagnostics.last_tick_observed;
+    try std.testing.expect(first_snapshot != 0);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), boot_diagnostics.phase);
+    try std.testing.expectEqual(boot_seq_before, boot_diagnostics.boot_seq);
+    try std.testing.expectEqual(phase_changes_before, boot_diagnostics.phase_changes);
+    try std.testing.expectEqual(history_len_before, oc_boot_phase_history_len());
+    try std.testing.expect(boot_diagnostics.last_tick_observed >= boot_diagnostics.last_command_tick);
+
+    _ = oc_submit_command(abi.command_capture_stack_pointer, 0, 0);
+    oc_tick();
+
+    try std.testing.expect(boot_diagnostics.stack_pointer_snapshot != 0);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), boot_diagnostics.phase);
+    try std.testing.expectEqual(boot_seq_before, boot_diagnostics.boot_seq);
+    try std.testing.expectEqual(history_len_before, oc_boot_phase_history_len());
+    try std.testing.expect(boot_diagnostics.last_tick_observed >= first_observed);
+}
+
+test "baremetal reset boot diagnostics preserves histories and runtime mode" {
+    resetBaremetalRuntimeForTest();
+
+    _ = oc_submit_command(abi.command_set_health_code, 418, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_set_boot_phase, abi.boot_phase_init, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_capture_stack_pointer, 0, 0);
+    oc_tick();
+
+    const pre_boot_seq = boot_diagnostics.boot_seq;
+    const pre_command_len = oc_command_history_len();
+    const pre_health_len = oc_health_history_len();
+    const pre_boot_history_len = oc_boot_phase_history_len();
+    try std.testing.expect(boot_diagnostics.stack_pointer_snapshot != 0);
+
+    _ = oc_submit_command(abi.command_reset_boot_diagnostics, 0, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u8, abi.mode_running), status.mode);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_runtime), boot_diagnostics.phase);
+    try std.testing.expectEqual(pre_boot_seq +% 1, boot_diagnostics.boot_seq);
+    try std.testing.expectEqual(@as(u32, 0), boot_diagnostics.phase_changes);
+    try std.testing.expectEqual(@as(u64, 0), boot_diagnostics.stack_pointer_snapshot);
+    try std.testing.expectEqual(pre_command_len + 1, oc_command_history_len());
+    try std.testing.expectEqual(pre_health_len + 1, oc_health_history_len());
+    try std.testing.expectEqual(pre_boot_history_len, oc_boot_phase_history_len());
+
+    _ = oc_submit_command(abi.command_set_boot_phase, abi.boot_phase_init, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(pre_boot_history_len + 1, oc_boot_phase_history_len());
 }
 
 test "baremetal scheduler command flow creates dispatches and completes tasks" {

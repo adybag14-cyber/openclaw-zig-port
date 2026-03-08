@@ -1345,6 +1345,11 @@ Full-stack replacement execution reference:
     - live PVH/QEMU+GDB sequence allocates two pages, proves wrong-pointer `command_allocator_free` returns `result_not_found`, wrong-size returns `result_invalid_argument`, successful free updates `last_free_*`, double-free returns `result_not_found`, and a fresh allocation still restarts from page `0`.
     - key probe evidence: `ACK=7`, `LAST_OPCODE=32`, `LAST_RESULT=0`, `ALLOC_PTR=1048576`, `BAD_PTR_RESULT=-2`, `BAD_SIZE_RESULT=-22`, `GOOD_FREE_RESULT=0`, `DOUBLE_FREE_RESULT=-2`, `GOOD_FREE_LAST_FREE_PTR=1048576`, `GOOD_FREE_LAST_FREE_SIZE=8192`, `REALLOC_PTR=1048576`, `REALLOC_PAGE_START=0`, `REALLOC_PAGE_LEN=1`, `REALLOC_FREE_PAGES=255`.
     - probe is wired into both `zig-ci` and `release-preview` validate stages so allocator-free failure regressions now block CI.
+  - bare-metal reset/control isolation hardening slice shipped:
+    - added six host regressions in `src/baremetal_main.zig` covering isolated reset/clear boundaries for `command_clear_command_history`, `command_clear_health_history`, `command_reset_command_result_counters`, `command_reset_boot_diagnostics`, `command_capture_stack_pointer`, and `command_reset_counters` config preservation.
+    - `scripts/baremetal-qemu-command-result-counters-probe-check.ps1` now proves `mode` and `last_health_code` are preserved across `command_reset_command_result_counters`.
+    - `scripts/baremetal-qemu-bootdiag-history-clear-probe-check.ps1` now proves boot-phase history survives `command_reset_boot_diagnostics`, health history survives `command_clear_command_history`, and command history survives `command_clear_health_history`.
+    - `scripts/baremetal-qemu-reset-counters-probe-check.ps1` now proves `command_reset_counters` preserves `feature_flags=0xA55AA55A` and `tick_batch_hint=4`, including the resulting post-reset tick step size.
   - bare-metal task-resume timer-clear validation shipped:
     - new script: `scripts/baremetal-qemu-task-resume-timer-clear-probe-check.ps1`.
     - added matching host regression in `src/baremetal_main.zig`.

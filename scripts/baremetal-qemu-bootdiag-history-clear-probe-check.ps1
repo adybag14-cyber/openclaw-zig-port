@@ -190,6 +190,7 @@ $healthHistoryCountAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -P
 $healthHistoryHeadAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal_main\.health_history_head$' -SymbolName "baremetal_main.health_history_head"
 $healthHistoryOverflowAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal_main\.health_history_overflow$' -SymbolName "baremetal_main.health_history_overflow"
 $healthHistorySeqAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal_main\.health_history_seq$' -SymbolName "baremetal_main.health_history_seq"
+$bootHistoryCountAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal_main\.boot_phase_history_count$' -SymbolName "baremetal_main.boot_phase_history_count"
 
 $artifactForGdb = $artifact.Replace('\', '/')
 if (Test-Path $gdbStdout) { Remove-Item -Force $gdbStdout }
@@ -307,6 +308,7 @@ if $stage == 5
     printf "BOOTDIAG_OBSERVED_TICK=%llu\n", *(unsigned long long*)(0x__BOOTDIAG__+__BOOTDIAG_OBSERVEDTICK_OFFSET__)
     printf "BOOTDIAG_STACK=%llu\n", *(unsigned long long*)(0x__BOOTDIAG__+__BOOTDIAG_STACK_OFFSET__)
     printf "BOOTDIAG_PHASE_CHANGES=%u\n", *(unsigned int*)(0x__BOOTDIAG__+__BOOTDIAG_PHASECHANGES_OFFSET__)
+    printf "BOOT_HISTORY_LEN=%u\n", *(unsigned int*)0x__BOOT_HISTORY_COUNT__
     printf "CMD_HISTORY_LEN=%u\n", *(unsigned int*)0x__CMD_HISTORY_COUNT__
     printf "CMD_HISTORY_HEAD=%u\n", *(unsigned int*)0x__CMD_HISTORY_HEAD__
     printf "CMD_HISTORY_OVERFLOW=%u\n", *(unsigned int*)0x__CMD_HISTORY_OVERFLOW__
@@ -338,6 +340,7 @@ if $stage == 6
     printf "CMD_HISTORY_FIRST_TICK=%llu\n", *(unsigned long long*)(0x__CMD_HISTORY__ + __COMMAND_EVENT_TICK_OFFSET__)
     printf "CMD_HISTORY_FIRST_ARG0=%llu\n", *(unsigned long long*)(0x__CMD_HISTORY__ + __COMMAND_EVENT_ARG0_OFFSET__)
     printf "CMD_HISTORY_FIRST_ARG1=%llu\n", *(unsigned long long*)(0x__CMD_HISTORY__ + __COMMAND_EVENT_ARG1_OFFSET__)
+    printf "HEALTH_HISTORY_LEN2=%u\n", *(unsigned int*)0x__HEALTH_HISTORY_COUNT__
     set *(unsigned short*)(0x__COMMAND__+__COMMAND_OPCODE_OFFSET__) = __CLEAR_HEALTH_HISTORY_OPCODE__
     set *(unsigned int*)(0x__COMMAND__+__COMMAND_SEQ_OFFSET__) = 6
     set *(unsigned long long*)(0x__COMMAND__+__COMMAND_ARG0_OFFSET__) = 0
@@ -361,6 +364,7 @@ if $stage == 7
     printf "HEALTH_HISTORY_FIRST_MODE=%u\n", *(unsigned char*)(0x__HEALTH_HISTORY__ + __HEALTH_EVENT_MODE_OFFSET__)
     printf "HEALTH_HISTORY_FIRST_TICK=%llu\n", *(unsigned long long*)(0x__HEALTH_HISTORY__ + __HEALTH_EVENT_TICK_OFFSET__)
     printf "HEALTH_HISTORY_FIRST_ACK=%u\n", *(unsigned int*)(0x__HEALTH_HISTORY__ + __HEALTH_EVENT_ACK_OFFSET__)
+    printf "CMD_HISTORY_LEN3=%u\n", *(unsigned int*)0x__CMD_HISTORY_COUNT__
     quit
   end
   continue
@@ -387,6 +391,7 @@ $gdbContent = $gdbTemplate `
     -replace '__HEALTH_HISTORY_HEAD__', $healthHistoryHeadAddress `
     -replace '__HEALTH_HISTORY_OVERFLOW__', $healthHistoryOverflowAddress `
     -replace '__HEALTH_HISTORY_SEQ__', $healthHistorySeqAddress `
+    -replace '__BOOT_HISTORY_COUNT__', $bootHistoryCountAddress `
     -replace '__STATUS_MODE_OFFSET__', [string]$statusModeOffset `
     -replace '__STATUS_TICKS_OFFSET__', [string]$statusTicksOffset `
     -replace '__STATUS_HEALTH_OFFSET__', [string]$statusLastHealthCodeOffset `
@@ -475,6 +480,7 @@ $expectations = @{
     BOOTDIAG_OBSERVED_TICK = 4
     BOOTDIAG_STACK = 0
     BOOTDIAG_PHASE_CHANGES = 0
+    BOOT_HISTORY_LEN = 3
     CMD_HISTORY_LEN = 4
     CMD_HISTORY_HEAD = 4
     CMD_HISTORY_OVERFLOW = 0
@@ -494,6 +500,7 @@ $expectations = @{
     CMD_HISTORY_FIRST_TICK = 4
     CMD_HISTORY_FIRST_ARG0 = 0
     CMD_HISTORY_FIRST_ARG1 = 0
+    HEALTH_HISTORY_LEN2 = 6
     ACK3 = 6
     LAST_OPCODE3 = $clearHealthHistoryOpcode
     LAST_RESULT3 = 0
@@ -505,6 +512,7 @@ $expectations = @{
     HEALTH_HISTORY_FIRST_MODE = $modeRunning
     HEALTH_HISTORY_FIRST_TICK = 6
     HEALTH_HISTORY_FIRST_ACK = 6
+    CMD_HISTORY_LEN3 = 2
 }
 
 foreach ($name in $expectations.Keys) {

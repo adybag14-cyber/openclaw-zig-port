@@ -214,6 +214,7 @@ Recommended sequence:
 - bare-metal optional QEMU allocator syscall failure probe in validate stage
 - bare-metal optional QEMU command-result counters probe in validate stage
 - bare-metal optional QEMU reset counters probe in validate stage
+- command-result / bootdiag-history-clear / reset-counters probes now also enforce isolated reset-preservation boundaries for runtime state, histories, and config without adding extra workflow jobs
 - bare-metal optional QEMU task lifecycle probe in validate stage
 - bare-metal optional QEMU active-task terminate probe in validate stage
 - bare-metal optional QEMU panic-recovery probe in validate stage

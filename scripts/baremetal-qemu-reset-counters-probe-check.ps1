@@ -33,6 +33,8 @@ $taskWaitInterruptOpcode = 57
 $modeRunning = 1
 $bootPhaseRuntime = 2
 $healthCode = 123
+$featureFlagsValue = 2774181210
+$tickBatchHintValue = 4
 $taskBudget = 8
 $taskPriority = 2
 $allocatorAllocSize = 4096
@@ -48,10 +50,12 @@ $exceptionCode = 51966
 $statusModeOffset = 6
 $statusTicksOffset = 8
 $statusLastHealthCodeOffset = 16
+$statusFeatureFlagsOffset = 20
 $statusPanicCountOffset = 24
 $statusCommandSeqAckOffset = 28
 $statusLastCommandOpcodeOffset = 32
 $statusLastCommandResultOffset = 34
+$statusTickBatchHintOffset = 36
 
 $commandOpcodeOffset = 6
 $commandSeqOffset = 8
@@ -255,6 +259,8 @@ if `$stage == 0
 end
 if `$stage == 1
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 1
+    set *(unsigned int*)(0x$statusAddress+$statusFeatureFlagsOffset) = $featureFlagsValue
+    set *(unsigned int*)(0x$statusAddress+$statusTickBatchHintOffset) = $tickBatchHintValue
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $triggerPanicFlagOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 2
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = 0
@@ -367,6 +373,8 @@ end
 if `$stage == 12
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 12
     printf "PRE_ACK=%u\n", *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset)
+    printf "PRE_FEATURE_FLAGS=%u\n", *(unsigned int*)(0x$statusAddress+$statusFeatureFlagsOffset)
+    printf "PRE_TICK_BATCH_HINT=%u\n", *(unsigned int*)(0x$statusAddress+$statusTickBatchHintOffset)
     printf "PRE_PANIC_COUNT=%u\n", *(unsigned int*)(0x$statusAddress+$statusPanicCountOffset)
     printf "PRE_INTERRUPT_COUNT=%llu\n", *(unsigned long long*)(0x$interruptStateAddress+$interruptStateInterruptCountOffset)
     printf "PRE_EXCEPTION_COUNT=%llu\n", *(unsigned long long*)(0x$interruptStateAddress+$interruptStateExceptionCountOffset)
@@ -402,6 +410,8 @@ if `$stage == 13
     printf "POST_TICKS=%llu\n", *(unsigned long long*)(0x$statusAddress+$statusTicksOffset)
     printf "POST_MODE=%u\n", *(unsigned char*)(0x$statusAddress+$statusModeOffset)
     printf "POST_HEALTH_CODE=%u\n", *(unsigned short*)(0x$statusAddress+$statusLastHealthCodeOffset)
+    printf "POST_FEATURE_FLAGS=%u\n", *(unsigned int*)(0x$statusAddress+$statusFeatureFlagsOffset)
+    printf "POST_TICK_BATCH_HINT=%u\n", *(unsigned int*)(0x$statusAddress+$statusTickBatchHintOffset)
     printf "POST_PANIC_COUNT=%u\n", *(unsigned int*)(0x$statusAddress+$statusPanicCountOffset)
     printf "POST_INTERRUPT_COUNT=%llu\n", *(unsigned long long*)(0x$interruptStateAddress+$interruptStateInterruptCountOffset)
     printf "POST_EXCEPTION_COUNT=%llu\n", *(unsigned long long*)(0x$interruptStateAddress+$interruptStateExceptionCountOffset)
@@ -473,6 +483,8 @@ try {
     }
 
     $preAck = Extract-IntValue -Text $gdbText -Name "PRE_ACK"
+    $preFeatureFlags = Extract-IntValue -Text $gdbText -Name "PRE_FEATURE_FLAGS"
+    $preTickBatchHint = Extract-IntValue -Text $gdbText -Name "PRE_TICK_BATCH_HINT"
     $prePanicCount = Extract-IntValue -Text $gdbText -Name "PRE_PANIC_COUNT"
     $preInterruptCount = Extract-IntValue -Text $gdbText -Name "PRE_INTERRUPT_COUNT"
     $preExceptionCount = Extract-IntValue -Text $gdbText -Name "PRE_EXCEPTION_COUNT"
@@ -499,6 +511,8 @@ try {
     $postTicks = Extract-IntValue -Text $gdbText -Name "POST_TICKS"
     $postMode = Extract-IntValue -Text $gdbText -Name "POST_MODE"
     $postHealthCode = Extract-IntValue -Text $gdbText -Name "POST_HEALTH_CODE"
+    $postFeatureFlags = Extract-IntValue -Text $gdbText -Name "POST_FEATURE_FLAGS"
+    $postTickBatchHint = Extract-IntValue -Text $gdbText -Name "POST_TICK_BATCH_HINT"
     $postPanicCount = Extract-IntValue -Text $gdbText -Name "POST_PANIC_COUNT"
     $postInterruptCount = Extract-IntValue -Text $gdbText -Name "POST_INTERRUPT_COUNT"
     $postExceptionCount = Extract-IntValue -Text $gdbText -Name "POST_EXCEPTION_COUNT"
@@ -539,13 +553,14 @@ try {
     $postWakeQueueLen = Extract-IntValue -Text $gdbText -Name "POST_WAKE_QUEUE_LEN"
 
     $pass = (
-        $preAck -eq 12 -and $prePanicCount -eq 1 -and $preInterruptCount -ge 1 -and $preExceptionCount -ge 1 -and
+        $preAck -eq 12 -and $preFeatureFlags -eq $featureFlagsValue -and $preTickBatchHint -eq $tickBatchHintValue -and
+        $prePanicCount -eq 1 -and $preInterruptCount -ge 1 -and $preExceptionCount -ge 1 -and
         $preInterruptHistoryLen -ge 2 -and $preExceptionHistoryLen -ge 1 -and $preInterruptVector -eq 1 -and $preExceptionVector -eq 1 -and
         $preCommandHistoryLen -ge 12 -and $preHealthHistoryLen -ge 12 -and $preModeHistoryLen -ge 2 -and $preBootHistoryLen -ge 2 -and
         $preCommandResultTotal -ge 12 -and $preSchedulerTaskCount -eq 1 -and $preAllocatorAllocationCount -eq 1 -and $preAllocatorBytesInUse -eq $allocatorAllocSize -and
         $preSyscallEntryCount -eq 1 -and $preTimerEntryCount -eq 1 -and $preTimerQuantum -eq $timerQuantum -and $preWakeQueueLen -eq 1 -and
-        $postAck -eq 13 -and $postLastOpcode -eq $resetCountersOpcode -and $postLastResult -eq 0 -and $postTicks -eq 1 -and $postMode -eq $modeRunning -and
-        $postHealthCode -eq 200 -and $postPanicCount -eq 0 -and $postInterruptCount -eq 0 -and $postExceptionCount -eq 0 -and
+        $postAck -eq 13 -and $postLastOpcode -eq $resetCountersOpcode -and $postLastResult -eq 0 -and $postTicks -eq $tickBatchHintValue -and $postMode -eq $modeRunning -and
+        $postHealthCode -eq 200 -and $postFeatureFlags -eq $featureFlagsValue -and $postTickBatchHint -eq $tickBatchHintValue -and $postPanicCount -eq 0 -and $postInterruptCount -eq 0 -and $postExceptionCount -eq 0 -and
         $postInterruptHistoryLen -eq 0 -and $postExceptionHistoryLen -eq 0 -and $postInterruptVector -eq 0 -and $postExceptionVector -eq 0 -and
         $postCommandHistoryLen -eq 1 -and $postCommandHistoryFirstSeq -eq 13 -and $postCommandHistoryFirstOpcode -eq $resetCountersOpcode -and
         $postHealthHistoryLen -eq 1 -and $postHealthHistoryFirstCode -eq 200 -and $postHealthHistoryFirstAck -eq 13 -and
