@@ -137,6 +137,18 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-command-loop-check.ps1
 
+      - name: Bare-metal QEMU mailbox header validation probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mailbox-header-validation-probe-check.ps1
+
+      - name: Bare-metal QEMU mailbox stale-seq probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mailbox-stale-seq-probe-check.ps1
+
+      - name: Bare-metal QEMU mailbox seq-wraparound probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mailbox-seq-wraparound-probe-check.ps1
+
       - name: Bare-metal QEMU feature flags tick batch probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-feature-flags-tick-batch-probe-check.ps1
@@ -244,6 +256,10 @@ jobs:
       - name: Bare-metal QEMU scheduler priority budget probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-priority-budget-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler default-budget invalid probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-default-budget-invalid-probe-check.ps1
 
       - name: Bare-metal QEMU scheduler round robin probe (optional)
         shell: pwsh

@@ -946,9 +946,14 @@ comptime {
 fn processPendingCommand() void {
     if (command_mailbox.seq == status.command_seq_ack) return;
 
+    const command_seq = command_mailbox.seq;
     status.last_command_opcode = command_mailbox.opcode;
-    status.last_command_result = executeCommand(command_mailbox.opcode, command_mailbox.arg0, command_mailbox.arg1);
-    status.command_seq_ack = command_mailbox.seq;
+    status.last_command_result = if (command_mailbox.magic != abi.command_magic or
+        command_mailbox.api_version != abi.api_version)
+        abi.result_invalid_argument
+    else
+        executeCommand(command_mailbox.opcode, command_mailbox.arg0, command_mailbox.arg1);
+    status.command_seq_ack = command_seq;
     boot_diagnostics.last_command_seq = status.command_seq_ack;
     boot_diagnostics.last_command_tick = status.ticks;
     recordCommand(
@@ -2476,6 +2481,179 @@ test "baremetal diagnostics command flow updates phase and stack snapshot" {
 
     oc_command_history_clear();
     try std.testing.expectEqual(@as(u32, 0), oc_command_history_len());
+}
+
+test "baremetal mailbox header validation rejects invalid magic and api version" {
+    resetBaremetalRuntimeForTest();
+
+    command_mailbox = .{
+        .magic = 0,
+        .api_version = abi.api_version,
+        .opcode = abi.command_set_tick_batch_hint,
+        .seq = 1,
+        .arg0 = 7,
+        .arg1 = 0,
+    };
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 1), status.command_seq_ack);
+    try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_set_tick_batch_hint), status.last_command_opcode);
+    try std.testing.expectEqual(@as(u32, 1), status.tick_batch_hint);
+    try std.testing.expectEqual(@as(u32, 1), oc_command_history_len());
+    try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), oc_command_history_event(0).result);
+
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version + 1,
+        .opcode = abi.command_set_tick_batch_hint,
+        .seq = 2,
+        .arg0 = 9,
+        .arg1 = 0,
+    };
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 2), status.command_seq_ack);
+    try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 1), status.tick_batch_hint);
+    try std.testing.expectEqual(@as(u32, 2), oc_command_history_len());
+    try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), oc_command_history_event(1).result);
+
+    command_mailbox.magic = abi.command_magic;
+    command_mailbox.api_version = abi.api_version;
+    _ = oc_submit_command(abi.command_set_tick_batch_hint, 5, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 5), status.tick_batch_hint);
+    try std.testing.expectEqual(@as(u32, 3), status.command_seq_ack);
+}
+
+test "baremetal mailbox replay no-op and sequence wraparound remain deterministic" {
+    resetBaremetalRuntimeForTest();
+
+    var seq = oc_submit_command(abi.command_set_tick_batch_hint, 4, 0);
+    try std.testing.expectEqual(@as(u32, 1), seq);
+    oc_tick();
+    try std.testing.expectEqual(seq, status.command_seq_ack);
+    try std.testing.expectEqual(@as(u32, 4), status.tick_batch_hint);
+
+    const history_len_before_replay = oc_command_history_len();
+    const last_opcode_before_replay = status.last_command_opcode;
+    const last_result_before_replay = status.last_command_result;
+    command_mailbox.opcode = abi.command_set_tick_batch_hint;
+    command_mailbox.arg0 = 9;
+    command_mailbox.arg1 = 0;
+    oc_tick();
+    try std.testing.expectEqual(seq, status.command_seq_ack);
+    try std.testing.expectEqual(@as(u32, 4), status.tick_batch_hint);
+    try std.testing.expectEqual(last_opcode_before_replay, status.last_command_opcode);
+    try std.testing.expectEqual(last_result_before_replay, status.last_command_result);
+    try std.testing.expectEqual(history_len_before_replay, oc_command_history_len());
+
+    command_mailbox.seq = std.math.maxInt(u32) - 1;
+    status.command_seq_ack = std.math.maxInt(u32) - 1;
+
+    seq = oc_submit_command(abi.command_set_tick_batch_hint, 6, 0);
+    try std.testing.expectEqual(std.math.maxInt(u32), seq);
+    oc_tick();
+    try std.testing.expectEqual(std.math.maxInt(u32), status.command_seq_ack);
+    try std.testing.expectEqual(@as(u32, 6), status.tick_batch_hint);
+
+    seq = oc_submit_command(abi.command_set_tick_batch_hint, 7, 0);
+    try std.testing.expectEqual(@as(u32, 0), seq);
+    oc_tick();
+    try std.testing.expectEqual(@as(u32, 0), status.command_seq_ack);
+    try std.testing.expectEqual(@as(u32, 7), status.tick_batch_hint);
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+}
+
+test "baremetal descriptor mailbox commands update init and load telemetry" {
+    resetBaremetalRuntimeForTest();
+
+    const init_before = x86_bootstrap.oc_descriptor_init_count();
+    const attempts_before = x86_bootstrap.oc_descriptor_load_attempt_count();
+    const success_before = x86_bootstrap.oc_descriptor_load_success_count();
+
+    _ = oc_submit_command(abi.command_reinit_descriptor_tables, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(init_before + 1, x86_bootstrap.oc_descriptor_init_count());
+    try std.testing.expect(x86_bootstrap.oc_descriptor_tables_ready());
+
+    _ = oc_submit_command(abi.command_load_descriptor_tables, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(attempts_before + 1, x86_bootstrap.oc_descriptor_load_attempt_count());
+    try std.testing.expectEqual(success_before + 1, x86_bootstrap.oc_descriptor_load_success_count());
+    try std.testing.expect(x86_bootstrap.oc_descriptor_tables_loaded());
+}
+
+test "baremetal reset vector counters command clears vector tables without disturbing histories" {
+    resetBaremetalRuntimeForTest();
+
+    x86_bootstrap.oc_interrupt_mask_clear_all();
+    x86_bootstrap.oc_interrupt_mask_reset_ignored_counts();
+    x86_bootstrap.oc_reset_interrupt_counters();
+    x86_bootstrap.oc_reset_exception_counters();
+    x86_bootstrap.oc_reset_vector_counters();
+    x86_bootstrap.oc_interrupt_history_clear();
+    x86_bootstrap.oc_exception_history_clear();
+
+    _ = oc_submit_command(abi.command_trigger_interrupt, 200, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_trigger_exception, 13, 0xCAFE);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u64, 2), x86_bootstrap.oc_interrupt_count());
+    try std.testing.expectEqual(@as(u64, 1), x86_bootstrap.oc_exception_count());
+    try std.testing.expectEqual(@as(u64, 1), x86_bootstrap.oc_interrupt_vector_count(200));
+    try std.testing.expectEqual(@as(u64, 1), x86_bootstrap.oc_exception_vector_count(13));
+    try std.testing.expectEqual(@as(u32, 2), x86_bootstrap.oc_interrupt_history_len());
+    try std.testing.expectEqual(@as(u32, 1), x86_bootstrap.oc_exception_history_len());
+
+    _ = oc_submit_command(abi.command_reset_vector_counters, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u64, 0), x86_bootstrap.oc_interrupt_vector_count(200));
+    try std.testing.expectEqual(@as(u64, 0), x86_bootstrap.oc_exception_vector_count(13));
+    try std.testing.expectEqual(@as(u64, 2), x86_bootstrap.oc_interrupt_count());
+    try std.testing.expectEqual(@as(u64, 1), x86_bootstrap.oc_exception_count());
+    try std.testing.expectEqual(@as(u32, 2), x86_bootstrap.oc_interrupt_history_len());
+    try std.testing.expectEqual(@as(u32, 1), x86_bootstrap.oc_exception_history_len());
+}
+
+test "baremetal scheduler default budget command rejects zero without clobbering state" {
+    resetBaremetalRuntimeForTest();
+
+    _ = oc_submit_command(abi.command_scheduler_disable, 0, 0);
+    oc_tick();
+    try std.testing.expect(!oc_scheduler_enabled());
+
+    _ = oc_submit_command(abi.command_scheduler_set_default_budget, 9, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 9), oc_scheduler_state_ptr().default_budget_ticks);
+
+    _ = oc_submit_command(abi.command_task_create, 0, 1);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_task_count());
+    const task0 = oc_scheduler_task(0);
+    try std.testing.expect(task0.task_id != 0);
+    try std.testing.expectEqual(@as(u32, 9), task0.budget_ticks);
+    try std.testing.expectEqual(@as(u32, 9), task0.budget_remaining);
+
+    _ = oc_submit_command(abi.command_scheduler_set_default_budget, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 9), oc_scheduler_state_ptr().default_budget_ticks);
+
+    _ = oc_submit_command(abi.command_task_create, 0, 2);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 2), oc_scheduler_task_count());
+    const task1 = oc_scheduler_task(1);
+    try std.testing.expect(task1.task_id != 0);
+    try std.testing.expectEqual(@as(u32, 9), task1.budget_ticks);
+    try std.testing.expectEqual(@as(u32, 9), task1.budget_remaining);
 }
 
 test "baremetal command history ring keeps newest mailbox entries" {
