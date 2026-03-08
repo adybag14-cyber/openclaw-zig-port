@@ -117,6 +117,7 @@ Recommended sequence:
 - optional bare-metal QEMU allocator syscall probe (alloc/free plus syscall register/invoke/block/disable/re-enable/clear-flags/unregister, then live `command_allocator_reset` + `command_syscall_reset` recovery proof against the freestanding PVH artifact)
 - optional bare-metal QEMU syscall saturation probe (fill the 64-entry syscall table, reject the 65th `register`, reclaim one slot with `unregister`, reuse it with a fresh syscall ID/token, and prove the reused slot invokes cleanly against the freestanding PVH artifact)
 - optional bare-metal QEMU syscall saturation reset probe (fill the 64-entry syscall table, dirty dispatch telemetry with a real invoke, run `command_syscall_reset`, prove the fully saturated table returns to steady state, and then prove a fresh syscall restarts cleanly from slot `0` against the freestanding PVH artifact)
+- optional bare-metal QEMU allocator saturation reset probe (fill all 64 allocator records, reject the next `command_allocator_alloc` with `no_space`, run `command_allocator_reset`, prove counters/bitmap/records collapse to steady state, and then prove a fresh 2-page allocation restarts cleanly from slot `0` against the freestanding PVH artifact)
 - optional bare-metal QEMU syscall control probe (isolated live `command_syscall_register` re-register, `command_syscall_set_flags`, blocked invoke, disable/enable, successful invoke, unregister, and missing-entry mutation proof against the freestanding PVH artifact)
 - optional bare-metal QEMU allocator syscall failure probe (invalid-alignment, no-space, blocked-syscall, and disabled-syscall result semantics plus command-result counters against the freestanding PVH artifact)
 - optional bare-metal QEMU command-result counters probe (live mailbox result-category accounting plus `command_reset_command_result_counters` reset semantics against the freestanding PVH artifact)
@@ -185,6 +186,7 @@ Recommended sequence:
 - bare-metal optional QEMU allocator syscall probe in validate stage
 - bare-metal optional QEMU syscall saturation probe in validate stage
 - bare-metal optional QEMU syscall saturation reset probe in validate stage
+- bare-metal optional QEMU allocator saturation reset probe in validate stage
 - bare-metal optional QEMU syscall control probe in validate stage
 - bare-metal optional QEMU allocator syscall failure probe in validate stage
 - bare-metal optional QEMU command-result counters probe in validate stage

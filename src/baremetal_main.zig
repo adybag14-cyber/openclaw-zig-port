@@ -3586,6 +3586,107 @@ test "baremetal allocator and syscall reset commands clear dirty runtime state" 
     try std.testing.expectEqual(@as(i16, abi.result_not_found), status.last_command_result);
 }
 
+test "baremetal allocator saturation reset command clears full table and restarts cleanly" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    status.tick_batch_hint = 1;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_allocator_reset();
+    oc_command_result_counters_clear();
+
+    const capacity = oc_allocator_allocation_capacity();
+    const alloc_size: u64 = allocator_default_page_size;
+    const alloc_alignment: u64 = allocator_default_page_size;
+    const fresh_alloc_size: u64 = allocator_default_page_size * 2;
+
+    var idx: u32 = 0;
+    while (idx < capacity) : (idx += 1) {
+        _ = oc_submit_command(abi.command_allocator_alloc, alloc_size, alloc_alignment);
+        oc_tick();
+        try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+        const record = oc_allocator_allocation(idx);
+        try std.testing.expectEqual(@as(u8, abi.allocation_state_active), record.state);
+        try std.testing.expectEqual(allocator_default_heap_base + @as(u64, idx) * allocator_default_page_size, record.ptr);
+        try std.testing.expectEqual(alloc_size, record.size_bytes);
+        try std.testing.expectEqual(idx, record.page_start);
+        try std.testing.expectEqual(@as(u32, 1), record.page_len);
+    }
+
+    const saturated_state = oc_allocator_state_ptr().*;
+    try std.testing.expectEqual(capacity, oc_allocator_allocation_count());
+    try std.testing.expectEqual(saturated_state.total_pages - capacity, saturated_state.free_pages);
+    try std.testing.expectEqual(capacity, saturated_state.allocation_count);
+    try std.testing.expectEqual(capacity, saturated_state.alloc_ops);
+    try std.testing.expectEqual(@as(u32, 0), saturated_state.free_ops);
+    try std.testing.expectEqual(@as(u64, capacity) * alloc_size, saturated_state.bytes_in_use);
+    try std.testing.expectEqual(@as(u64, capacity) * alloc_size, saturated_state.peak_bytes_in_use);
+    try std.testing.expectEqual(allocator_default_heap_base + @as(u64, capacity - 1) * allocator_default_page_size, saturated_state.last_alloc_ptr);
+    try std.testing.expectEqual(alloc_size, saturated_state.last_alloc_size);
+    try std.testing.expectEqual(@as(u8, abi.allocation_state_active), oc_allocator_allocation(0).state);
+    try std.testing.expectEqual(@as(u8, abi.allocation_state_active), oc_allocator_allocation(capacity - 1).state);
+    try std.testing.expectEqual(@as(u8, 1), oc_allocator_page_bitmap_ptr().*[0]);
+    try std.testing.expectEqual(@as(u8, 1), oc_allocator_page_bitmap_ptr().*[@as(usize, @intCast(capacity - 1))]);
+    try std.testing.expectEqual(@as(u8, 0), oc_allocator_page_bitmap_ptr().*[@as(usize, @intCast(capacity))]);
+
+    _ = oc_submit_command(abi.command_allocator_alloc, alloc_size, alloc_alignment);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_no_space), status.last_command_result);
+    const overflow_state = oc_allocator_state_ptr().*;
+    try std.testing.expectEqual(saturated_state.free_pages, overflow_state.free_pages);
+    try std.testing.expectEqual(saturated_state.allocation_count, overflow_state.allocation_count);
+    try std.testing.expectEqual(saturated_state.alloc_ops, overflow_state.alloc_ops);
+    try std.testing.expectEqual(saturated_state.bytes_in_use, overflow_state.bytes_in_use);
+    try std.testing.expectEqual(saturated_state.last_alloc_ptr, overflow_state.last_alloc_ptr);
+
+    _ = oc_submit_command(abi.command_allocator_reset, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    const reset_state = oc_allocator_state_ptr().*;
+    try std.testing.expectEqual(reset_state.total_pages, reset_state.free_pages);
+    try std.testing.expectEqual(@as(u32, 0), reset_state.allocation_count);
+    try std.testing.expectEqual(@as(u32, 0), reset_state.alloc_ops);
+    try std.testing.expectEqual(@as(u32, 0), reset_state.free_ops);
+    try std.testing.expectEqual(@as(u64, 0), reset_state.bytes_in_use);
+    try std.testing.expectEqual(@as(u64, 0), reset_state.peak_bytes_in_use);
+    try std.testing.expectEqual(@as(u64, 0), reset_state.last_alloc_ptr);
+    try std.testing.expectEqual(@as(u64, 0), reset_state.last_alloc_size);
+    try std.testing.expectEqual(@as(u64, 0), reset_state.last_free_ptr);
+    try std.testing.expectEqual(@as(u64, 0), reset_state.last_free_size);
+    try std.testing.expectEqual(@as(u8, abi.allocation_state_unused), oc_allocator_allocation(0).state);
+    try std.testing.expectEqual(@as(u8, abi.allocation_state_unused), oc_allocator_allocation(1).state);
+    try std.testing.expectEqual(@as(u8, 0), oc_allocator_page_bitmap_ptr().*[0]);
+    try std.testing.expectEqual(@as(u8, 0), oc_allocator_page_bitmap_ptr().*[63]);
+
+    _ = oc_submit_command(abi.command_allocator_alloc, fresh_alloc_size, alloc_alignment);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    const fresh_state = oc_allocator_state_ptr().*;
+    const fresh_record = oc_allocator_allocation(0);
+    try std.testing.expectEqual(@as(u32, 1), fresh_state.allocation_count);
+    try std.testing.expectEqual(@as(u32, 1), fresh_state.alloc_ops);
+    try std.testing.expectEqual(fresh_alloc_size, fresh_state.bytes_in_use);
+    try std.testing.expectEqual(fresh_alloc_size, fresh_state.peak_bytes_in_use);
+    try std.testing.expectEqual(allocator_default_heap_base, fresh_state.last_alloc_ptr);
+    try std.testing.expectEqual(fresh_alloc_size, fresh_state.last_alloc_size);
+    try std.testing.expectEqual(fresh_state.total_pages - 2, fresh_state.free_pages);
+    try std.testing.expectEqual(allocator_default_heap_base, fresh_record.ptr);
+    try std.testing.expectEqual(fresh_alloc_size, fresh_record.size_bytes);
+    try std.testing.expectEqual(@as(u32, 0), fresh_record.page_start);
+    try std.testing.expectEqual(@as(u32, 2), fresh_record.page_len);
+    try std.testing.expectEqual(@as(u8, abi.allocation_state_active), fresh_record.state);
+    try std.testing.expectEqual(@as(u8, abi.allocation_state_unused), oc_allocator_allocation(1).state);
+}
+
 test "baremetal timer periodic flow rearms and honors enable disable controls" {
     status.mode = abi.mode_running;
     status.ticks = 0;

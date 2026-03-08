@@ -1285,6 +1285,12 @@ Full-stack replacement execution reference:
     - live PVH/QEMU+GDB sequence proves `command_interrupt_mask_apply_profile(external_all)` blocks vector `200`, `command_interrupt_mask_set(200, 0)` restores wake delivery on vector `200`, `command_interrupt_mask_set(201, 1)` preserves `custom` profile drift while ignored counts accumulate, `command_interrupt_mask_reset_ignored_counts` clears the ignored-count telemetry, `command_interrupt_mask_apply_profile(external_high)` enforces the `63/64` boundary, invalid profile `9` is rejected, and `command_interrupt_mask_clear_all` restores the `none` profile.
     - key probe evidence: `ACK=18`, `LAST_OPCODE=64`, `EXTERNAL_ALL_MASKED_COUNT=224`, `UNMASK_WAKE0_VECTOR=200`, `CUSTOM_IGNORED_200=1`, `CUSTOM_IGNORED_201=1`, `RESET_IGNORED_COUNT=0`, `EXTERNAL_HIGH_MASKED_COUNT=192`, `EXTERNAL_HIGH_MASKED_63=0`, `EXTERNAL_HIGH_MASKED_64=1`, `INVALID_PROFILE_RESULT=-22`, `NONE_PROFILE=0`.
     - probe is wired into both `zig-ci` and `release-preview` validate stages so live interrupt-mask profile regressions now block CI.
+  - bare-metal allocator saturation reset validation shipped:
+    - new script: `scripts/baremetal-qemu-allocator-saturation-reset-probe-check.ps1`.
+    - added matching host regression in `src/baremetal_main.zig`.
+    - live PVH/QEMU+GDB sequence fills all `64` allocator records with one-page allocations, proves the next `command_allocator_alloc` returns `result_no_space`, runs `command_allocator_reset`, proves counters/bitmap/records collapse to steady baseline, and then proves a fresh two-page allocation restarts cleanly from slot `0`.
+    - key probe evidence: `ACK=68`, `LAST_OPCODE=32`, `LAST_RESULT=0`, `PRE_RESET_ALLOCATION_COUNT=64`, `PRE_RESET_FREE_PAGES=192`, `POST_RESET_ALLOCATION_COUNT=0`, `POST_RESET_FREE_PAGES=256`, `FRESH_PTR=1048576`, `FRESH_PAGE_LEN=2`.
+    - probe is wired into both `zig-ci` and `release-preview` validate stages so allocator-table reset regressions now block CI.
   - Week-3 control-plane completion slice shipped:
     - gateway now exposes `GET /ui` for minimal bootstrap control operations (`status`, `doctor`, `logs.tail`, `node.pair.list`) through a token-aware browser panel.
     - node-pair protocol handling consolidated across payload variants: request aliases (`node_id/deviceId`) and action aliases (`pair_id/nodePairId/id` + optional `status|decision`) now normalize into the same state transitions and response schema.

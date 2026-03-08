@@ -342,6 +342,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-syscall-saturation-reset-probe-check.ps1
 
+      - name: Bare-metal QEMU allocator saturation reset probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-allocator-saturation-reset-probe-check.ps1
+
       - name: Bare-metal QEMU syscall control probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-syscall-control-probe-check.ps1
