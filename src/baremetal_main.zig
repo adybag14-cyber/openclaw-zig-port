@@ -3436,6 +3436,82 @@ test "baremetal syscall table saturates and reuses cleared slots" {
     try std.testing.expectEqual(invoke_expected, oc_syscall_state_ptr().last_result);
 }
 
+test "baremetal syscall reset clears saturated table and restarts dispatch state" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    status.tick_batch_hint = 1;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_syscall_reset();
+    oc_timer_reset();
+    oc_scheduler_reset();
+
+    const capacity = oc_syscall_entry_capacity();
+    var index: u32 = 0;
+    while (index < capacity) : (index += 1) {
+        _ = oc_submit_command(abi.command_syscall_register, index + 1, 0x2000 + index);
+        oc_tick();
+        try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    }
+
+    const pre_reset_invoke_id: u32 = 7;
+    const pre_reset_invoke_arg: u64 = 0x55;
+    _ = oc_submit_command(abi.command_syscall_invoke, pre_reset_invoke_id, pre_reset_invoke_arg);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    const pre_reset_expected: i64 = @as(i64, @bitCast(@as(u64, (0x2000 + (pre_reset_invoke_id - 1)) ^ pre_reset_invoke_arg ^ pre_reset_invoke_id)));
+    try std.testing.expectEqual(capacity, oc_syscall_entry_count());
+    try std.testing.expectEqual(@as(u64, 1), oc_syscall_state_ptr().dispatch_count);
+    try std.testing.expectEqual(pre_reset_invoke_id, oc_syscall_state_ptr().last_syscall_id);
+    try std.testing.expectEqual(pre_reset_expected, oc_syscall_state_ptr().last_result);
+
+    _ = oc_submit_command(abi.command_syscall_reset, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expect(oc_syscall_enabled());
+    try std.testing.expectEqual(@as(u32, 0), oc_syscall_entry_count());
+    const state_after_reset = oc_syscall_state_ptr().*;
+    try std.testing.expectEqual(@as(u64, 0), state_after_reset.dispatch_count);
+    try std.testing.expectEqual(@as(u32, 0), state_after_reset.last_syscall_id);
+    try std.testing.expectEqual(@as(u64, 0), state_after_reset.last_invoke_tick);
+    try std.testing.expectEqual(@as(i64, 0), state_after_reset.last_result);
+    try std.testing.expectEqual(@as(u8, abi.syscall_entry_state_unused), oc_syscall_entry(0).state);
+    try std.testing.expectEqual(@as(u8, abi.syscall_entry_state_unused), oc_syscall_entry(1).state);
+
+    const fresh_id: u32 = 777;
+    const fresh_token: u64 = 0xD00D;
+    const fresh_invoke_arg: u64 = 0x99;
+    _ = oc_submit_command(abi.command_syscall_register, fresh_id, fresh_token);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 1), oc_syscall_entry_count());
+    try std.testing.expectEqual(fresh_id, oc_syscall_entry(0).syscall_id);
+    try std.testing.expectEqual(fresh_token, oc_syscall_entry(0).handler_token);
+    try std.testing.expectEqual(@as(u8, abi.syscall_entry_state_registered), oc_syscall_entry(0).state);
+    try std.testing.expectEqual(@as(u8, abi.syscall_entry_state_unused), oc_syscall_entry(1).state);
+
+    _ = oc_submit_command(abi.command_syscall_invoke, fresh_id, fresh_invoke_arg);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    const fresh_expected: i64 = @as(i64, @bitCast(@as(u64, fresh_token ^ fresh_invoke_arg ^ fresh_id)));
+    try std.testing.expectEqual(@as(u64, 1), oc_syscall_entry(0).invoke_count);
+    try std.testing.expectEqual(fresh_invoke_arg, oc_syscall_entry(0).last_arg);
+    try std.testing.expectEqual(fresh_expected, oc_syscall_entry(0).last_result);
+    try std.testing.expectEqual(@as(u64, 1), oc_syscall_state_ptr().dispatch_count);
+    try std.testing.expectEqual(fresh_id, oc_syscall_state_ptr().last_syscall_id);
+    try std.testing.expect(oc_syscall_state_ptr().last_invoke_tick > 0);
+    try std.testing.expectEqual(fresh_expected, oc_syscall_state_ptr().last_result);
+}
+
 test "baremetal allocator and syscall reset commands clear dirty runtime state" {
     status.mode = abi.mode_running;
     status.ticks = 0;

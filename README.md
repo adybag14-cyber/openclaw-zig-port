@@ -26,6 +26,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - bare-metal timer wake behavior is now enforced by a live QEMU+GDB probe (`command_timer_reset`, `command_timer_set_quantum`, `command_task_create`, `command_task_wait_for`) against the freestanding PVH artifact
   - bare-metal allocator/syscall behavior is now enforced by a live QEMU+GDB probe (`command_allocator_*`, `command_syscall_*`) including blocked and disabled syscall paths
   - bare-metal syscall saturation behavior is now enforced by a dedicated live QEMU+GDB probe that fills the 64-entry syscall table, rejects the 65th registration with `no_space`, reclaims one slot, and proves clean slot reuse plus invoke behavior
+  - bare-metal syscall saturation reset recovery is now enforced by a dedicated live QEMU+GDB probe that fills the 64-entry syscall table, dirties dispatch telemetry with a real invoke, proves `command_syscall_reset` clears the fully saturated table back to steady state, and then proves a fresh syscall restarts cleanly from slot `0`
   - bare-metal syscall control mutation behavior is now enforced by a dedicated live QEMU+GDB probe (`command_syscall_register`, `command_syscall_set_flags`, `command_syscall_disable`, `command_syscall_enable`, `command_syscall_unregister`) proving re-register, blocked/disabled invoke, successful invoke, and missing-entry mutation semantics against the freestanding PVH artifact
   - bare-metal allocator/syscall reset recovery is now enforced by both the host suite and the live QEMU+GDB probe, proving dirty allocator/syscall state is cleared by `command_allocator_reset` and `command_syscall_reset` after real alloc/register/invoke activity instead of only at setup time
   - bare-metal interrupt-mask/exception behavior is now enforced by a live QEMU+GDB probe (masked external interrupt remains blocked while exception delivery still wakes a waiting task and records interrupt/exception histories)
@@ -74,6 +75,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - optional QEMU mode/boot-phase history clear probe validates the dedicated mailbox clear paths end to end, proving `command_clear_mode_history` and `command_clear_boot_phase_history` zero ring len/head/overflow/seq independently, preserve the non-cleared companion ring until its own clear, and restart both histories at `seq=1` on the next live transitions
   - optional QEMU allocator/syscall failure probe validates invalid-alignment, no-space, blocked-syscall, and disabled-syscall result semantics plus command-result counters against the freestanding PVH artifact
   - optional QEMU syscall saturation probe validates the 64-entry syscall-table boundary: full table registration, `no_space` on the 65th entry, slot reclaim via `unregister`, clean slot reuse with a fresh syscall ID/token, and successful post-reuse invoke against the freestanding PVH artifact
+  - optional QEMU syscall saturation reset probe validates the fully saturated reset lane: fill all 64 syscall slots, dirty dispatch state with a real invoke, run `command_syscall_reset`, prove the table and dispatch telemetry collapse to steady state, then prove a fresh syscall restarts cleanly from slot `0`
   - optional QEMU syscall control probe validates isolated syscall mutation semantics: re-register without entry-count growth, blocked invoke `-17`, disabled invoke `-38`, re-enabled successful invoke, unregister, and missing-entry mutation paths against the freestanding PVH artifact
   - optional QEMU scheduler probe validates scheduler reset/timeslice/task-create/policy-enable flow end to end against the freestanding PVH artifact
   - optional QEMU scheduler priority/budget probe validates `command_scheduler_set_default_budget` and `command_task_set_priority` end to end, proving a zero-budget low-priority task inherits the configured default budget (`9`) and a later reprioritization flips dispatch from the high-priority task to the low-priority task (`ACK=9`, `LAST_OPCODE=56`, low task `run_count 0 -> 1`)
@@ -107,6 +109,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - optional QEMU wake-queue batch-pop probe validates post-overflow recovery end to end, proving a `62`-entry batch drain leaves `seq 65/66`, a default pop leaves only `seq 66`, a final drain empties the queue, and the next manual wake reuses the ring at `seq 67`
   - optional QEMU allocator/syscall probe validates alloc/free plus syscall register/invoke/block/disable/re-enable/clear-flags/unregister flow end to end against the freestanding PVH artifact, then proves `command_allocator_reset` and `command_syscall_reset` collapse the dirty runtime state back to allocator/syscall steady baseline
   - optional QEMU syscall saturation probe validates the dedicated syscall-table capacity and reuse lane without allocator noise, proving 64/64 registration, overflow rejection, reclaimed-slot reuse, and fresh invoke telemetry against the freestanding PVH artifact
+  - optional QEMU syscall saturation reset probe validates the dedicated reset lane without allocator noise, proving a fully saturated syscall table plus dirty dispatch telemetry collapse back to reset steady state and that the next fresh syscall register/invoke path restarts cleanly from slot `0`
   - optional QEMU syscall control probe validates the dedicated mutation lane (`command_syscall_register`, `command_syscall_set_flags`, `command_syscall_disable`, `command_syscall_enable`, `command_syscall_unregister`) plus invoke behavior without allocator noise against the freestanding PVH artifact
   - optional QEMU command-result counters probe validates categorized mailbox result accounting live under QEMU+GDB, proving `ok`, `invalid`, `not_supported`, and `other_error` buckets increment correctly and `command_reset_command_result_counters` collapses the struct back to a single reset `ok`
   - optional QEMU reset-counters probe validates `command_reset_counters` end to end after dirtying interrupt, exception, scheduler, allocator, syscall, timer, wake-queue, mode, boot-phase, command-history, and health-history state, proving the runtime collapses back to the expected steady baseline under QEMU+GDB
@@ -518,6 +521,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU wake-queue batch-pop probe
 - optional bare-metal QEMU allocator syscall probe
 - optional bare-metal QEMU syscall saturation probe
+- optional bare-metal QEMU syscall saturation reset probe
 - optional bare-metal QEMU syscall control probe
 - optional bare-metal QEMU allocator syscall failure probe
 - optional bare-metal QEMU command-result counters probe
@@ -576,6 +580,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU wake-queue batch-pop validation
 - optional bare-metal QEMU allocator syscall validation
 - optional bare-metal QEMU syscall saturation validation
+- optional bare-metal QEMU syscall saturation reset validation
 - optional bare-metal QEMU syscall control validation
 - optional bare-metal QEMU allocator syscall failure validation
 - optional bare-metal QEMU command-result counters validation
