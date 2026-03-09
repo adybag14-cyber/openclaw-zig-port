@@ -269,7 +269,7 @@ function Extract-IntValue {
         [string] $Name
     )
 
-    $pattern = [regex]::Escape($Name) + '=(-?\d+)'
+    $pattern = '(?m)^' + [regex]::Escape($Name) + '=(-?\d+)\r?$'
     $match = [regex]::Match($Text, $pattern)
     if (-not $match.Success) {
         return $null
@@ -398,6 +398,7 @@ set pagination off
 set confirm off
 set `$stage = 0
 set `$post_wake_tick = 0
+set `$before_wake_tick = 0
 file $artifactForGdb
 handle SIGQUIT nostop noprint pass
 target remote :$GdbPort
@@ -467,6 +468,14 @@ if `$stage == 5
 end
 if `$stage == 6
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 6 && *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset) == $taskStateWaiting && *(unsigned char*)(0x$schedulerWaitKindAddress) == $waitConditionInterruptAny && *(unsigned long long*)(0x$schedulerWaitTimeoutTickAddress) > *(unsigned long long*)(0x$statusAddress+$statusTicksOffset) && *(unsigned int*)(0x$wakeQueueCountAddress) == 0
+    set `$before_wake_tick = *(unsigned long long*)(0x$statusAddress+$statusTicksOffset)
+    printf "BEFORE_INTERRUPT_TIMEOUT_MANUAL_WAKE\n"
+    printf "BEFORE_WAKE_TICK=%llu\n", `$before_wake_tick
+    printf "BEFORE_WAKE_TASK0_STATE=%u\n", *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset)
+    printf "BEFORE_WAKE_WAIT_KIND0=%u\n", *(unsigned char*)(0x$schedulerWaitKindAddress)
+    printf "BEFORE_WAKE_WAIT_VECTOR0=%u\n", *(unsigned char*)(0x$schedulerWaitInterruptVectorAddress)
+    printf "BEFORE_WAKE_WAIT_TIMEOUT0=%llu\n", *(unsigned long long*)(0x$schedulerWaitTimeoutTickAddress)
+    printf "BEFORE_WAKE_WAKE_QUEUE_COUNT=%u\n", *(unsigned int*)(0x$wakeQueueCountAddress)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $schedulerWakeTaskOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 7
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = 1
@@ -561,7 +570,14 @@ finally {
 }
 
 $hitStart = $false
+$hitBeforeInterruptTimeoutManualWake = $false
 $hitAfterInterruptTimeoutManualWake = $false
+$beforeWakeTick = $null
+$beforeWakeTask0State = $null
+$beforeWakeWaitKind0 = $null
+$beforeWakeWaitVector0 = $null
+$beforeWakeWaitTimeout0 = $null
+$beforeWakeWakeQueueCount = $null
 $ack = $null
 $lastOpcode = $null
 $lastResult = $null
@@ -597,7 +613,14 @@ $lastInterruptVector = $null
 if (Test-Path $gdbStdout) {
     $gdbOutput = [string](Get-Content -Path $gdbStdout -Raw)
     $hitStart = $gdbOutput.Contains("HIT_START")
+    $hitBeforeInterruptTimeoutManualWake = $gdbOutput.Contains("BEFORE_INTERRUPT_TIMEOUT_MANUAL_WAKE")
     $hitAfterInterruptTimeoutManualWake = $gdbOutput.Contains("AFTER_INTERRUPT_TIMEOUT_MANUAL_WAKE")
+    $beforeWakeTick = Extract-IntValue -Text $gdbOutput -Name "BEFORE_WAKE_TICK"
+    $beforeWakeTask0State = Extract-IntValue -Text $gdbOutput -Name "BEFORE_WAKE_TASK0_STATE"
+    $beforeWakeWaitKind0 = Extract-IntValue -Text $gdbOutput -Name "BEFORE_WAKE_WAIT_KIND0"
+    $beforeWakeWaitVector0 = Extract-IntValue -Text $gdbOutput -Name "BEFORE_WAKE_WAIT_VECTOR0"
+    $beforeWakeWaitTimeout0 = Extract-IntValue -Text $gdbOutput -Name "BEFORE_WAKE_WAIT_TIMEOUT0"
+    $beforeWakeWakeQueueCount = Extract-IntValue -Text $gdbOutput -Name "BEFORE_WAKE_WAKE_QUEUE_COUNT"
     $ack = Extract-IntValue -Text $gdbOutput -Name "ACK"
     $lastOpcode = Extract-IntValue -Text $gdbOutput -Name "LAST_OPCODE"
     $lastResult = Extract-IntValue -Text $gdbOutput -Name "LAST_RESULT"
@@ -654,7 +677,14 @@ Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_WAKE_QUEUE_ADDR
 Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_WAKE_QUEUE_COUNT_ADDR=0x$wakeQueueCountAddress"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_INTERRUPT_STATE_ADDR=0x$interruptStateAddress"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_HIT_START=$hitStart"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_HIT_BEFORE=$hitBeforeInterruptTimeoutManualWake"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_HIT_AFTER=$hitAfterInterruptTimeoutManualWake"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_BEFORE_WAKE_TICK=$beforeWakeTick"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_BEFORE_WAKE_TASK0_STATE=$beforeWakeTask0State"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_BEFORE_WAKE_WAIT_KIND0=$beforeWakeWaitKind0"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_BEFORE_WAKE_WAIT_VECTOR0=$beforeWakeWaitVector0"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_BEFORE_WAKE_WAIT_TIMEOUT0=$beforeWakeWaitTimeout0"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_BEFORE_WAKE_WAKE_QUEUE_COUNT=$beforeWakeWakeQueueCount"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_ACK=$ack"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_LAST_OPCODE=$lastOpcode"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_LAST_RESULT=$lastResult"
@@ -693,8 +723,15 @@ Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_QEMU_STDERR=$qe
 Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_MANUAL_WAKE_PROBE_TIMED_OUT=$timedOut"
 
 $probePassed = $hitStart -and
+    $hitBeforeInterruptTimeoutManualWake -and
     $hitAfterInterruptTimeoutManualWake -and
     (-not $timedOut) -and
+    ($beforeWakeTick -ge 0) -and
+    ($beforeWakeTask0State -eq $taskStateWaiting) -and
+    ($beforeWakeWaitKind0 -eq $waitConditionInterruptAny) -and
+    ($beforeWakeWaitVector0 -eq 0) -and
+    ($beforeWakeWaitTimeout0 -gt $beforeWakeTick) -and
+    ($beforeWakeWakeQueueCount -eq 0) -and
     ($ack -eq 7) -and
     ($lastOpcode -eq $schedulerWakeTaskOpcode) -and
     ($lastResult -eq 0) -and

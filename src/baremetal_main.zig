@@ -7054,6 +7054,7 @@ test "baremetal interrupt wait with timeout wakes on interrupt before deadline" 
 
 test "baremetal interrupt wait with timeout cancels cleanly on manual wake" {
     resetBaremetalRuntimeForTest();
+    x86_bootstrap.oc_reset_interrupt_counters();
 
     _ = oc_submit_command(abi.command_scheduler_disable, 0, 0);
     oc_tick();
@@ -7068,6 +7069,9 @@ test "baremetal interrupt wait with timeout cancels cleanly on manual wake" {
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_waiting_count());
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_interrupt_count());
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_timeout_count());
+    try std.testing.expectEqual(@as(u8, wait_condition_interrupt_any), scheduler_wait_kind[0]);
+    try std.testing.expectEqual(@as(u8, 0), scheduler_wait_interrupt_vector[0]);
+    try std.testing.expect(scheduler_wait_timeout_tick[0] > status.ticks);
     try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
 
     _ = oc_submit_command(abi.command_scheduler_wake_task, task_id, 0);
@@ -7076,8 +7080,14 @@ test "baremetal interrupt wait with timeout cancels cleanly on manual wake" {
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_waiting_count());
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_interrupt_count());
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_timeout_count());
+    try std.testing.expectEqual(@as(u8, wait_condition_none), scheduler_wait_kind[0]);
+    try std.testing.expectEqual(@as(u8, 0), scheduler_wait_interrupt_vector[0]);
+    try std.testing.expectEqual(@as(u64, 0), scheduler_wait_timeout_tick[0]);
     try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 0), oc_timer_entry_count());
     try std.testing.expectEqual(@as(u64, 0), oc_timer_state_ptr().dispatch_count);
+    try std.testing.expectEqual(@as(u64, 0), x86_bootstrap.oc_interrupt_count());
+    try std.testing.expectEqual(@as(u16, 0), x86_bootstrap.oc_last_interrupt_vector());
 
     const evt = oc_wake_queue_event(0);
     try std.testing.expectEqual(task_id, evt.task_id);
@@ -7090,6 +7100,8 @@ test "baremetal interrupt wait with timeout cancels cleanly on manual wake" {
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_interrupt_count());
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_timeout_count());
     try std.testing.expectEqual(@as(u64, 0), oc_timer_state_ptr().dispatch_count);
+    try std.testing.expectEqual(@as(u64, 0), x86_bootstrap.oc_interrupt_count());
+    try std.testing.expectEqual(@as(u16, 0), x86_bootstrap.oc_last_interrupt_vector());
     try std.testing.expectEqual(evt.tick, oc_timer_state_ptr().last_wake_tick);
 }
 
