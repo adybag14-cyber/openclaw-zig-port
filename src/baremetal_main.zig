@@ -6089,13 +6089,18 @@ test "baremetal scheduler disable and re-enable gate dispatch under active load"
     oc_tick();
     var task = oc_scheduler_task(0);
     try std.testing.expect(task.task_id != 0);
+    try std.testing.expectEqual(@as(u8, 1), oc_scheduler_state_ptr().task_count);
+    try std.testing.expectEqual(@as(u8, 0), oc_scheduler_state_ptr().running_slot);
     try std.testing.expectEqual(@as(u32, 1), task.run_count);
     try std.testing.expectEqual(@as(u32, 4), task.budget_remaining);
     const dispatch_before_disable = oc_scheduler_state_ptr().dispatch_count;
 
     _ = oc_submit_command(abi.command_scheduler_disable, 0, 0);
     oc_tick();
+    try std.testing.expectEqual(@as(u16, abi.command_scheduler_disable), status.last_command_opcode);
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
     try std.testing.expect(!oc_scheduler_enabled());
+    try std.testing.expectEqual(@as(u8, 1), oc_scheduler_state_ptr().task_count);
     try std.testing.expectEqual(@as(u8, scheduler_no_slot), oc_scheduler_state_ptr().running_slot);
     task = oc_scheduler_task(0);
     try std.testing.expectEqual(@as(u32, 1), task.run_count);
@@ -6112,7 +6117,11 @@ test "baremetal scheduler disable and re-enable gate dispatch under active load"
 
     _ = oc_submit_command(abi.command_scheduler_enable, 0, 0);
     oc_tick();
+    try std.testing.expectEqual(@as(u16, abi.command_scheduler_enable), status.last_command_opcode);
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
     try std.testing.expect(oc_scheduler_enabled());
+    try std.testing.expectEqual(@as(u8, 1), oc_scheduler_state_ptr().task_count);
+    try std.testing.expectEqual(@as(u8, 0), oc_scheduler_state_ptr().running_slot);
     try std.testing.expectEqual(dispatch_before_disable +% 1, oc_scheduler_state_ptr().dispatch_count);
     task = oc_scheduler_task(0);
     try std.testing.expectEqual(@as(u32, 2), task.run_count);

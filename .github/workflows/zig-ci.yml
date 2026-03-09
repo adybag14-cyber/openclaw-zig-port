@@ -365,6 +365,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-disable-enable-probe-check.ps1
 
+      - name: Bare-metal QEMU scheduler disable-enable baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-disable-enable-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler disable-enable disabled-freeze probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-disable-enable-disabled-freeze-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler disable-enable idle-preserve probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-disable-enable-idle-preserve-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler disable-enable resume probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-disable-enable-resume-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler disable-enable final task-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-disable-enable-final-task-state-probe-check.ps1
+
       - name: Bare-metal QEMU scheduler reset probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-reset-probe-check.ps1
