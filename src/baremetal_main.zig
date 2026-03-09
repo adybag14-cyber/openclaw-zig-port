@@ -6538,6 +6538,8 @@ test "baremetal panic flag freezes scheduler until mode recovery under active lo
         task = oc_scheduler_task(0);
     }
     try std.testing.expect(task.task_id != 0);
+    try std.testing.expectEqual(@as(u8, 1), oc_scheduler_state_ptr().task_count);
+    try std.testing.expectEqual(@as(u8, 0), oc_scheduler_state_ptr().running_slot);
     try std.testing.expectEqual(@as(u32, 1), task.run_count);
     try std.testing.expectEqual(@as(u32, 5), task.budget_remaining);
 
@@ -6545,10 +6547,12 @@ test "baremetal panic flag freezes scheduler until mode recovery under active lo
     _ = oc_submit_command(abi.command_trigger_panic_flag, 0, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_trigger_panic_flag), status.last_command_opcode);
     try std.testing.expectEqual(@as(u8, abi.mode_panicked), status.mode);
     try std.testing.expectEqual(@as(u32, 1), status.panic_count);
     try std.testing.expectEqual(@as(u8, abi.boot_phase_panicked), boot_diagnostics.phase);
     try std.testing.expectEqual(dispatch_before_panic, oc_scheduler_state_ptr().dispatch_count);
+    try std.testing.expectEqual(@as(u8, 1), oc_scheduler_state_ptr().task_count);
     try std.testing.expectEqual(@as(u8, scheduler_no_slot), oc_scheduler_state_ptr().running_slot);
     task = oc_scheduler_task(0);
     try std.testing.expectEqual(@as(u32, 1), task.run_count);
@@ -6564,9 +6568,12 @@ test "baremetal panic flag freezes scheduler until mode recovery under active lo
     _ = oc_submit_command(abi.command_set_mode, abi.mode_running, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_set_mode), status.last_command_opcode);
     try std.testing.expectEqual(@as(u8, abi.mode_running), status.mode);
     try std.testing.expectEqual(@as(u8, abi.boot_phase_panicked), boot_diagnostics.phase);
     try std.testing.expectEqual(dispatch_before_panic + 1, oc_scheduler_state_ptr().dispatch_count);
+    try std.testing.expectEqual(@as(u8, 1), oc_scheduler_state_ptr().task_count);
+    try std.testing.expectEqual(@as(u8, 0), oc_scheduler_state_ptr().running_slot);
     task = oc_scheduler_task(0);
     try std.testing.expectEqual(@as(u32, 2), task.run_count);
     try std.testing.expectEqual(@as(u32, 4), task.budget_remaining);
@@ -6574,8 +6581,11 @@ test "baremetal panic flag freezes scheduler until mode recovery under active lo
     _ = oc_submit_command(abi.command_set_boot_phase, abi.boot_phase_runtime, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_set_boot_phase), status.last_command_opcode);
     try std.testing.expectEqual(@as(u8, abi.boot_phase_runtime), boot_diagnostics.phase);
     try std.testing.expectEqual(dispatch_before_panic + 2, oc_scheduler_state_ptr().dispatch_count);
+    try std.testing.expectEqual(@as(u8, 1), oc_scheduler_state_ptr().task_count);
+    try std.testing.expectEqual(@as(u8, 0), oc_scheduler_state_ptr().running_slot);
     task = oc_scheduler_task(0);
     try std.testing.expectEqual(@as(u32, 3), task.run_count);
     try std.testing.expectEqual(@as(u32, 3), task.budget_remaining);
