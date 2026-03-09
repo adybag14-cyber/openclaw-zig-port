@@ -248,6 +248,11 @@ Recommended sequence:
 - bare-metal optional QEMU timer cancel-task interrupt-timeout probe in validate stage
 - bare-metal optional QEMU timer cancel task probe in validate stage
 - bare-metal optional QEMU timer reset recovery probe in validate stage
+- bare-metal optional QEMU timer-disable reenable arm-preservation probe in validate stage
+- bare-metal optional QEMU timer-disable reenable deadline-hold probe in validate stage
+- bare-metal optional QEMU timer-disable reenable deferred-wake-order probe in validate stage
+- bare-metal optional QEMU timer-disable reenable wake-payload probe in validate stage
+- bare-metal optional QEMU timer-disable reenable dispatch-drain probe in validate stage
 - bare-metal optional QEMU timer-reset wait-kind isolation probe in validate stage
 - bare-metal optional QEMU task-resume timer-clear probe in validate stage
 - bare-metal optional QEMU task-resume interrupt-timeout probe in validate stage

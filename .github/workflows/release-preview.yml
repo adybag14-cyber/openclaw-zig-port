@@ -495,6 +495,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-timer-disable-reenable-oneshot-recovery-probe-check.ps1
 
+      - name: Bare-metal QEMU timer-disable reenable arm-preservation probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-disable-reenable-arm-preservation-probe-check.ps1
+
+      - name: Bare-metal QEMU timer-disable reenable deadline-hold probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-disable-reenable-deadline-hold-probe-check.ps1
+
+      - name: Bare-metal QEMU timer-disable reenable deferred-wake-order probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-disable-reenable-deferred-wake-order-probe-check.ps1
+
+      - name: Bare-metal QEMU timer-disable reenable wake-payload probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-disable-reenable-wake-payload-probe-check.ps1
+
+      - name: Bare-metal QEMU timer-disable reenable dispatch-drain probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-disable-reenable-dispatch-drain-probe-check.ps1
+
       - name: Bare-metal QEMU interrupt-timeout disable-enable probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-timeout-disable-enable-probe-check.ps1
