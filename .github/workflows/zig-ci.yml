@@ -413,13 +413,33 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-timer-disable-reenable-probe-check.ps1
 
+      - name: Bare-metal QEMU timer-disable paused-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-disable-paused-state-probe-check.ps1
+
+      - name: Bare-metal QEMU timer-disable reenable one-shot recovery probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-disable-reenable-oneshot-recovery-probe-check.ps1
+
       - name: Bare-metal QEMU interrupt-timeout disable-enable probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-timeout-disable-enable-probe-check.ps1
 
+      - name: Bare-metal QEMU interrupt-timeout disable-reenable timer probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-timeout-disable-reenable-timer-probe-check.ps1
+
       - name: Bare-metal QEMU interrupt-timeout disable-interrupt probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-timeout-disable-interrupt-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt-timeout disable-interrupt recovery probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-timeout-disable-interrupt-recovery-probe-check.ps1
+
+      - name: Bare-metal QEMU timer-reset wait-kind isolation probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-reset-wait-kind-isolation-probe-check.ps1
 
       - name: Bare-metal QEMU interrupt mask profile probe (optional)
         shell: pwsh

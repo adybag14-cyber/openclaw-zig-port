@@ -11,7 +11,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - Original OpenClaw beta baseline (`v2026.3.7-beta.1`): `95/95` covered
   - Union baseline: `136/136` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
-- Latest local validation: `zig build test --summary all` -> main `203/203` + bare-metal host `98/98` passing
+- Latest local validation: `zig build test --summary all` -> main `203/203` + bare-metal host `106/106` passing
 - Latest published edge release tag: `v0.2.0-zig-edge.26`
 - Toolchain policy: Codeberg `master` is canonical; `adybag14-cyber/zig` publishes rolling `latest-master` and immutable `upstream-<sha>` Windows releases for refresh and reproducibility.
 - Recent FS1 progress (2026-03-06):
@@ -125,6 +125,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - optional QEMU timer-disable reenable probe validates a pure one-shot timer waiter across `command_timer_disable` and `command_timer_enable`, proving the waiter survives idle time past the original deadline, the overdue wake lands exactly once after re-enable, and the runtime records a single timer wake against the freestanding PVH artifact
   - optional QEMU interrupt-timeout disable-enable probe validates a timeout-backed interrupt waiter across `command_timer_disable` and `command_timer_enable`, proving the timeout arm survives the disabled window, no wake is emitted while timers stay disabled, and the overdue timer wake lands exactly once after re-enable with `reason=timer`, `vector=0`
   - optional QEMU interrupt-timeout disable-interrupt probe validates a timeout-backed interrupt waiter across `command_timer_disable` with a real interrupt arriving while timers are disabled, proving the waiter wakes immediately on the interrupt path, the timeout arm is cleared, and re-enabling timers later does not leak a stale timer wake
+  - timer-recovery wrapper probes now enforce the narrow boundaries directly: paused disabled-state stability for pure one-shot waits, one-shot overdue wake recovery after re-enable, timeout-backed interrupt recovery on timer re-enable, timeout-backed interrupt recovery on direct interrupt while timers are disabled, and timer-reset wait-kind isolation between pure timer waits and interrupt waiters
   - optional QEMU periodic timer clamp probe validates the periodic helper saturation path end to end, proving a timer armed at `u64::max-1` first fires at `18446744073709551615`, re-arms to the same saturated deadline, and then remains stable after the runtime tick counter wraps to `0`
   - optional QEMU interrupt-filter probe validates `command_task_wait_interrupt` vector filtering end to end, proving interrupt-any waiters wake on `200`, vector-scoped waiters ignore non-matching `200`, then wake on matching `13`, and invalid vector `65536` is rejected with `LAST_RESULT=-22` against the freestanding PVH artifact
   - optional QEMU task-terminate interrupt-timeout probe validates `command_task_terminate` on a timeout-backed interrupt waiter end to end, proving the terminated task keeps `state=4`, queued wake count stays `0`, timer entry count stays `0`, timeout state is cleared back to `none`, and a later interrupt only advances telemetry without producing a stale wake against the freestanding PVH artifact
@@ -578,8 +579,13 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU task-terminate interrupt-timeout probe
 - optional bare-metal QEMU timer-disable interrupt probe
 - optional bare-metal QEMU timer-disable reenable probe
+- optional bare-metal QEMU timer-disable paused-state probe
+- optional bare-metal QEMU timer-disable reenable one-shot recovery probe
 - optional bare-metal QEMU interrupt-timeout disable-enable probe
+- optional bare-metal QEMU interrupt-timeout disable-reenable timer probe
 - optional bare-metal QEMU interrupt-timeout disable-interrupt probe
+- optional bare-metal QEMU interrupt-timeout disable-interrupt recovery probe
+- optional bare-metal QEMU timer-reset wait-kind isolation probe
 - optional bare-metal QEMU manual wait interrupt probe
 - optional bare-metal QEMU wake-queue selective probe
 - optional bare-metal QEMU wake-queue selective-overflow probe

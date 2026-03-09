@@ -3,9 +3,9 @@
 ## Current Snapshot
 
 - Latest published edge release: `v0.2.0-zig-edge.26`
-- Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `98/98` passing
+- Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `106/106` passing
 - Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=170`, `ZIG_EVENTS_COUNT=19`
-- Current head: `main + FS6 history-control probes`
+- Current head: `main + FS6 timer-recovery wrappers`
 - Toolchain lane: Codeberg `master` is canonical; `adybag14-cyber/zig` is the Windows release mirror with rolling `latest-master` plus immutable `upstream-<sha>` releases.
 - Latest CI:
   - `zig-ci` `22813604542` -> success
@@ -42,8 +42,13 @@ Recommended sequence:
 ./scripts/baremetal-qemu-periodic-timer-probe-check.ps1
 ./scripts/baremetal-qemu-interrupt-timeout-probe-check.ps1
 ./scripts/baremetal-qemu-timer-disable-reenable-probe-check.ps1
+./scripts/baremetal-qemu-timer-disable-paused-state-probe-check.ps1
+./scripts/baremetal-qemu-timer-disable-reenable-oneshot-recovery-probe-check.ps1
 ./scripts/baremetal-qemu-interrupt-timeout-disable-enable-probe-check.ps1
+./scripts/baremetal-qemu-interrupt-timeout-disable-reenable-timer-probe-check.ps1
 ./scripts/baremetal-qemu-interrupt-timeout-disable-interrupt-probe-check.ps1
+./scripts/baremetal-qemu-interrupt-timeout-disable-interrupt-recovery-probe-check.ps1
+./scripts/baremetal-qemu-timer-reset-wait-kind-isolation-probe-check.ps1
 ./scripts/baremetal-qemu-task-terminate-interrupt-timeout-probe-check.ps1
 ./scripts/baremetal-qemu-panic-wake-recovery-probe-check.ps1
 ./scripts/baremetal-qemu-wake-queue-selective-probe-check.ps1
@@ -132,8 +137,13 @@ Recommended sequence:
 - optional bare-metal QEMU masked interrupt timeout probe (`command_interrupt_mask_apply_profile(external_all)` suppresses vector `200`, preserves the waiting task with no wake queue entry and zero interrupt telemetry, and then allows the timeout path to wake with `reason=timer`, `vector=0` against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt timeout clamp probe (near-`u64::max` `task_wait_interrupt_for` deadline saturates to `18446744073709551615`, the queued wake records that saturated tick, and the live wake boundary wraps cleanly to `0` under the freestanding PVH artifact)
 - optional bare-metal QEMU timer-disable reenable probe (a pure one-shot timer waiter survives `command_timer_disable`, remains blocked after idling past the original deadline, then wakes exactly once after `command_timer_enable` with a single queued `reason=timer` wake against the freestanding PVH artifact)
+- optional bare-metal QEMU timer-disable paused-state probe (wrapper over the broad timer-disable reenable path that fails specifically when the disabled pause window stops preserving the armed entry, waiting task state, or zero wake/dispatch counts)
+- optional bare-metal QEMU timer-disable reenable one-shot recovery probe (wrapper over the broad timer-disable reenable path that fails specifically when the pure one-shot wake stops recovering as a single `reason=timer`, `vector=0`, `timer_id=1` wake after `command_timer_enable`)
 - optional bare-metal QEMU interrupt-timeout disable-enable probe (`command_task_wait_interrupt_for` survives `command_timer_disable`, remains blocked after idling past the original deadline, then emits exactly one overdue `reason=timer`, `vector=0` wake after `command_timer_enable` against the freestanding PVH artifact)
+- optional bare-metal QEMU interrupt-timeout disable-reenable timer probe (wrapper over the broad interrupt-timeout disable-enable path that fails specifically when the overdue wake stops being timer-only with zero interrupt telemetry and no remaining armed entries after `command_timer_enable`)
 - optional bare-metal QEMU interrupt-timeout disable-interrupt probe (`command_task_wait_interrupt_for` survives `command_timer_disable`, wakes immediately on a real interrupt while timers stay disabled, clears the timeout arm, and does not leak a stale timer wake after `command_timer_enable` against the freestanding PVH artifact)
+- optional bare-metal QEMU interrupt-timeout disable-interrupt recovery probe (wrapper over the broad interrupt-timeout disable-interrupt path that fails specifically when the direct interrupt wake stops winning with `reason=interrupt`, matching vector telemetry, and zero timer dispatch after re-enable)
+- optional bare-metal QEMU timer-reset wait-kind isolation probe (wrapper over the broad timer-reset recovery path that fails specifically when `command_timer_reset` stops collapsing pure timer waits to manual while preserving interrupt-wait mode and clearing only the timeout arm)
 - optional bare-metal QEMU interrupt filter probe (`task_wait_interrupt(any)` wakes on vector `200`, vector-scoped `task_wait_interrupt(13)` ignores non-matching `200`, then wakes on matching `13`, and invalid vector `65536` is rejected with `-22` against the freestanding PVH artifact)
 - optional bare-metal QEMU task-terminate interrupt-timeout probe (`command_task_terminate` on a `task_wait_interrupt_for` waiter clears the timeout arm and wait state, leaves no wake-queue residue, prevents later ghost interrupt/timeout wake delivery for the terminated task, and keeps `timer_dispatch_count=0` against the freestanding PVH artifact)
 - optional bare-metal QEMU task-terminate mixed-state probe (live mixed `command_task_wait_for`, `command_scheduler_wake_task`, survivor wake, and `command_task_terminate` proof, validating current timer-cancel-on-manual-wake semantics plus targeted wake-queue cleanup for the terminated task against the freestanding PVH artifact)
@@ -208,6 +218,7 @@ Recommended sequence:
 - bare-metal optional QEMU timer cancel-task interrupt-timeout probe in validate stage
 - bare-metal optional QEMU timer cancel task probe in validate stage
 - bare-metal optional QEMU timer reset recovery probe in validate stage
+- bare-metal optional QEMU timer-reset wait-kind isolation probe in validate stage
 - bare-metal optional QEMU task-resume timer-clear probe in validate stage
 - bare-metal optional QEMU task-resume interrupt-timeout probe in validate stage
 - bare-metal optional QEMU scheduler-wake timer-clear probe in validate stage
@@ -221,8 +232,12 @@ Recommended sequence:
 - bare-metal optional QEMU masked interrupt timeout probe in validate stage
 - bare-metal optional QEMU interrupt timeout clamp probe in validate stage
 - bare-metal optional QEMU timer-disable reenable probe in validate stage
+- bare-metal optional QEMU timer-disable paused-state probe in validate stage
+- bare-metal optional QEMU timer-disable reenable one-shot recovery probe in validate stage
 - bare-metal optional QEMU interrupt-timeout disable-enable probe in validate stage
+- bare-metal optional QEMU interrupt-timeout disable-reenable timer probe in validate stage
 - bare-metal optional QEMU interrupt-timeout disable-interrupt probe in validate stage
+- bare-metal optional QEMU interrupt-timeout disable-interrupt recovery probe in validate stage
 - bare-metal optional QEMU interrupt filter probe in validate stage
 - bare-metal optional QEMU task-terminate interrupt-timeout probe in validate stage
 - bare-metal optional QEMU task-terminate mixed-state probe in validate stage
