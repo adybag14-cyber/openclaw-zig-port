@@ -607,6 +607,11 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU interrupt mask profile probe
 - optional bare-metal QEMU interrupt mask control probe
 - optional bare-metal QEMU interrupt mask clear-all recovery probe
+- optional bare-metal QEMU interrupt mask custom-profile preserve probe
+- optional bare-metal QEMU interrupt mask invalid-input preserve-state probe
+- optional bare-metal QEMU interrupt mask reset-ignored preserve-mask probe
+- optional bare-metal QEMU interrupt mask profile boundary probe
+- optional bare-metal QEMU interrupt mask exception-delivery probe
 - runtime smoke gate
 - appliance control-plane smoke gate (`system.boot.*`, `system.rollback.*`, secure-boot-gated `update.run`)
 - appliance restart recovery smoke gate (persisted `compat-state.json` replay across stop/start)
@@ -672,6 +677,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU reset counters validation
 - optional bare-metal QEMU interrupt mask profile validation
 - optional bare-metal QEMU interrupt mask control validation
+- optional bare-metal QEMU interrupt mask wrapper validation
 - appliance control-plane smoke validation
 - appliance restart recovery validation
 - appliance rollout boundary validation

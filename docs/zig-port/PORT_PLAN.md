@@ -1357,6 +1357,11 @@ Full-stack replacement execution reference:
     - runtime now suppresses masked non-exception vectors while preserving exception delivery semantics for vectors `<32`.
     - profile-aware masking now supports deterministic windows (`none`, `external_all`, `external_high`) with automatic `custom` profile drift tracking after manual per-vector edits.
     - validated with `zig build test --summary all` (`124/124`) and `scripts/baremetal-smoke-check.ps1`.
+  - bare-metal interrupt-mask wrapper isolation batch shipped:
+    - new wrapper probes: `scripts/baremetal-qemu-interrupt-mask-custom-profile-preserve-probe-check.ps1`, `scripts/baremetal-qemu-interrupt-mask-invalid-input-preserve-state-probe-check.ps1`, `scripts/baremetal-qemu-interrupt-mask-reset-ignored-preserve-mask-probe-check.ps1`, `scripts/baremetal-qemu-interrupt-mask-profile-boundary-probe-check.ps1`, and `scripts/baremetal-qemu-interrupt-mask-exception-delivery-probe-check.ps1`.
+    - `baremetal-qemu-interrupt-mask-control-probe-check.ps1` now emits immediate post-invalid state snapshots so wrapper probes can prove invalid vector/state rejection does not clobber the live custom profile.
+    - `baremetal-qemu-interrupt-mask-profile-probe-check.ps1` now emits immediate post-reset mask-table snapshots so wrapper probes can prove `command_interrupt_mask_reset_ignored_counts` clears telemetry without mutating the active custom mask set.
+    - the wrapper batch isolates five contracts that were previously only implied by the larger live sequences: custom-profile preservation, invalid-input state preservation, ignored-count reset isolation, `external_high` boundary plus invalid-profile rejection, and masked-external vs non-maskable-exception delivery.
   - bare-metal QEMU interrupt-mask/exception validation shipped:
     - new script: `scripts/baremetal-qemu-interrupt-mask-exception-probe-check.ps1`.
     - live PVH/QEMU+GDB sequence proves `command_interrupt_mask_apply_profile(external_all)` blocks vector `200` without waking the waiting task, while `command_trigger_exception(13, 51966)` still wakes the task and records interrupt/exception histories.

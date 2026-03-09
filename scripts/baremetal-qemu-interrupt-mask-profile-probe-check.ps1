@@ -582,6 +582,10 @@ if `$stage == 14
     printf "RESET_IGNORED_200=%llu\n", *(unsigned long long*)(0x$interruptMaskIgnoredVectorCountsAddress+$maskedVectorIgnoredOffset)
     printf "RESET_IGNORED_201=%llu\n", *(unsigned long long*)(0x$interruptMaskIgnoredVectorCountsAddress+$secondaryMaskedVectorIgnoredOffset)
     printf "RESET_LAST_MASKED_VECTOR=%u\n", *(unsigned char*)(0x$lastMaskedInterruptVectorAddress)
+    printf "RESET_PROFILE=%u\n", *(unsigned char*)(0x$interruptMaskProfileAddress)
+    printf "RESET_MASKED_COUNT=%u\n", *(unsigned int*)(0x$interruptMaskedCountAddress)
+    printf "RESET_MASKED_200=%u\n", *(unsigned char*)(0x$interruptMaskAddress+$maskedVector)
+    printf "RESET_MASKED_201=%u\n", *(unsigned char*)(0x$interruptMaskAddress+$secondaryMaskedVector)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $interruptMaskApplyProfileOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 15
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = $interruptMaskProfileExternalHigh
@@ -721,6 +725,10 @@ $resetIgnoredCount = $null
 $resetIgnored200 = $null
 $resetIgnored201 = $null
 $resetLastMaskedVector = $null
+$resetProfile = $null
+$resetMaskedCount = $null
+$resetMasked200 = $null
+$resetMasked201 = $null
 $externalHighProfile = $null
 $externalHighMaskedCount = $null
 $externalHighMasked63 = $null
@@ -793,6 +801,10 @@ if (Test-Path $gdbStdout) {
     $resetIgnored200 = Extract-IntValue -Text $out -Name "RESET_IGNORED_200"
     $resetIgnored201 = Extract-IntValue -Text $out -Name "RESET_IGNORED_201"
     $resetLastMaskedVector = Extract-IntValue -Text $out -Name "RESET_LAST_MASKED_VECTOR"
+    $resetProfile = Extract-IntValue -Text $out -Name "RESET_PROFILE"
+    $resetMaskedCount = Extract-IntValue -Text $out -Name "RESET_MASKED_COUNT"
+    $resetMasked200 = Extract-IntValue -Text $out -Name "RESET_MASKED_200"
+    $resetMasked201 = Extract-IntValue -Text $out -Name "RESET_MASKED_201"
     $externalHighProfile = Extract-IntValue -Text $out -Name "EXTERNAL_HIGH_PROFILE"
     $externalHighMaskedCount = Extract-IntValue -Text $out -Name "EXTERNAL_HIGH_MASKED_COUNT"
     $externalHighMasked63 = Extract-IntValue -Text $out -Name "EXTERNAL_HIGH_MASKED_63"
@@ -883,6 +895,10 @@ Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_PROFILE_PROBE_RESET_IGNORED_COUNT=$r
 Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_PROFILE_PROBE_RESET_IGNORED_200=$resetIgnored200"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_PROFILE_PROBE_RESET_IGNORED_201=$resetIgnored201"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_PROFILE_PROBE_RESET_LAST_MASKED_VECTOR=$resetLastMaskedVector"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_PROFILE_PROBE_RESET_PROFILE=$resetProfile"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_PROFILE_PROBE_RESET_MASKED_COUNT=$resetMaskedCount"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_PROFILE_PROBE_RESET_MASKED_200=$resetMasked200"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_PROFILE_PROBE_RESET_MASKED_201=$resetMasked201"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_PROFILE_PROBE_EXTERNAL_HIGH_PROFILE=$externalHighProfile"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_PROFILE_PROBE_EXTERNAL_HIGH_MASKED_COUNT=$externalHighMaskedCount"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_PROFILE_PROBE_EXTERNAL_HIGH_MASKED_63=$externalHighMasked63"
@@ -960,6 +976,10 @@ $pass = (
     $resetIgnored200 -eq 0 -and
     $resetIgnored201 -eq 0 -and
     $resetLastMaskedVector -eq 0 -and
+    $resetProfile -eq $interruptMaskProfileCustom -and
+    $resetMaskedCount -eq 223 -and
+    $resetMasked200 -eq 0 -and
+    $resetMasked201 -eq 1 -and
     $externalHighProfile -eq $interruptMaskProfileExternalHigh -and
     $externalHighMaskedCount -eq 192 -and
     $externalHighMasked63 -eq 0 -and

@@ -171,6 +171,11 @@ Recommended sequence:
 - optional bare-metal QEMU interrupt mask profile probe (external-all, custom unmask/remask, ignored-count reset, external-high, invalid profile rejection, and clear-all recovery against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt mask control probe (direct `command_interrupt_mask_set`, invalid vector/state rejection, ignored-count reset, and final `clear_all` recovery against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt mask clear-all recovery probe (dedicated `command_interrupt_mask_clear_all` proof after direct mask manipulation, showing wake delivery resumes, ignored-count telemetry collapses back to `0`, and the runtime returns to profile `none` against the freestanding PVH artifact)
+- optional bare-metal QEMU interrupt mask custom-profile preserve probe (wrapper over the profile probe that isolates the `custom` profile drift contract, per-vector ignored counts, and last-masked vector retention without relying on later cleanup stages)
+- optional bare-metal QEMU interrupt mask invalid-input preserve-state probe (wrapper over the control probe that isolates invalid vector/state rejection and proves those failures do not clobber the live custom-profile mask state)
+- optional bare-metal QEMU interrupt mask reset-ignored preserve-mask probe (wrapper over the profile probe that isolates `command_interrupt_mask_reset_ignored_counts` and proves it clears ignored-count telemetry without mutating the active custom mask table)
+- optional bare-metal QEMU interrupt mask profile boundary probe (wrapper over the profile probe that isolates the `external_high` `63/64` boundary and invalid-profile rejection while preserving the active profile)
+- optional bare-metal QEMU interrupt mask exception-delivery probe (wrapper over the exception probe that isolates masked external suppression plus non-maskable exception wake delivery and matching interrupt/exception telemetry)
 - parity evidence artifacts
   - websocket smoke validates `/ws` and root compatibility route `/`, including binary-frame RPC dispatch
   - gateway-auth and websocket smokes use bounded receive timeouts to prevent hanging CI jobs
@@ -280,6 +285,11 @@ Recommended sequence:
 - bare-metal optional QEMU interrupt mask profile probe in validate stage
 - bare-metal optional QEMU interrupt mask control probe in validate stage
 - bare-metal optional QEMU interrupt mask clear-all recovery probe in validate stage
+- bare-metal optional QEMU interrupt mask custom-profile preserve probe in validate stage
+- bare-metal optional QEMU interrupt mask invalid-input preserve-state probe in validate stage
+- bare-metal optional QEMU interrupt mask reset-ignored preserve-mask probe in validate stage
+- bare-metal optional QEMU interrupt mask profile boundary probe in validate stage
+- bare-metal optional QEMU interrupt mask exception-delivery probe in validate stage
 - npm package dry-run validation in release validate stage
 - python package validation (unit tests + build + twine check) in release validate stage
 - local `scripts/release-preview.ps1` mirrors parity/docs/freshness gates before artifact packaging

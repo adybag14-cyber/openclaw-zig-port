@@ -553,6 +553,9 @@ end
 if `$stage == 12
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 12
     printf "INVALID_VECTOR_RESULT=%d\n", *(short*)(0x$statusAddress+$statusLastCommandResultOffset)
+    printf "INVALID_VECTOR_CURRENT_PROFILE=%u\n", *(unsigned char*)(0x$interruptMaskProfileAddress)
+    printf "INVALID_VECTOR_CURRENT_MASKED_COUNT=%u\n", *(unsigned int*)(0x$interruptMaskedCountAddress)
+    printf "INVALID_VECTOR_CURRENT_MASKED_200=%u\n", *(unsigned char*)(0x$interruptMaskAddress+$maskedVector)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $interruptMaskSetOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 13
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = $maskedVector
@@ -564,6 +567,9 @@ end
 if `$stage == 13
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 13
     printf "INVALID_STATE_RESULT=%d\n", *(short*)(0x$statusAddress+$statusLastCommandResultOffset)
+    printf "INVALID_STATE_CURRENT_PROFILE=%u\n", *(unsigned char*)(0x$interruptMaskProfileAddress)
+    printf "INVALID_STATE_CURRENT_MASKED_COUNT=%u\n", *(unsigned int*)(0x$interruptMaskedCountAddress)
+    printf "INVALID_STATE_CURRENT_MASKED_200=%u\n", *(unsigned char*)(0x$interruptMaskAddress+$maskedVector)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $interruptMaskSetOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 14
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = $secondaryMaskedVector
@@ -700,7 +706,13 @@ $unmaskedProfile = $null
 $unmaskedMaskedCount = $null
 $unmaskedMasked200 = $null
 $invalidVectorResult = $null
+$invalidVectorCurrentProfile = $null
+$invalidVectorCurrentMaskedCount = $null
+$invalidVectorCurrentMasked200 = $null
 $invalidStateResult = $null
+$invalidStateCurrentProfile = $null
+$invalidStateCurrentMaskedCount = $null
+$invalidStateCurrentMasked200 = $null
 $secondaryProfile = $null
 $secondaryMaskedCount = $null
 $secondaryMasked201 = $null
@@ -798,7 +810,13 @@ if (Test-Path $gdbStdout) {
     $unmaskedMaskedCount = Extract-IntValue -Text $out -Name "UNMASKED_MASKED_COUNT"
     $unmaskedMasked200 = Extract-IntValue -Text $out -Name "UNMASKED_MASKED_200"
     $invalidVectorResult = Extract-IntValue -Text $out -Name "INVALID_VECTOR_RESULT"
+    $invalidVectorCurrentProfile = Extract-IntValue -Text $out -Name "INVALID_VECTOR_CURRENT_PROFILE"
+    $invalidVectorCurrentMaskedCount = Extract-IntValue -Text $out -Name "INVALID_VECTOR_CURRENT_MASKED_COUNT"
+    $invalidVectorCurrentMasked200 = Extract-IntValue -Text $out -Name "INVALID_VECTOR_CURRENT_MASKED_200"
     $invalidStateResult = Extract-IntValue -Text $out -Name "INVALID_STATE_RESULT"
+    $invalidStateCurrentProfile = Extract-IntValue -Text $out -Name "INVALID_STATE_CURRENT_PROFILE"
+    $invalidStateCurrentMaskedCount = Extract-IntValue -Text $out -Name "INVALID_STATE_CURRENT_MASKED_COUNT"
+    $invalidStateCurrentMasked200 = Extract-IntValue -Text $out -Name "INVALID_STATE_CURRENT_MASKED_200"
     $secondaryProfile = Extract-IntValue -Text $out -Name "SECONDARY_PROFILE"
     $secondaryMaskedCount = Extract-IntValue -Text $out -Name "SECONDARY_MASKED_COUNT"
     $secondaryMasked201 = Extract-IntValue -Text $out -Name "SECONDARY_MASKED_201"
@@ -908,7 +926,13 @@ Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_CONTROL_PROBE_UNMASKED_WAKE_QUEUE_CO
 Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_CONTROL_PROBE_UNMASKED_WAKE0_VECTOR=$unmaskedWake0Vector"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_CONTROL_PROBE_UNMASKED_WAKE0_REASON=$unmaskedWake0Reason"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_CONTROL_PROBE_INVALID_VECTOR_RESULT=$invalidVectorResult"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_CONTROL_PROBE_INVALID_VECTOR_CURRENT_PROFILE=$invalidVectorCurrentProfile"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_CONTROL_PROBE_INVALID_VECTOR_CURRENT_MASKED_COUNT=$invalidVectorCurrentMaskedCount"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_CONTROL_PROBE_INVALID_VECTOR_CURRENT_MASKED_200=$invalidVectorCurrentMasked200"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_CONTROL_PROBE_INVALID_STATE_RESULT=$invalidStateResult"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_CONTROL_PROBE_INVALID_STATE_CURRENT_PROFILE=$invalidStateCurrentProfile"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_CONTROL_PROBE_INVALID_STATE_CURRENT_MASKED_COUNT=$invalidStateCurrentMaskedCount"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_CONTROL_PROBE_INVALID_STATE_CURRENT_MASKED_200=$invalidStateCurrentMasked200"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_CONTROL_PROBE_SECONDARY_MASKED_COUNT=$secondaryMaskedCount"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_CONTROL_PROBE_SECONDARY_IGNORED_COUNT=$secondaryIgnoredCount"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_MASK_CONTROL_PROBE_EXTERNAL_ALL_TASK0_STATE=$externalAllTask0State"
@@ -1003,7 +1027,13 @@ $pass = (
     $unmaskedMaskedCount -eq 0 -and
     $unmaskedMasked200 -eq 0 -and
     $invalidVectorResult -eq -22 -and
+    $invalidVectorCurrentProfile -eq $interruptMaskProfileCustom -and
+    $invalidVectorCurrentMaskedCount -eq 0 -and
+    $invalidVectorCurrentMasked200 -eq 0 -and
     $invalidStateResult -eq -22 -and
+    $invalidStateCurrentProfile -eq $interruptMaskProfileCustom -and
+    $invalidStateCurrentMaskedCount -eq 0 -and
+    $invalidStateCurrentMasked200 -eq 0 -and
     $secondaryProfile -eq $interruptMaskProfileCustom -and
     $secondaryMaskedCount -eq 1 -and
     $secondaryMasked201 -eq 1 -and

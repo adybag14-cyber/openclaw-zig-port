@@ -845,6 +845,10 @@ Phase 6 progress notes:
   - runtime behavior: masked non-exception interrupts are ignored while exception vectors remain non-maskable
   - interrupt-mask profiles now supported: `none`, `external_all`, `external_high`, and automatic `custom` profile tracking on manual mask edits
   - regression coverage added for masked wake suppression, per-vector ignored-interrupt telemetry, reset semantics, profile application windows, and command argument validation
+- [x] Bare-metal interrupt-mask wrapper isolation batch shipped:
+  - new wrapper probes: `scripts/baremetal-qemu-interrupt-mask-custom-profile-preserve-probe-check.ps1`, `scripts/baremetal-qemu-interrupt-mask-invalid-input-preserve-state-probe-check.ps1`, `scripts/baremetal-qemu-interrupt-mask-reset-ignored-preserve-mask-probe-check.ps1`, `scripts/baremetal-qemu-interrupt-mask-profile-boundary-probe-check.ps1`, and `scripts/baremetal-qemu-interrupt-mask-exception-delivery-probe-check.ps1`
+  - broad profile/control probes now emit the immediate post-invalid and post-reset mask-state snapshots required for wrapper-level assertions
+  - live wrapper coverage now isolates five narrow guarantees: `custom` profile drift retention, invalid input preserving custom state, ignored-count reset without mask-table mutation, `external_high` boundary plus invalid-profile rejection, and non-maskable exception delivery while an external vector remains masked
 - [x] `scripts/baremetal-qemu-interrupt-mask-control-probe-check.ps1` (optional PVH/QEMU probe proves direct `command_interrupt_mask_set`, invalid vector/state rejection, ignored-count reset, and final `command_interrupt_mask_clear_all` recovery against the freestanding artifact)
 - [x] `scripts/zig-codeberg-master-check.ps1` (reports local vs remote master hash)
 - [x] Multi-baseline method diff check: `Go(latest)=134`, `Original(latest)=95`, `OriginalBeta(latest)=95`, `Union=136`, `Zig=170`, `missing_in_zig=0`, `union_extras=34`

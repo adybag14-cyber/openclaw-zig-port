@@ -459,6 +459,22 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-mask-clear-all-recovery-probe-check.ps1
 
+      - name: Bare-metal QEMU interrupt mask custom-profile preserve probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-custom-profile-preserve-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt mask invalid-input preserve-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-invalid-input-preserve-state-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt mask reset-ignored preserve-mask probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-reset-ignored-preserve-mask-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt mask profile boundary probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-profile-boundary-probe-check.ps1
+
       - name: Bare-metal QEMU task terminate interrupt-timeout probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-task-terminate-interrupt-timeout-probe-check.ps1
@@ -598,6 +614,10 @@ jobs:
       - name: Bare-metal QEMU interrupt mask exception probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-mask-exception-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt mask exception-delivery probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-exception-delivery-probe-check.ps1
 
   build-assets:
     runs-on: ubuntu-latest
