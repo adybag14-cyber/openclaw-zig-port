@@ -5863,6 +5863,49 @@ test "baremetal wake queue count snapshot ptr reflects live query" {
     try std.testing.expectEqual(@as(u32, 0), third_snapshot.reason_vector_count);
 }
 
+test "baremetal wake queue count snapshot ptr stays live across queue mutations" {
+    resetBaremetalRuntimeForTest();
+
+    wakeQueuePush(5101, 61, abi.wake_reason_timer, 0, 10, 0);
+    wakeQueuePush(5102, 62, abi.wake_reason_interrupt, 13, 20, 5);
+    wakeQueuePush(5103, 63, abi.wake_reason_interrupt, 13, 30, 6);
+    wakeQueuePush(5104, 64, abi.wake_reason_interrupt, 31, 40, 7);
+    wakeQueuePush(5105, 65, abi.wake_reason_manual, 0, 50, 8);
+
+    const query = oc_wake_queue_count_query_ptr();
+    query.* = .{
+        .vector = 13,
+        .reason = abi.wake_reason_interrupt,
+        .reserved0 = 0,
+        .reserved1 = 0,
+        .max_tick = 40,
+    };
+    const before = oc_wake_queue_count_snapshot_ptr().*;
+    try std.testing.expectEqual(@as(u32, 2), before.vector_count);
+    try std.testing.expectEqual(@as(u32, 4), before.before_tick_count);
+    try std.testing.expectEqual(@as(u32, 2), before.reason_vector_count);
+
+    try std.testing.expect(wakeQueuePopReason(abi.wake_reason_interrupt, 1));
+    const after_reason = oc_wake_queue_count_snapshot_ptr().*;
+    try std.testing.expectEqual(@as(u32, 1), after_reason.vector_count);
+    try std.testing.expectEqual(@as(u32, 3), after_reason.before_tick_count);
+    try std.testing.expectEqual(@as(u32, 1), after_reason.reason_vector_count);
+
+    try std.testing.expect(wakeQueuePopVector(13, 99));
+    const after_vector = oc_wake_queue_count_snapshot_ptr().*;
+    try std.testing.expectEqual(@as(u32, 0), after_vector.vector_count);
+    try std.testing.expectEqual(@as(u32, 2), after_vector.before_tick_count);
+    try std.testing.expectEqual(@as(u32, 0), after_vector.reason_vector_count);
+
+    query.vector = 31;
+    query.reason = abi.wake_reason_manual;
+    query.max_tick = 55;
+    const manual_snapshot = oc_wake_queue_count_snapshot_ptr().*;
+    try std.testing.expectEqual(@as(u32, 1), manual_snapshot.vector_count);
+    try std.testing.expectEqual(@as(u32, 3), manual_snapshot.before_tick_count);
+    try std.testing.expectEqual(@as(u32, 0), manual_snapshot.reason_vector_count);
+}
+
 test "baremetal scheduler priority policy favors highest priority and supports updates" {
     status.mode = abi.mode_running;
     status.ticks = 0;

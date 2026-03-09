@@ -819,6 +819,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-wake-queue-count-snapshot-probe-check.ps1
 
+      - name: Bare-metal QEMU wake queue count-snapshot baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-count-snapshot-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU wake queue count-snapshot query1 probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-count-snapshot-query1-probe-check.ps1
+
+      - name: Bare-metal QEMU wake queue count-snapshot query2 probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-count-snapshot-query2-probe-check.ps1
+
+      - name: Bare-metal QEMU wake queue count-snapshot query3 probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-count-snapshot-query3-probe-check.ps1
+
+      - name: Bare-metal QEMU wake queue count-snapshot nonmutating-read probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-count-snapshot-nonmutating-read-probe-check.ps1
+
       - name: Bare-metal QEMU wake queue batch pop probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-wake-queue-batch-pop-probe-check.ps1
