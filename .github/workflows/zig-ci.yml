@@ -968,6 +968,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-task-lifecycle-probe-check.ps1
 
+      - name: Bare-metal QEMU task lifecycle wait1-baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-lifecycle-wait1-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU task lifecycle wake1-manual probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-lifecycle-wake1-manual-probe-check.ps1
+
+      - name: Bare-metal QEMU task lifecycle wait2-baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-lifecycle-wait2-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU task lifecycle wake2-manual probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-lifecycle-wake2-manual-probe-check.ps1
+
+      - name: Bare-metal QEMU task lifecycle terminate-rejected-wake probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-lifecycle-terminate-rejected-wake-probe-check.ps1
+
       - name: Bare-metal QEMU active-task terminate probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-active-task-terminate-probe-check.ps1

@@ -372,11 +372,15 @@ set `$wait1_task_count = 0
 set `$wake1_len = 0
 set `$wake1_state = 0
 set `$wake1_reason = 0
+set `$wake1_task_id = 0
+set `$wake1_tick = 0
 set `$wait2_state = 0
 set `$wait2_task_count = 0
 set `$wake2_len = 0
 set `$wake2_state = 0
 set `$wake2_reason = 0
+set `$wake2_task_id = 0
+set `$wake2_tick = 0
 set `$terminate_state = 0
 set `$terminate_task_count = 0
 set `$rejected_wake_len = 0
@@ -455,6 +459,8 @@ if `$stage == 6
     set `$wake1_len = *(unsigned int*)(0x$wakeQueueCountAddress)
     set `$wake1_state = *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset)
     set `$wake1_reason = *(unsigned char*)(0x$wakeQueueAddress+$wakeEventReasonOffset)
+    set `$wake1_task_id = *(unsigned int*)(0x$wakeQueueAddress+$wakeEventTaskIdOffset)
+    set `$wake1_tick = *(unsigned long long*)(0x$wakeQueueAddress+$wakeEventTickOffset)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $taskWaitOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 7
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = `$task_id
@@ -480,6 +486,8 @@ if `$stage == 8
     set `$wake2_len = *(unsigned int*)(0x$wakeQueueCountAddress)
     set `$wake2_state = *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset)
     set `$wake2_reason = *(unsigned char*)(0x$wakeQueueAddress+($wakeEventStride*1)+$wakeEventReasonOffset)
+    set `$wake2_task_id = *(unsigned int*)(0x$wakeQueueAddress+($wakeEventStride*1)+$wakeEventTaskIdOffset)
+    set `$wake2_tick = *(unsigned long long*)(0x$wakeQueueAddress+($wakeEventStride*1)+$wakeEventTickOffset)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $taskTerminateOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 9
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = `$task_id
@@ -501,7 +509,7 @@ if `$stage == 9
   continue
 end
 if `$stage == 10
-  if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 10 && *(short*)(0x$statusAddress+$statusLastCommandResultOffset) == $resultNotFound && *(unsigned int*)(0x$wakeQueueCountAddress) == 2
+  if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 10 && *(short*)(0x$statusAddress+$statusLastCommandResultOffset) == $resultNotFound && *(unsigned int*)(0x$wakeQueueCountAddress) == 0
     set `$rejected_wake_len = *(unsigned int*)(0x$wakeQueueCountAddress)
     set `$stage = 11
   end
@@ -519,15 +527,15 @@ printf "WAIT1_TASK_COUNT=%u\n", `$wait1_task_count
 printf "WAKE1_QUEUE_LEN=%u\n", `$wake1_len
 printf "WAKE1_STATE=%u\n", `$wake1_state
 printf "WAKE1_REASON=%u\n", `$wake1_reason
-printf "WAKE1_TASK_ID=%u\n", *(unsigned int*)(0x$wakeQueueAddress+$wakeEventTaskIdOffset)
-printf "WAKE1_TICK=%llu\n", *(unsigned long long*)(0x$wakeQueueAddress+$wakeEventTickOffset)
+printf "WAKE1_TASK_ID=%u\n", `$wake1_task_id
+printf "WAKE1_TICK=%llu\n", `$wake1_tick
 printf "WAIT2_STATE=%u\n", `$wait2_state
 printf "WAIT2_TASK_COUNT=%u\n", `$wait2_task_count
 printf "WAKE2_QUEUE_LEN=%u\n", `$wake2_len
 printf "WAKE2_STATE=%u\n", `$wake2_state
 printf "WAKE2_REASON=%u\n", `$wake2_reason
-printf "WAKE2_TASK_ID=%u\n", *(unsigned int*)(0x$wakeQueueAddress+($wakeEventStride*1)+$wakeEventTaskIdOffset)
-printf "WAKE2_TICK=%llu\n", *(unsigned long long*)(0x$wakeQueueAddress+($wakeEventStride*1)+$wakeEventTickOffset)
+printf "WAKE2_TASK_ID=%u\n", `$wake2_task_id
+printf "WAKE2_TICK=%llu\n", `$wake2_tick
 printf "TERMINATE_STATE=%u\n", `$terminate_state
 printf "TERMINATE_TASK_COUNT=%u\n", `$terminate_task_count
 printf "REJECTED_WAKE_QUEUE_LEN=%u\n", `$rejected_wake_len
@@ -662,7 +670,7 @@ if ($wake2Reason -ne $wakeReasonManual) { throw "Expected WAKE2_REASON=$wakeReas
 if ($wake2TaskId -ne $taskId) { throw "Expected WAKE2_TASK_ID=$taskId, got $wake2TaskId" }
 if ($terminateState -ne $taskStateTerminated) { throw "Expected TERMINATE_STATE=$taskStateTerminated, got $terminateState" }
 if ($terminateTaskCount -ne 0) { throw "Expected TERMINATE_TASK_COUNT=0, got $terminateTaskCount" }
-if ($rejectedWakeQueueLen -ne 2) { throw "Expected REJECTED_WAKE_QUEUE_LEN=2, got $rejectedWakeQueueLen" }
+if ($rejectedWakeQueueLen -ne 0) { throw "Expected REJECTED_WAKE_QUEUE_LEN=0, got $rejectedWakeQueueLen" }
 
 Write-Output "BAREMETAL_QEMU_AVAILABLE=True"
 Write-Output "BAREMETAL_QEMU_BINARY=$qemu"
@@ -675,11 +683,19 @@ Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_LAST_OPCODE=$lastOpcode"
 Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_LAST_RESULT=$lastResult"
 Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_TICKS=$ticks"
 Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_TASK_ID=$taskId"
+Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_TASK_PRIORITY=$taskPriority"
 Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_WAIT1_STATE=$wait1State"
+Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_WAIT1_TASK_COUNT=$wait1TaskCount"
 Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_WAKE1_QUEUE_LEN=$wake1QueueLen"
+Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_WAKE1_STATE=$wake1State"
 Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_WAKE1_REASON=$wake1Reason"
+Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_WAKE1_TASK_ID=$wake1TaskId"
 Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_WAIT2_STATE=$wait2State"
+Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_WAIT2_TASK_COUNT=$wait2TaskCount"
 Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_WAKE2_QUEUE_LEN=$wake2QueueLen"
+Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_WAKE2_STATE=$wake2State"
 Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_WAKE2_REASON=$wake2Reason"
+Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_WAKE2_TASK_ID=$wake2TaskId"
 Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_TERMINATE_STATE=$terminateState"
+Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_TERMINATE_TASK_COUNT=$terminateTaskCount"
 Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_REJECTED_WAKE_QUEUE_LEN=$rejectedWakeQueueLen"

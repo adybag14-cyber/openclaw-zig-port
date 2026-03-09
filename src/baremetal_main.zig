@@ -4679,7 +4679,7 @@ test "baremetal timer quantum delays one shot dispatch until quantum boundary" {
     try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
 }
 
-test "baremetal task wait and resume commands control runnable state and wake queue" {
+test "baremetal task lifecycle commands control runnable state wake queue and post-terminate rejection" {
     status.mode = abi.mode_running;
     status.ticks = 0;
     status.command_seq_ack = 0;
@@ -4709,19 +4709,58 @@ test "baremetal task wait and resume commands control runnable state and wake qu
     _ = oc_submit_command(abi.command_task_wait, task_id, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_task_wait), status.last_command_opcode);
     try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(0).state);
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_waiting_count());
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_task_count());
 
-    _ = oc_submit_command(abi.command_task_resume, task_id, 0);
+    _ = oc_submit_command(abi.command_scheduler_wake_task, task_id, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_scheduler_wake_task), status.last_command_opcode);
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_waiting_count());
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_task_count());
     try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
-    const evt = oc_wake_queue_event(0);
+    var evt = oc_wake_queue_event(0);
     try std.testing.expectEqual(task_id, evt.task_id);
     try std.testing.expectEqual(@as(u8, abi.wake_reason_manual), evt.reason);
+    try std.testing.expectEqual(@as(u8, abi.task_state_ready), oc_scheduler_task(0).state);
+
+    _ = oc_submit_command(abi.command_task_wait, task_id, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_task_wait), status.last_command_opcode);
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(0).state);
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_waiting_count());
+    try std.testing.expectEqual(@as(u32, 0), oc_scheduler_task_count());
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+
+    _ = oc_submit_command(abi.command_task_resume, task_id, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_task_resume), status.last_command_opcode);
+    try std.testing.expectEqual(@as(u32, 0), oc_scheduler_waiting_count());
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_task_count());
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_len());
+    evt = oc_wake_queue_event(1);
+    try std.testing.expectEqual(task_id, evt.task_id);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_manual), evt.reason);
+    try std.testing.expectEqual(@as(u8, abi.task_state_ready), oc_scheduler_task(0).state);
+
+    _ = oc_submit_command(abi.command_task_terminate, task_id, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_task_terminate), status.last_command_opcode);
+    try std.testing.expectEqual(@as(u8, abi.task_state_terminated), oc_scheduler_task(0).state);
+    try std.testing.expectEqual(@as(u32, 0), oc_scheduler_task_count());
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
+
+    _ = oc_submit_command(abi.command_scheduler_wake_task, task_id, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_not_found), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_scheduler_wake_task), status.last_command_opcode);
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u8, abi.task_state_terminated), oc_scheduler_task(0).state);
 }
 
 test "baremetal task resume clears timer-backed wait and prevents stale wake" {
