@@ -57,6 +57,12 @@ Recommended sequence:
 ./scripts/baremetal-qemu-allocator-syscall-probe-check.ps1
 ./scripts/baremetal-qemu-syscall-saturation-probe-check.ps1
 ./scripts/baremetal-qemu-syscall-control-probe-check.ps1
+./scripts/baremetal-qemu-syscall-reregister-preserve-count-probe-check.ps1
+./scripts/baremetal-qemu-syscall-blocked-invoke-preserve-state-probe-check.ps1
+./scripts/baremetal-qemu-syscall-disabled-invoke-preserve-state-probe-check.ps1
+./scripts/baremetal-qemu-syscall-saturation-overflow-preserve-full-probe-check.ps1
+./scripts/baremetal-qemu-syscall-saturation-reuse-slot-probe-check.ps1
+./scripts/baremetal-qemu-syscall-saturation-reset-restart-probe-check.ps1
 ./scripts/baremetal-qemu-allocator-syscall-failure-probe-check.ps1
 ./scripts/baremetal-qemu-reset-counters-probe-check.ps1
 ./scripts/baremetal-qemu-interrupt-mask-clear-all-recovery-probe-check.ps1
@@ -172,6 +178,7 @@ Recommended sequence:
 - optional bare-metal QEMU allocator saturation reuse probe (fill all 64 allocator records, reject the next `command_allocator_alloc` with `no_space`, free allocator record slot `5`, prove the slot becomes reusable while the table returns to full occupancy, and prove first-fit page search lands on pages `64-65` against the freestanding PVH artifact)
 - optional bare-metal QEMU allocator free failure probe (allocate 2 pages, prove wrong-pointer `command_allocator_free` returns `result_not_found`, wrong-size returns `result_invalid_argument`, successful free updates `last_free_*`, double-free returns `result_not_found`, and a fresh allocation restarts from page `0` against the freestanding PVH artifact)
 - optional bare-metal QEMU syscall control probe (isolated live `command_syscall_register` re-register, `command_syscall_set_flags`, blocked invoke, disable/enable, successful invoke, unregister, and missing-entry mutation proof against the freestanding PVH artifact)
+- optional bare-metal QEMU syscall wrapper validation batch (wrapper probes over the broad syscall lanes, isolating re-register token-update/no-growth, blocked invoke preservation, disabled invoke preservation, saturation overflow full-table retention, slot reuse semantics, and post-reset slot-zero restart)
 - optional bare-metal QEMU allocator syscall failure probe (invalid-alignment, no-space, blocked-syscall, and disabled-syscall result semantics plus command-result counters against the freestanding PVH artifact)
 - optional bare-metal QEMU command-result counters probe (live mailbox result-category accounting plus `command_reset_command_result_counters` reset semantics against the freestanding PVH artifact)
 - optional bare-metal QEMU reset counters probe (live `command_reset_counters` proof after dirtying interrupt, exception, scheduler, allocator, syscall, timer, wake-queue, mode, boot-phase, command-history, and health-history state against the freestanding PVH artifact)
@@ -283,6 +290,12 @@ Recommended sequence:
 - bare-metal optional QEMU allocator saturation reuse probe in validate stage
 - bare-metal optional QEMU allocator free failure probe in validate stage
 - bare-metal optional QEMU syscall control probe in validate stage
+- bare-metal optional QEMU syscall reregister preserve-count probe in validate stage
+- bare-metal optional QEMU syscall blocked-invoke preserve-state probe in validate stage
+- bare-metal optional QEMU syscall disabled-invoke preserve-state probe in validate stage
+- bare-metal optional QEMU syscall saturation overflow preserve-full probe in validate stage
+- bare-metal optional QEMU syscall saturation reuse-slot probe in validate stage
+- bare-metal optional QEMU syscall saturation-reset restart probe in validate stage
 - bare-metal optional QEMU allocator syscall failure probe in validate stage
 - bare-metal optional QEMU command-result counters probe in validate stage
 - bare-metal optional QEMU reset counters probe in validate stage

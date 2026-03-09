@@ -35,6 +35,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - bare-metal allocator saturation reuse is now enforced by both the host suite and a dedicated live QEMU+GDB probe that fills all 64 allocator records, rejects the next allocation with `no_space`, frees record slot `5`, proves that slot becomes reusable while the table stays saturated after a fresh 2-page allocation, and proves first-fit page search advances to pages `64-65` when page `6` still blocks the freed region
   - bare-metal allocator free failure handling is now enforced by both the host suite and a dedicated live QEMU+GDB probe that proves wrong-pointer `not_found`, wrong-size `invalid_argument`, valid free recovery, double-free `not_found`, and clean reallocation from page `0` without clobbering `last_free_*` metadata
   - bare-metal syscall control mutation behavior is now enforced by a dedicated live QEMU+GDB probe (`command_syscall_register`, `command_syscall_set_flags`, `command_syscall_disable`, `command_syscall_enable`, `command_syscall_unregister`) proving re-register, blocked/disabled invoke, successful invoke, and missing-entry mutation semantics against the freestanding PVH artifact
+  - bare-metal syscall wrapper isolation is now enforced by dedicated QEMU wrappers that fail directly on the narrow re-register/no-growth, blocked invoke, disabled invoke, saturation-overflow full-table, slot-reuse, and post-reset restart boundaries
   - bare-metal allocator/syscall reset recovery is now enforced by both the host suite and the live QEMU+GDB probe, proving dirty allocator/syscall state is cleared by `command_allocator_reset` and `command_syscall_reset` after real alloc/register/invoke activity instead of only at setup time
   - bare-metal interrupt-mask/exception behavior is now enforced by a live QEMU+GDB probe (masked external interrupt remains blocked while exception delivery still wakes a waiting task and records interrupt/exception histories)
   - bare-metal interrupt-mask profile control is now enforced by a live QEMU+GDB probe (`command_interrupt_mask_apply_profile`, `command_interrupt_mask_set`, `command_interrupt_mask_reset_ignored_counts`, `command_interrupt_mask_clear_all`) covering external-all, custom unmask/remask, external-high, invalid profile rejection, and clear-all recovery
@@ -149,6 +150,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - optional QEMU allocator saturation reuse probe validates the dedicated allocator-table reuse lane without syscall noise, proving the full 64-record table rejects overflow, `command_allocator_free` reclaims a middle slot, the next 2-page allocation reuses that record slot, and first-fit page search moves to pages `64-65` because page `6` still blocks the freed region
   - optional QEMU allocator free-failure probe validates the dedicated `command_allocator_free` error lane without syscall noise, proving wrong-pointer `not_found`, wrong-size `invalid_argument`, successful free metadata updates, double-free `not_found`, and post-failure reallocation from page `0`
   - optional QEMU syscall control probe validates the dedicated mutation lane (`command_syscall_register`, `command_syscall_set_flags`, `command_syscall_disable`, `command_syscall_enable`, `command_syscall_unregister`) plus invoke behavior without allocator noise against the freestanding PVH artifact
+  - optional QEMU syscall wrapper validation isolates the narrower syscall-control contracts on top of the broad probes: re-register token update without growth, blocked invoke preservation, disabled invoke preservation, saturation overflow full-table retention, reclaimed-slot reuse, and post-reset slot-zero restart
   - optional QEMU command-result counters probe validates categorized mailbox result accounting live under QEMU+GDB, proving `ok`, `invalid`, `not_supported`, and `other_error` buckets increment correctly and `command_reset_command_result_counters` collapses the struct back to a single reset `ok`
   - optional QEMU reset-counters probe validates `command_reset_counters` end to end after dirtying interrupt, exception, scheduler, allocator, syscall, timer, wake-queue, mode, boot-phase, command-history, and health-history state, proving the runtime collapses back to the expected steady baseline under QEMU+GDB
   - optional QEMU reset-preservation wrapper probes now enforce the narrow recovery boundaries directly: `reset-counters` preserves configured `feature_flags` and `tick_batch_hint`; `reset_boot_diagnostics` preserves runtime mode and existing histories; `clear_command_history` preserves health history; `clear_health_history` preserves command history; and `reset_command_result_counters` preserves live runtime posture while collapsing counters to the single reset receipt
@@ -604,6 +606,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU allocator saturation reuse probe
 - optional bare-metal QEMU allocator free failure probe
 - optional bare-metal QEMU syscall control probe
+- optional bare-metal QEMU syscall wrapper validation
 - optional bare-metal QEMU allocator syscall failure probe
 - optional bare-metal QEMU command-result counters probe
 - optional bare-metal QEMU reset counters probe
@@ -678,6 +681,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU allocator saturation reuse validation
 - optional bare-metal QEMU allocator free failure validation
 - optional bare-metal QEMU syscall control validation
+- optional bare-metal QEMU syscall wrapper validation
 - optional bare-metal QEMU allocator syscall failure validation
 - optional bare-metal QEMU command-result counters validation
 - optional bare-metal QEMU reset counters validation
