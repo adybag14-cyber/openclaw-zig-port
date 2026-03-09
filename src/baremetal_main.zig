@@ -6031,10 +6031,31 @@ test "baremetal scheduler default round robin dispatch remains stable" {
 
     _ = oc_submit_command(abi.command_scheduler_enable, 0, 0);
     oc_tick();
-    const first = oc_scheduler_task(0);
-    const second = oc_scheduler_task(1);
+    var first = oc_scheduler_task(0);
+    var second = oc_scheduler_task(1);
     try std.testing.expectEqual(@as(u32, 1), first.run_count);
     try std.testing.expectEqual(@as(u32, 0), second.run_count);
+    try std.testing.expectEqual(@as(u32, 3), first.budget_remaining);
+    try std.testing.expectEqual(@as(u32, 4), second.budget_remaining);
+
+    oc_tick();
+    first = oc_scheduler_task(0);
+    second = oc_scheduler_task(1);
+    try std.testing.expectEqual(@as(u32, 1), first.run_count);
+    try std.testing.expectEqual(@as(u32, 1), second.run_count);
+    try std.testing.expectEqual(@as(u32, 3), first.budget_remaining);
+    try std.testing.expectEqual(@as(u32, 3), second.budget_remaining);
+
+    oc_tick();
+    first = oc_scheduler_task(0);
+    second = oc_scheduler_task(1);
+    try std.testing.expectEqual(@as(u32, 2), first.run_count);
+    try std.testing.expectEqual(@as(u32, 1), second.run_count);
+    try std.testing.expectEqual(@as(u32, 2), first.budget_remaining);
+    try std.testing.expectEqual(@as(u32, 3), second.budget_remaining);
+    try std.testing.expectEqual(@as(u8, 2), oc_scheduler_state_ptr().task_count);
+    try std.testing.expectEqual(@as(u8, abi.scheduler_policy_round_robin), oc_scheduler_policy());
+    try std.testing.expect(status.last_command_result == abi.result_ok);
 }
 
 test "baremetal scheduler live timeslice updates change subsequent budget consumption" {

@@ -363,6 +363,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-round-robin-probe-check.ps1
 
+      - name: Bare-metal QEMU scheduler round robin baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-round-robin-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler round robin first-dispatch probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-round-robin-first-dispatch-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler round robin second-dispatch probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-round-robin-second-dispatch-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler round robin third-dispatch probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-round-robin-third-dispatch-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler round robin final task-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-round-robin-final-task-state-probe-check.ps1
+
       - name: Bare-metal QEMU scheduler timeslice update probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-timeslice-update-probe-check.ps1
