@@ -241,6 +241,11 @@ Recommended sequence:
 - bare-metal optional QEMU scheduler reset timer-clear probe in validate stage
 - bare-metal optional QEMU scheduler reset config-preservation probe in validate stage
 - bare-metal optional QEMU scheduler policy-switch probe in validate stage
+- bare-metal optional QEMU scheduler policy-switch rr-baseline probe in validate stage
+- bare-metal optional QEMU scheduler policy-switch priority-dominance probe in validate stage
+- bare-metal optional QEMU scheduler policy-switch reprioritize-low probe in validate stage
+- bare-metal optional QEMU scheduler policy-switch rr-return probe in validate stage
+- bare-metal optional QEMU scheduler policy-switch invalid-preserve probe in validate stage
 - bare-metal optional QEMU scheduler saturation probe in validate stage
 - bare-metal optional QEMU timer wake probe in validate stage
 - bare-metal optional QEMU timer quantum probe in validate stage

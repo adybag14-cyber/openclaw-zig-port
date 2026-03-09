@@ -355,6 +355,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-policy-switch-probe-check.ps1
 
+      - name: Bare-metal QEMU scheduler policy-switch rr-baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-policy-switch-rr-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler policy-switch priority-dominance probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-policy-switch-priority-dominance-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler policy-switch reprioritize-low probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-policy-switch-reprioritize-low-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler policy-switch rr-return probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-policy-switch-rr-return-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler policy-switch invalid-preserve probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-policy-switch-invalid-preserve-probe-check.ps1
+
       - name: Bare-metal QEMU scheduler saturation probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-saturation-probe-check.ps1
