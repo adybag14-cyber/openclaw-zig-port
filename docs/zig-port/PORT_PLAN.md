@@ -1451,6 +1451,9 @@ Full-stack replacement execution reference:
     - live PVH/QEMU+GDB sequence dirties allocator state with `command_allocator_alloc(8192, 4096)`, dirties syscall state with `command_syscall_register(12, 0xCAFE)` plus `command_syscall_invoke(12, 0x55AA)`, then runs dedicated `command_allocator_reset` and `command_syscall_reset` to prove both subsystems collapse independently back to steady baseline.
     - key probe evidence: `ACK=8`, `LAST_OPCODE=36`, `LAST_RESULT=-2`, dirty allocator count `1`, dirty syscall dispatch count `1`, post-reset allocator count `0`, post-reset free pages `256`, post-reset syscall entry count `0`, post-reset syscall dispatch count `0`.
     - probe is wired into both `zig-ci` and `release-preview` validate stages so dedicated allocator/syscall reset regressions now block CI.
+  - bare-metal allocator/syscall reset wrapper validation shipped:
+    - new scripts: `scripts/baremetal-qemu-allocator-syscall-reset-dirty-allocator-probe-check.ps1`, `scripts/baremetal-qemu-allocator-syscall-reset-dirty-syscall-probe-check.ps1`, `scripts/baremetal-qemu-allocator-syscall-reset-post-reset-allocator-baseline-probe-check.ps1`, `scripts/baremetal-qemu-allocator-syscall-reset-post-reset-syscall-baseline-probe-check.ps1`, and `scripts/baremetal-qemu-allocator-syscall-reset-missing-entry-after-reset-probe-check.ps1`.
+    - these wrappers reuse the broad live allocator/syscall reset probe and fail directly on five narrower guarantees: dirty allocator state capture before reset, dirty syscall state capture before reset, allocator baseline restoration after reset, syscall baseline restoration after reset, and the final missing-entry invoke receipt after both resets.
   - bare-metal allocator free-failure validation shipped:
     - new script: `scripts/baremetal-qemu-allocator-free-failure-probe-check.ps1`.
     - added matching host regression in `src/baremetal_main.zig`.

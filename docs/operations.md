@@ -404,6 +404,7 @@ Recommended sequence:
 - bare-metal optional QEMU syscall saturation reuse-slot probe in validate stage
 - bare-metal optional QEMU syscall saturation-reset restart probe in validate stage
 - bare-metal optional QEMU allocator syscall failure probe in validate stage
+- bare-metal optional QEMU allocator/syscall reset wrapper probes in validate stage
 - bare-metal optional QEMU command-result counters probe in validate stage
 - bare-metal optional QEMU reset counters probe in validate stage
 - bare-metal optional QEMU reset-command-result preserve-runtime probe in validate stage
