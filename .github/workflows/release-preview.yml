@@ -998,6 +998,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-active-task-terminate-probe-check.ps1
 
+      - name: Bare-metal QEMU active-task terminate baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-active-task-terminate-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU active-task terminate failover probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-active-task-terminate-failover-probe-check.ps1
+
+      - name: Bare-metal QEMU active-task terminate repeat-idempotent probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-active-task-terminate-repeat-idempotent-probe-check.ps1
+
+      - name: Bare-metal QEMU active-task terminate survivor-progress probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-active-task-terminate-survivor-progress-probe-check.ps1
+
+      - name: Bare-metal QEMU active-task terminate final-collapse probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-active-task-terminate-final-collapse-probe-check.ps1
+
       - name: Bare-metal QEMU panic recovery probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-panic-recovery-probe-check.ps1

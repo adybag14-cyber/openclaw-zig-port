@@ -6398,6 +6398,7 @@ test "baremetal task terminate command fails over cleanly under active load" {
     _ = oc_submit_command(abi.command_task_terminate, high_id, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_task_terminate), status.last_command_opcode);
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_task_count());
     try std.testing.expectEqual(@as(u8, 0), oc_scheduler_state_ptr().running_slot);
     low_task = oc_scheduler_task(0);
@@ -6409,21 +6410,29 @@ test "baremetal task terminate command fails over cleanly under active load" {
     _ = oc_submit_command(abi.command_task_terminate, high_id, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_task_terminate), status.last_command_opcode);
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_task_count());
     low_task = oc_scheduler_task(0);
+    high_task = oc_scheduler_task(1);
     try std.testing.expectEqual(@as(u32, 2), low_task.run_count);
     try std.testing.expectEqual(@as(u32, 4), low_task.budget_remaining);
+    try std.testing.expectEqual(@as(u8, abi.task_state_terminated), high_task.state);
 
     const dispatch_before_final_terminate = oc_scheduler_state_ptr().dispatch_count;
     const low_id = low_task.task_id;
     _ = oc_submit_command(abi.command_task_terminate, low_id, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_task_terminate), status.last_command_opcode);
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_task_count());
     try std.testing.expectEqual(@as(u8, scheduler_no_slot), oc_scheduler_state_ptr().running_slot);
     try std.testing.expectEqual(dispatch_before_final_terminate, oc_scheduler_state_ptr().dispatch_count);
     low_task = oc_scheduler_task(0);
+    high_task = oc_scheduler_task(1);
     try std.testing.expectEqual(@as(u8, abi.task_state_terminated), low_task.state);
+    try std.testing.expectEqual(@as(u32, 0), low_task.budget_remaining);
+    try std.testing.expectEqual(@as(u8, abi.task_state_terminated), high_task.state);
+    try std.testing.expectEqual(@as(u32, 0), high_task.budget_remaining);
 }
 
 test "baremetal task terminate clears mixed timer and wake state for the target task only" {
