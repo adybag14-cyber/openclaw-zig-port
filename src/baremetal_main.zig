@@ -6621,18 +6621,28 @@ test "baremetal panic preserves interrupt and timer wakes until recovery" {
     try std.testing.expect(oc_scheduler_enabled());
     try std.testing.expectEqual(@as(u64, 0), oc_scheduler_state_ptr().dispatch_count);
     try std.testing.expectEqual(@as(u8, scheduler_no_slot), oc_scheduler_state_ptr().running_slot);
+    try std.testing.expectEqual(@as(u32, 0), oc_scheduler_task_count());
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(0).state);
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(1).state);
+    try std.testing.expectEqual(@as(u32, 1), oc_timer_entry_count());
 
     _ = oc_submit_command(abi.command_trigger_panic_flag, 0, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_trigger_panic_flag), status.last_command_opcode);
     try std.testing.expectEqual(@as(u8, abi.mode_panicked), status.mode);
     try std.testing.expectEqual(@as(u32, 1), status.panic_count);
     try std.testing.expectEqual(@as(u8, abi.boot_phase_panicked), boot_diagnostics.phase);
     try std.testing.expectEqual(@as(u64, 0), oc_scheduler_state_ptr().dispatch_count);
     try std.testing.expectEqual(@as(u8, scheduler_no_slot), oc_scheduler_state_ptr().running_slot);
+    try std.testing.expectEqual(@as(u32, 0), oc_scheduler_task_count());
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(0).state);
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(1).state);
 
     _ = oc_submit_command(abi.command_trigger_interrupt, 200, 0);
     oc_tick();
+    try std.testing.expectEqual(@as(u16, abi.command_trigger_interrupt), status.last_command_opcode);
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
     try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
     const interrupt_evt = oc_wake_queue_event(0);
     try std.testing.expectEqual(interrupt_task_id, interrupt_evt.task_id);
@@ -6662,10 +6672,12 @@ test "baremetal panic preserves interrupt and timer wakes until recovery" {
     _ = oc_submit_command(abi.command_set_mode, abi.mode_running, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_set_mode), status.last_command_opcode);
     try std.testing.expectEqual(@as(u8, abi.mode_running), status.mode);
     try std.testing.expectEqual(@as(u8, abi.boot_phase_panicked), boot_diagnostics.phase);
     try std.testing.expectEqual(@as(u64, 1), oc_scheduler_state_ptr().dispatch_count);
     try std.testing.expectEqual(@as(u8, 0), oc_scheduler_state_ptr().running_slot);
+    try std.testing.expectEqual(@as(u32, 2), oc_scheduler_task_count());
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_task(0).run_count);
     try std.testing.expectEqual(@as(u32, 5), oc_scheduler_task(0).budget_remaining);
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_task(1).run_count);
@@ -6674,9 +6686,11 @@ test "baremetal panic preserves interrupt and timer wakes until recovery" {
     _ = oc_submit_command(abi.command_set_boot_phase, abi.boot_phase_runtime, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_set_boot_phase), status.last_command_opcode);
     try std.testing.expectEqual(@as(u8, abi.boot_phase_runtime), boot_diagnostics.phase);
     try std.testing.expectEqual(@as(u64, 2), oc_scheduler_state_ptr().dispatch_count);
     try std.testing.expectEqual(@as(u8, 1), oc_scheduler_state_ptr().running_slot);
+    try std.testing.expectEqual(@as(u32, 2), oc_scheduler_task_count());
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_task(0).run_count);
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_task(1).run_count);
     try std.testing.expectEqual(@as(u32, 6), oc_scheduler_task(1).budget_remaining);

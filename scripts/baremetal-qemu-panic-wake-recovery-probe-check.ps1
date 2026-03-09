@@ -307,6 +307,12 @@ if $stage == 8
 end
 if $stage == 9
   if *(unsigned int*)(0x__STATUS__+__STATUS_ACK_OFFSET__) == 9 && *(unsigned char*)(0x__SCHED_STATE__+__SCHED_ENABLED_OFFSET__) == 1 && *(unsigned long long*)(0x__SCHED_STATE__+__SCHED_DISPATCH_COUNT_OFFSET__) == 0 && *(unsigned char*)(0x__SCHED_STATE__+__SCHED_RUNNING_SLOT_OFFSET__) == __SCHEDULER_NO_SLOT__
+    printf "PRE_PANIC_TASK_COUNT=%u\n", *(unsigned char*)(0x__SCHED_STATE__+__SCHED_TASK_COUNT_OFFSET__)
+    printf "PRE_PANIC_RUNNING_SLOT=%u\n", *(unsigned char*)(0x__SCHED_STATE__+__SCHED_RUNNING_SLOT_OFFSET__)
+    printf "PRE_PANIC_DISPATCH_COUNT=%llu\n", *(unsigned long long*)(0x__SCHED_STATE__+__SCHED_DISPATCH_COUNT_OFFSET__)
+    printf "PRE_PANIC_TASK0_STATE=%u\n", *(unsigned char*)(0x__TASKS__+__TASK0_STATE_OFFSET__)
+    printf "PRE_PANIC_TASK1_STATE=%u\n", *(unsigned char*)(0x__TASKS__+__TASK_STRIDE__+__TASK0_STATE_OFFSET__)
+    printf "PRE_PANIC_TIMER_COUNT=%u\n", *(unsigned char*)(0x__TIMER_STATE__+__TIMER_ENTRY_COUNT_OFFSET__)
     set *(unsigned short*)(0x__COMMAND_MAILBOX__+__COMMAND_OPCODE_OFFSET__) = __TRIGGER_PANIC_OPCODE__
     set *(unsigned int*)(0x__COMMAND_MAILBOX__+__COMMAND_SEQ_OFFSET__) = 10
     set *(unsigned long long*)(0x__COMMAND_MAILBOX__+__COMMAND_ARG0_OFFSET__) = 0
@@ -317,6 +323,14 @@ if $stage == 9
 end
 if $stage == 10
   if *(unsigned int*)(0x__STATUS__+__STATUS_ACK_OFFSET__) == 10 && *(unsigned short*)(0x__STATUS__+__STATUS_LAST_OPCODE_OFFSET__) == __TRIGGER_PANIC_OPCODE__ && *(short*)(0x__STATUS__+__STATUS_LAST_RESULT_OFFSET__) == 0 && *(unsigned char*)(0x__STATUS__+__STATUS_MODE_OFFSET__) == __MODE_PANICKED__ && *(unsigned int*)(0x__STATUS__+__STATUS_PANIC_COUNT_OFFSET__) == 1 && *(unsigned char*)(0x__BOOT_DIAG__+__BOOT_DIAG_PHASE_OFFSET__) == __BOOT_PHASE_PANICKED__ && *(unsigned long long*)(0x__SCHED_STATE__+__SCHED_DISPATCH_COUNT_OFFSET__) == 0 && *(unsigned char*)(0x__SCHED_STATE__+__SCHED_RUNNING_SLOT_OFFSET__) == __SCHEDULER_NO_SLOT__
+    printf "PANIC_FREEZE_LAST_OPCODE=%u\n", *(unsigned short*)(0x__STATUS__+__STATUS_LAST_OPCODE_OFFSET__)
+    printf "PANIC_FREEZE_LAST_RESULT=%d\n", *(short*)(0x__STATUS__+__STATUS_LAST_RESULT_OFFSET__)
+    printf "PANIC_FREEZE_MODE=%u\n", *(unsigned char*)(0x__STATUS__+__STATUS_MODE_OFFSET__)
+    printf "PANIC_FREEZE_BOOT_PHASE=%u\n", *(unsigned char*)(0x__BOOT_DIAG__+__BOOT_DIAG_PHASE_OFFSET__)
+    printf "PANIC_FREEZE_PANIC_COUNT=%u\n", *(unsigned int*)(0x__STATUS__+__STATUS_PANIC_COUNT_OFFSET__)
+    printf "PANIC_FREEZE_TASK_COUNT=%u\n", *(unsigned char*)(0x__SCHED_STATE__+__SCHED_TASK_COUNT_OFFSET__)
+    printf "PANIC_FREEZE_RUNNING_SLOT=%u\n", *(unsigned char*)(0x__SCHED_STATE__+__SCHED_RUNNING_SLOT_OFFSET__)
+    printf "PANIC_FREEZE_DISPATCH_COUNT=%llu\n", *(unsigned long long*)(0x__SCHED_STATE__+__SCHED_DISPATCH_COUNT_OFFSET__)
     set *(unsigned short*)(0x__COMMAND_MAILBOX__+__COMMAND_OPCODE_OFFSET__) = __TRIGGER_INTERRUPT_OPCODE__
     set *(unsigned int*)(0x__COMMAND_MAILBOX__+__COMMAND_SEQ_OFFSET__) = 11
     set *(unsigned long long*)(0x__COMMAND_MAILBOX__+__COMMAND_ARG0_OFFSET__) = __INTERRUPT_VECTOR__
@@ -536,6 +550,20 @@ if ($stderrText -match "Failed to resolve symbol address") {
 }
 
 $expected = @{
+    "PRE_PANIC_TASK_COUNT" = 0
+    "PRE_PANIC_RUNNING_SLOT" = $schedulerNoSlot
+    "PRE_PANIC_DISPATCH_COUNT" = 0
+    "PRE_PANIC_TASK0_STATE" = $taskStateWaiting
+    "PRE_PANIC_TASK1_STATE" = $taskStateWaiting
+    "PRE_PANIC_TIMER_COUNT" = 1
+    "PANIC_FREEZE_LAST_OPCODE" = $triggerPanicOpcode
+    "PANIC_FREEZE_LAST_RESULT" = 0
+    "PANIC_FREEZE_MODE" = $modePanicked
+    "PANIC_FREEZE_BOOT_PHASE" = $bootPhasePanicked
+    "PANIC_FREEZE_PANIC_COUNT" = 1
+    "PANIC_FREEZE_TASK_COUNT" = 0
+    "PANIC_FREEZE_RUNNING_SLOT" = $schedulerNoSlot
+    "PANIC_FREEZE_DISPATCH_COUNT" = 0
     "PANIC_WAKE1_TASK_COUNT" = 1
     "PANIC_WAKE1_DISPATCH_COUNT" = 0
     "PANIC_WAKE1_QUEUE_LEN" = 1

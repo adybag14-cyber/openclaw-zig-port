@@ -984,6 +984,21 @@ jobs:
       - name: Bare-metal QEMU panic wake recovery probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-panic-wake-recovery-probe-check.ps1
+      - name: Bare-metal QEMU panic-wake baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-panic-wake-recovery-baseline-probe-check.ps1
+      - name: Bare-metal QEMU panic-wake freeze-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-panic-wake-recovery-freeze-state-probe-check.ps1
+      - name: Bare-metal QEMU panic-wake preserved-wakes probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-panic-wake-recovery-preserved-wakes-probe-check.ps1
+      - name: Bare-metal QEMU panic-wake mode-recovery probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-panic-wake-recovery-mode-recovery-probe-check.ps1
+      - name: Bare-metal QEMU panic-wake final-task-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-panic-wake-recovery-final-task-state-probe-check.ps1
 
       - name: Bare-metal QEMU manual wait interrupt probe (optional)
         shell: pwsh
