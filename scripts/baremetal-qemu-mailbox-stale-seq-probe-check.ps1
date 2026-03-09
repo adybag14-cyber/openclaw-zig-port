@@ -174,6 +174,12 @@ commands
 silent
 if `$stage == 1
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 1 && *(unsigned int*)(0x$statusAddress+$statusTickBatchHintOffset) == 4
+    printf "AFTER_FIRST_MAILBOX_COMMAND\n"
+    printf "FIRST_ACK=%u\n", *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset)
+    printf "FIRST_LAST_OPCODE=%u\n", *(unsigned short*)(0x$statusAddress+$statusLastCommandOpcodeOffset)
+    printf "FIRST_LAST_RESULT=%d\n", *(short*)(0x$statusAddress+$statusLastCommandResultOffset)
+    printf "FIRST_TICK_BATCH_HINT=%u\n", *(unsigned int*)(0x$statusAddress+$statusTickBatchHintOffset)
+    printf "FIRST_MAILBOX_SEQ=%u\n", *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset)
     set `$replay_last_opcode = *(unsigned short*)(0x$statusAddress+$statusLastCommandOpcodeOffset)
     set `$replay_last_result = *(short*)(0x$statusAddress+$statusLastCommandResultOffset)
     set *(unsigned int*)(0x$commandMailboxAddress+$commandMagicOffset) = $commandMagic
@@ -188,6 +194,12 @@ if `$stage == 1
 end
 if `$stage == 2
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 1 && *(unsigned int*)(0x$statusAddress+$statusTickBatchHintOffset) == 4 && *(unsigned short*)(0x$statusAddress+$statusLastCommandOpcodeOffset) == `$replay_last_opcode && *(short*)(0x$statusAddress+$statusLastCommandResultOffset) == `$replay_last_result
+    printf "AFTER_STALE_REPLAY\n"
+    printf "STALE_ACK=%u\n", *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset)
+    printf "STALE_LAST_OPCODE=%u\n", *(unsigned short*)(0x$statusAddress+$statusLastCommandOpcodeOffset)
+    printf "STALE_LAST_RESULT=%d\n", *(short*)(0x$statusAddress+$statusLastCommandResultOffset)
+    printf "STALE_TICK_BATCH_HINT=%u\n", *(unsigned int*)(0x$statusAddress+$statusTickBatchHintOffset)
+    printf "STALE_MAILBOX_SEQ=%u\n", *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset)
     set *(unsigned int*)(0x$commandMailboxAddress+$commandMagicOffset) = $commandMagic
     set *(unsigned short*)(0x$commandMailboxAddress+$commandApiVersionOffset) = $apiVersion
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $setTickBatchHintOpcode
@@ -245,6 +257,16 @@ $tickBatchHint = Extract-IntValue -Text $out -Name 'TICK_BATCH_HINT'
 $mailboxSeq = Extract-IntValue -Text $out -Name 'MAILBOX_SEQ'
 $replayLastOpcode = Extract-IntValue -Text $out -Name 'REPLAY_LAST_OPCODE'
 $replayLastResult = Extract-IntValue -Text $out -Name 'REPLAY_LAST_RESULT'
+$firstAck = Extract-IntValue -Text $out -Name 'FIRST_ACK'
+$firstLastOpcode = Extract-IntValue -Text $out -Name 'FIRST_LAST_OPCODE'
+$firstLastResult = Extract-IntValue -Text $out -Name 'FIRST_LAST_RESULT'
+$firstTickBatchHint = Extract-IntValue -Text $out -Name 'FIRST_TICK_BATCH_HINT'
+$firstMailboxSeq = Extract-IntValue -Text $out -Name 'FIRST_MAILBOX_SEQ'
+$staleAck = Extract-IntValue -Text $out -Name 'STALE_ACK'
+$staleLastOpcode = Extract-IntValue -Text $out -Name 'STALE_LAST_OPCODE'
+$staleLastResult = Extract-IntValue -Text $out -Name 'STALE_LAST_RESULT'
+$staleTickBatchHint = Extract-IntValue -Text $out -Name 'STALE_TICK_BATCH_HINT'
+$staleMailboxSeq = Extract-IntValue -Text $out -Name 'STALE_MAILBOX_SEQ'
 
 Write-Output "BAREMETAL_QEMU_AVAILABLE=True"
 Write-Output "BAREMETAL_QEMU_BINARY=$qemu"
@@ -256,6 +278,30 @@ Write-Output "BAREMETAL_QEMU_MAILBOX_STALE_SEQ_GDB_STDOUT=$gdbStdout"
 Write-Output "BAREMETAL_QEMU_MAILBOX_STALE_SEQ_GDB_STDERR=$gdbStderr"
 Write-Output "BAREMETAL_QEMU_MAILBOX_STALE_SEQ_QEMU_STDOUT=$qemuStdout"
 Write-Output "BAREMETAL_QEMU_MAILBOX_STALE_SEQ_QEMU_STDERR=$qemuStderr"
+if ($null -ne $firstAck) {
+    Write-Output "FIRST_ACK=$firstAck"
+    Write-Output "FIRST_LAST_OPCODE=$firstLastOpcode"
+    Write-Output "FIRST_LAST_RESULT=$firstLastResult"
+    Write-Output "FIRST_TICK_BATCH_HINT=$firstTickBatchHint"
+    Write-Output "FIRST_MAILBOX_SEQ=$firstMailboxSeq"
+}
+if ($null -ne $staleAck) {
+    Write-Output "STALE_ACK=$staleAck"
+    Write-Output "STALE_LAST_OPCODE=$staleLastOpcode"
+    Write-Output "STALE_LAST_RESULT=$staleLastResult"
+    Write-Output "STALE_TICK_BATCH_HINT=$staleTickBatchHint"
+    Write-Output "STALE_MAILBOX_SEQ=$staleMailboxSeq"
+}
+if ($null -ne $ack) {
+    Write-Output "ACK=$ack"
+    Write-Output "LAST_OPCODE=$lastOpcode"
+    Write-Output "LAST_RESULT=$lastResult"
+    Write-Output "TICKS=$ticks"
+    Write-Output "TICK_BATCH_HINT=$tickBatchHint"
+    Write-Output "MAILBOX_SEQ=$mailboxSeq"
+    Write-Output "REPLAY_LAST_OPCODE=$replayLastOpcode"
+    Write-Output "REPLAY_LAST_RESULT=$replayLastResult"
+}
 
 $pass = (
     $hitStart -and

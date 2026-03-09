@@ -173,6 +173,14 @@ commands
 silent
 if `$stage == 1
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 1 && *(short*)(0x$statusAddress+$statusLastCommandResultOffset) == $resultInvalid && *(unsigned int*)(0x$statusAddress+$statusTickBatchHintOffset) == 1
+    printf "AFTER_INVALID_MAGIC\n"
+    printf "INVALID_MAGIC_ACK=%u\n", *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset)
+    printf "INVALID_MAGIC_LAST_OPCODE=%u\n", *(unsigned short*)(0x$statusAddress+$statusLastCommandOpcodeOffset)
+    printf "INVALID_MAGIC_LAST_RESULT=%d\n", *(short*)(0x$statusAddress+$statusLastCommandResultOffset)
+    printf "INVALID_MAGIC_TICK_BATCH_HINT=%u\n", *(unsigned int*)(0x$statusAddress+$statusTickBatchHintOffset)
+    printf "INVALID_MAGIC_MAILBOX_MAGIC=%u\n", *(unsigned int*)(0x$commandMailboxAddress+$commandMagicOffset)
+    printf "INVALID_MAGIC_MAILBOX_API_VERSION=%u\n", *(unsigned short*)(0x$commandMailboxAddress+$commandApiVersionOffset)
+    printf "INVALID_MAGIC_MAILBOX_SEQ=%u\n", *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset)
     set *(unsigned int*)(0x$commandMailboxAddress+$commandMagicOffset) = $commandMagic
     set *(unsigned short*)(0x$commandMailboxAddress+$commandApiVersionOffset) = ($apiVersion + 1)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $setTickBatchHintOpcode
@@ -185,6 +193,14 @@ if `$stage == 1
 end
 if `$stage == 2
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 2 && *(short*)(0x$statusAddress+$statusLastCommandResultOffset) == $resultInvalid && *(unsigned int*)(0x$statusAddress+$statusTickBatchHintOffset) == 1
+    printf "AFTER_INVALID_API_VERSION\n"
+    printf "INVALID_API_VERSION_ACK=%u\n", *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset)
+    printf "INVALID_API_VERSION_LAST_OPCODE=%u\n", *(unsigned short*)(0x$statusAddress+$statusLastCommandOpcodeOffset)
+    printf "INVALID_API_VERSION_LAST_RESULT=%d\n", *(short*)(0x$statusAddress+$statusLastCommandResultOffset)
+    printf "INVALID_API_VERSION_TICK_BATCH_HINT=%u\n", *(unsigned int*)(0x$statusAddress+$statusTickBatchHintOffset)
+    printf "INVALID_API_VERSION_MAILBOX_MAGIC=%u\n", *(unsigned int*)(0x$commandMailboxAddress+$commandMagicOffset)
+    printf "INVALID_API_VERSION_MAILBOX_API_VERSION=%u\n", *(unsigned short*)(0x$commandMailboxAddress+$commandApiVersionOffset)
+    printf "INVALID_API_VERSION_MAILBOX_SEQ=%u\n", *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset)
     set *(unsigned int*)(0x$commandMailboxAddress+$commandMagicOffset) = $commandMagic
     set *(unsigned short*)(0x$commandMailboxAddress+$commandApiVersionOffset) = $apiVersion
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $setTickBatchHintOpcode
@@ -244,6 +260,20 @@ $mailboxMagic = Extract-IntValue -Text $out -Name 'MAILBOX_MAGIC'
 $mailboxApiVersion = Extract-IntValue -Text $out -Name 'MAILBOX_API_VERSION'
 $mailboxOpcode = Extract-IntValue -Text $out -Name 'MAILBOX_OPCODE'
 $mailboxSeq = Extract-IntValue -Text $out -Name 'MAILBOX_SEQ'
+$invalidMagicAck = Extract-IntValue -Text $out -Name 'INVALID_MAGIC_ACK'
+$invalidMagicLastOpcode = Extract-IntValue -Text $out -Name 'INVALID_MAGIC_LAST_OPCODE'
+$invalidMagicLastResult = Extract-IntValue -Text $out -Name 'INVALID_MAGIC_LAST_RESULT'
+$invalidMagicTickBatchHint = Extract-IntValue -Text $out -Name 'INVALID_MAGIC_TICK_BATCH_HINT'
+$invalidMagicMailboxMagic = Extract-IntValue -Text $out -Name 'INVALID_MAGIC_MAILBOX_MAGIC'
+$invalidMagicMailboxApiVersion = Extract-IntValue -Text $out -Name 'INVALID_MAGIC_MAILBOX_API_VERSION'
+$invalidMagicMailboxSeq = Extract-IntValue -Text $out -Name 'INVALID_MAGIC_MAILBOX_SEQ'
+$invalidApiVersionAck = Extract-IntValue -Text $out -Name 'INVALID_API_VERSION_ACK'
+$invalidApiVersionLastOpcode = Extract-IntValue -Text $out -Name 'INVALID_API_VERSION_LAST_OPCODE'
+$invalidApiVersionLastResult = Extract-IntValue -Text $out -Name 'INVALID_API_VERSION_LAST_RESULT'
+$invalidApiVersionTickBatchHint = Extract-IntValue -Text $out -Name 'INVALID_API_VERSION_TICK_BATCH_HINT'
+$invalidApiVersionMailboxMagic = Extract-IntValue -Text $out -Name 'INVALID_API_VERSION_MAILBOX_MAGIC'
+$invalidApiVersionMailboxApiVersion = Extract-IntValue -Text $out -Name 'INVALID_API_VERSION_MAILBOX_API_VERSION'
+$invalidApiVersionMailboxSeq = Extract-IntValue -Text $out -Name 'INVALID_API_VERSION_MAILBOX_SEQ'
 
 Write-Output "BAREMETAL_QEMU_AVAILABLE=True"
 Write-Output "BAREMETAL_QEMU_BINARY=$qemu"
@@ -255,6 +285,35 @@ Write-Output "BAREMETAL_QEMU_MAILBOX_HEADER_VALIDATION_GDB_STDOUT=$gdbStdout"
 Write-Output "BAREMETAL_QEMU_MAILBOX_HEADER_VALIDATION_GDB_STDERR=$gdbStderr"
 Write-Output "BAREMETAL_QEMU_MAILBOX_HEADER_VALIDATION_QEMU_STDOUT=$qemuStdout"
 Write-Output "BAREMETAL_QEMU_MAILBOX_HEADER_VALIDATION_QEMU_STDERR=$qemuStderr"
+if ($null -ne $invalidMagicAck) {
+    Write-Output "INVALID_MAGIC_ACK=$invalidMagicAck"
+    Write-Output "INVALID_MAGIC_LAST_OPCODE=$invalidMagicLastOpcode"
+    Write-Output "INVALID_MAGIC_LAST_RESULT=$invalidMagicLastResult"
+    Write-Output "INVALID_MAGIC_TICK_BATCH_HINT=$invalidMagicTickBatchHint"
+    Write-Output "INVALID_MAGIC_MAILBOX_MAGIC=$invalidMagicMailboxMagic"
+    Write-Output "INVALID_MAGIC_MAILBOX_API_VERSION=$invalidMagicMailboxApiVersion"
+    Write-Output "INVALID_MAGIC_MAILBOX_SEQ=$invalidMagicMailboxSeq"
+}
+if ($null -ne $invalidApiVersionAck) {
+    Write-Output "INVALID_API_VERSION_ACK=$invalidApiVersionAck"
+    Write-Output "INVALID_API_VERSION_LAST_OPCODE=$invalidApiVersionLastOpcode"
+    Write-Output "INVALID_API_VERSION_LAST_RESULT=$invalidApiVersionLastResult"
+    Write-Output "INVALID_API_VERSION_TICK_BATCH_HINT=$invalidApiVersionTickBatchHint"
+    Write-Output "INVALID_API_VERSION_MAILBOX_MAGIC=$invalidApiVersionMailboxMagic"
+    Write-Output "INVALID_API_VERSION_MAILBOX_API_VERSION=$invalidApiVersionMailboxApiVersion"
+    Write-Output "INVALID_API_VERSION_MAILBOX_SEQ=$invalidApiVersionMailboxSeq"
+}
+if ($null -ne $ack) {
+    Write-Output "ACK=$ack"
+    Write-Output "LAST_OPCODE=$lastOpcode"
+    Write-Output "LAST_RESULT=$lastResult"
+    Write-Output "TICKS=$ticks"
+    Write-Output "TICK_BATCH_HINT=$tickBatchHint"
+    Write-Output "MAILBOX_MAGIC=$mailboxMagic"
+    Write-Output "MAILBOX_API_VERSION=$mailboxApiVersion"
+    Write-Output "MAILBOX_OPCODE=$mailboxOpcode"
+    Write-Output "MAILBOX_SEQ=$mailboxSeq"
+}
 
 $pass = (
     $hitStart -and

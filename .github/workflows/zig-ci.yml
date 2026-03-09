@@ -149,6 +149,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-mailbox-seq-wraparound-probe-check.ps1
 
+      - name: Bare-metal QEMU mailbox invalid-magic preserve-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mailbox-invalid-magic-preserve-state-probe-check.ps1
+
+      - name: Bare-metal QEMU mailbox invalid-api-version preserve-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mailbox-invalid-api-version-preserve-state-probe-check.ps1
+
+      - name: Bare-metal QEMU mailbox valid recovery probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mailbox-valid-recovery-probe-check.ps1
+
+      - name: Bare-metal QEMU mailbox stale-seq preserve-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mailbox-stale-seq-preserve-state-probe-check.ps1
+
+      - name: Bare-metal QEMU mailbox seq-wraparound recovery probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mailbox-seq-wraparound-recovery-probe-check.ps1
+
       - name: Bare-metal QEMU feature flags tick batch probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-feature-flags-tick-batch-probe-check.ps1

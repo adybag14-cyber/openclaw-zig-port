@@ -5,7 +5,7 @@
 - Latest published edge release: `v0.2.0-zig-edge.27`
 - Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `106/106` passing
 - Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=170`, `ZIG_EVENTS_COUNT=19`
-- Current head: `main + FS6 feature-flags/tick-batch wrappers`
+- Current head: `main + FS6 mailbox wrapper probes`
 - Toolchain lane: Codeberg `master` is canonical; `adybag14-cyber/zig` is the Windows release mirror with rolling `latest-master` plus immutable `upstream-<sha>` releases.
 - Latest CI:
   - `zig-ci` `22813604542` -> success
@@ -25,6 +25,14 @@ Recommended sequence:
 ./scripts/baremetal-qemu-smoke-check.ps1
 ./scripts/baremetal-qemu-runtime-oc-tick-check.ps1
 ./scripts/baremetal-qemu-command-loop-check.ps1
+./scripts/baremetal-qemu-mailbox-header-validation-probe-check.ps1
+./scripts/baremetal-qemu-mailbox-invalid-magic-preserve-state-probe-check.ps1
+./scripts/baremetal-qemu-mailbox-invalid-api-version-preserve-state-probe-check.ps1
+./scripts/baremetal-qemu-mailbox-valid-recovery-probe-check.ps1
+./scripts/baremetal-qemu-mailbox-stale-seq-probe-check.ps1
+./scripts/baremetal-qemu-mailbox-stale-seq-preserve-state-probe-check.ps1
+./scripts/baremetal-qemu-mailbox-seq-wraparound-probe-check.ps1
+./scripts/baremetal-qemu-mailbox-seq-wraparound-recovery-probe-check.ps1
 ./scripts/baremetal-qemu-feature-flags-tick-batch-probe-check.ps1
 ./scripts/baremetal-qemu-feature-flags-set-success-probe-check.ps1
 ./scripts/baremetal-qemu-tick-batch-valid-update-probe-check.ps1
@@ -117,6 +125,7 @@ Recommended sequence:
 - optional bare-metal QEMU mailbox header validation probe (invalid `magic` / `api_version` rejection with `ack` advancement but no command execution, followed by clean recovery on the next valid mailbox command against the freestanding PVH artifact)
 - optional bare-metal QEMU mailbox stale-seq probe (stale `command_seq` replay stays no-op, preserves prior `ack`/history state, and the next fresh sequence executes exactly once against the freestanding PVH artifact)
 - optional bare-metal QEMU mailbox seq-wraparound probe (live mailbox progression across `u64::max` wrap, preserving deterministic `ack` rollover and command-history ordering over the freestanding PVH artifact)
+- optional bare-metal QEMU mailbox wrapper probes (`baremetal-qemu-mailbox-invalid-magic-preserve-state-probe-check.ps1`, `baremetal-qemu-mailbox-invalid-api-version-preserve-state-probe-check.ps1`, `baremetal-qemu-mailbox-valid-recovery-probe-check.ps1`, `baremetal-qemu-mailbox-stale-seq-preserve-state-probe-check.ps1`, and `baremetal-qemu-mailbox-seq-wraparound-recovery-probe-check.ps1`) reuse the broad mailbox probes and fail directly on the narrow invalid-header, valid recovery, stale-replay preservation, and wraparound recovery boundaries
 - optional bare-metal QEMU command-history overflow clear probe (combined overflow + clear + restart proof for the command-history ring, validating retained `seq 4 -> 35`, single-receipt clear collapse, and clean restart semantics without disturbing health-history overflow state)
 - optional bare-metal QEMU health-history overflow clear probe (combined overflow + clear + restart proof for the health-history ring, validating retained `seq 8 -> 71`, single-receipt clear collapse at `seq 1`, and clean restart semantics without disturbing command-history overflow state)
 - optional bare-metal QEMU mode/boot-phase history probe (command/runtime/panic reason ordering plus post-clear saturation of the 64-entry mode-history and boot-phase-history rings against the freestanding PVH artifact)

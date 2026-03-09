@@ -174,6 +174,12 @@ commands
 silent
 if `$stage == 1
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 4294967295 && *(unsigned int*)(0x$statusAddress+$statusTickBatchHintOffset) == 6
+    printf "AFTER_PRE_WRAP_COMMAND\n"
+    printf "PRE_WRAP_ACK=%u\n", *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset)
+    printf "PRE_WRAP_LAST_OPCODE=%u\n", *(unsigned short*)(0x$statusAddress+$statusLastCommandOpcodeOffset)
+    printf "PRE_WRAP_LAST_RESULT=%d\n", *(short*)(0x$statusAddress+$statusLastCommandResultOffset)
+    printf "PRE_WRAP_TICK_BATCH_HINT=%u\n", *(unsigned int*)(0x$statusAddress+$statusTickBatchHintOffset)
+    printf "PRE_WRAP_MAILBOX_SEQ=%u\n", *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset)
     set *(unsigned int*)(0x$commandMailboxAddress+$commandMagicOffset) = $commandMagic
     set *(unsigned short*)(0x$commandMailboxAddress+$commandApiVersionOffset) = $apiVersion
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $setTickBatchHintOpcode
@@ -227,6 +233,11 @@ $lastResult = Extract-IntValue -Text $out -Name 'LAST_RESULT'
 $ticks = Extract-IntValue -Text $out -Name 'TICKS'
 $tickBatchHint = Extract-IntValue -Text $out -Name 'TICK_BATCH_HINT'
 $mailboxSeq = Extract-IntValue -Text $out -Name 'MAILBOX_SEQ'
+$preWrapAck = Extract-IntValue -Text $out -Name 'PRE_WRAP_ACK'
+$preWrapLastOpcode = Extract-IntValue -Text $out -Name 'PRE_WRAP_LAST_OPCODE'
+$preWrapLastResult = Extract-IntValue -Text $out -Name 'PRE_WRAP_LAST_RESULT'
+$preWrapTickBatchHint = Extract-IntValue -Text $out -Name 'PRE_WRAP_TICK_BATCH_HINT'
+$preWrapMailboxSeq = Extract-IntValue -Text $out -Name 'PRE_WRAP_MAILBOX_SEQ'
 
 Write-Output "BAREMETAL_QEMU_AVAILABLE=True"
 Write-Output "BAREMETAL_QEMU_BINARY=$qemu"
@@ -238,6 +249,21 @@ Write-Output "BAREMETAL_QEMU_MAILBOX_SEQ_WRAPAROUND_GDB_STDOUT=$gdbStdout"
 Write-Output "BAREMETAL_QEMU_MAILBOX_SEQ_WRAPAROUND_GDB_STDERR=$gdbStderr"
 Write-Output "BAREMETAL_QEMU_MAILBOX_SEQ_WRAPAROUND_QEMU_STDOUT=$qemuStdout"
 Write-Output "BAREMETAL_QEMU_MAILBOX_SEQ_WRAPAROUND_QEMU_STDERR=$qemuStderr"
+if ($null -ne $preWrapAck) {
+    Write-Output "PRE_WRAP_ACK=$preWrapAck"
+    Write-Output "PRE_WRAP_LAST_OPCODE=$preWrapLastOpcode"
+    Write-Output "PRE_WRAP_LAST_RESULT=$preWrapLastResult"
+    Write-Output "PRE_WRAP_TICK_BATCH_HINT=$preWrapTickBatchHint"
+    Write-Output "PRE_WRAP_MAILBOX_SEQ=$preWrapMailboxSeq"
+}
+if ($null -ne $ack) {
+    Write-Output "ACK=$ack"
+    Write-Output "LAST_OPCODE=$lastOpcode"
+    Write-Output "LAST_RESULT=$lastResult"
+    Write-Output "TICKS=$ticks"
+    Write-Output "TICK_BATCH_HINT=$tickBatchHint"
+    Write-Output "MAILBOX_SEQ=$mailboxSeq"
+}
 
 $pass = (
     $hitStart -and

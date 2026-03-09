@@ -2499,8 +2499,12 @@ test "baremetal mailbox header validation rejects invalid magic and api version"
     try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
     try std.testing.expectEqual(@as(u16, abi.command_set_tick_batch_hint), status.last_command_opcode);
     try std.testing.expectEqual(@as(u32, 1), status.tick_batch_hint);
+    try std.testing.expectEqual(@as(u32, 0), command_mailbox.magic);
+    try std.testing.expectEqual(@as(u16, abi.api_version), command_mailbox.api_version);
+    try std.testing.expectEqual(@as(u32, 1), command_mailbox.seq);
     try std.testing.expectEqual(@as(u32, 1), oc_command_history_len());
     try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), oc_command_history_event(0).result);
+    try std.testing.expectEqual(@as(u16, abi.command_set_tick_batch_hint), oc_command_history_event(0).opcode);
 
     command_mailbox = .{
         .magic = abi.command_magic,
@@ -2513,9 +2517,14 @@ test "baremetal mailbox header validation rejects invalid magic and api version"
     oc_tick();
     try std.testing.expectEqual(@as(u32, 2), status.command_seq_ack);
     try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_set_tick_batch_hint), status.last_command_opcode);
     try std.testing.expectEqual(@as(u32, 1), status.tick_batch_hint);
+    try std.testing.expectEqual(@as(u32, abi.command_magic), command_mailbox.magic);
+    try std.testing.expectEqual(@as(u16, abi.api_version + 1), command_mailbox.api_version);
+    try std.testing.expectEqual(@as(u32, 2), command_mailbox.seq);
     try std.testing.expectEqual(@as(u32, 2), oc_command_history_len());
     try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), oc_command_history_event(1).result);
+    try std.testing.expectEqual(@as(u16, abi.command_set_tick_batch_hint), oc_command_history_event(1).opcode);
 
     command_mailbox.magic = abi.command_magic;
     command_mailbox.api_version = abi.api_version;
@@ -2524,6 +2533,9 @@ test "baremetal mailbox header validation rejects invalid magic and api version"
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
     try std.testing.expectEqual(@as(u32, 5), status.tick_batch_hint);
     try std.testing.expectEqual(@as(u32, 3), status.command_seq_ack);
+    try std.testing.expectEqual(@as(u16, abi.command_set_tick_batch_hint), status.last_command_opcode);
+    try std.testing.expectEqual(@as(u32, 3), oc_command_history_len());
+    try std.testing.expectEqual(@as(i16, abi.result_ok), oc_command_history_event(2).result);
 }
 
 test "baremetal mailbox replay no-op and sequence wraparound remain deterministic" {
@@ -2534,6 +2546,7 @@ test "baremetal mailbox replay no-op and sequence wraparound remain deterministi
     oc_tick();
     try std.testing.expectEqual(seq, status.command_seq_ack);
     try std.testing.expectEqual(@as(u32, 4), status.tick_batch_hint);
+    try std.testing.expectEqual(@as(u32, 1), oc_command_history_len());
 
     const history_len_before_replay = oc_command_history_len();
     const last_opcode_before_replay = status.last_command_opcode;
@@ -2547,6 +2560,7 @@ test "baremetal mailbox replay no-op and sequence wraparound remain deterministi
     try std.testing.expectEqual(last_opcode_before_replay, status.last_command_opcode);
     try std.testing.expectEqual(last_result_before_replay, status.last_command_result);
     try std.testing.expectEqual(history_len_before_replay, oc_command_history_len());
+    try std.testing.expectEqual(@as(u32, 1), command_mailbox.seq);
 
     command_mailbox.seq = std.math.maxInt(u32) - 1;
     status.command_seq_ack = std.math.maxInt(u32) - 1;
@@ -2556,6 +2570,8 @@ test "baremetal mailbox replay no-op and sequence wraparound remain deterministi
     oc_tick();
     try std.testing.expectEqual(std.math.maxInt(u32), status.command_seq_ack);
     try std.testing.expectEqual(@as(u32, 6), status.tick_batch_hint);
+    try std.testing.expectEqual(@as(u32, 2), oc_command_history_len());
+    try std.testing.expectEqual(@as(u32, std.math.maxInt(u32)), command_mailbox.seq);
 
     seq = oc_submit_command(abi.command_set_tick_batch_hint, 7, 0);
     try std.testing.expectEqual(@as(u32, 0), seq);
@@ -2563,6 +2579,9 @@ test "baremetal mailbox replay no-op and sequence wraparound remain deterministi
     try std.testing.expectEqual(@as(u32, 0), status.command_seq_ack);
     try std.testing.expectEqual(@as(u32, 7), status.tick_batch_hint);
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_set_tick_batch_hint), status.last_command_opcode);
+    try std.testing.expectEqual(@as(u32, 3), oc_command_history_len());
+    try std.testing.expectEqual(@as(u32, 0), command_mailbox.seq);
 }
 
 test "baremetal descriptor mailbox commands update init and load telemetry" {
