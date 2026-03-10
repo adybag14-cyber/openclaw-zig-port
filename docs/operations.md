@@ -227,6 +227,7 @@ Recommended sequence:
 - optional bare-metal QEMU panic-wake recovery wrapper probes (five isolated checks over the same broad lane: pre-panic waiting baseline, panic freeze-state, preserved interrupt+timer wake queue delivery, mode-recovery dispatch resume, and final recovered task-state telemetry)
 - optional bare-metal QEMU manual-wait interrupt probe (`task_wait` remains blocked with `wake_queue_len=0` and manual wait-kind intact after interrupt `44`, then recovers via explicit `scheduler_wake_task` against the freestanding PVH artifact)
 - optional bare-metal QEMU wake-queue selective probe (timer, interrupt, and manual wake generation plus `pop_reason`, `pop_vector`, `pop_reason_vector`, and `pop_before_tick` queue drains, with live vector/reason+vector/before-tick telemetry snapshot checks against the freestanding PVH artifact)
+- optional bare-metal QEMU wake-queue selective wrapper validation (five isolated wrappers over the same mixed queue lane, failing directly on baseline queue composition, reason drain, vector drain, exact reason+vector drain, and the final before-tick/invalid-pair preserved-state boundary against the freestanding PVH artifact)
 - optional bare-metal QEMU wake-queue reason-pop probe (dedicated `command_wake_queue_pop_reason` lane on a small mixed queue, proving FIFO removal of only the matching `interrupt` wakes and invalid-reason rejection without vector/overflow setup noise)
 - optional bare-metal QEMU wake-queue reason-pop wrapper validation (baseline queue composition, first matching-pop survivor ordering, final manual-only survivor ordering, invalid-reason rejection, and invalid-reason nonmutation on the dedicated four-entry mixed queue lane)
 - optional bare-metal QEMU wake-queue vector-pop probe (dedicated `command_wake_queue_pop_vector` lane on a small mixed queue, proving FIFO removal of only matching vector `13` wakes and invalid-vector rejection without overflow setup noise)
@@ -401,6 +402,7 @@ Recommended sequence:
 - bare-metal optional QEMU scheduler round-robin probe in validate stage
 - bare-metal optional QEMU scheduler round-robin wrapper probes in validate stage
 - bare-metal optional QEMU wake-queue selective probe in validate stage
+- bare-metal optional QEMU wake-queue selective wrapper probes in validate stage
 - bare-metal optional QEMU wake-queue reason-pop probe in validate stage
 - bare-metal optional QEMU wake-queue reason-pop wrapper probes in validate stage
 - bare-metal optional QEMU wake-queue vector-pop probe in validate stage

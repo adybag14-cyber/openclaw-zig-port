@@ -171,6 +171,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - optional QEMU manual-wait interrupt probe validates `command_task_wait` isolation end to end, proving a manual waiter remains blocked with an empty wake queue after interrupt `44`, then resumes correctly through an explicit `command_scheduler_wake_task` against the freestanding PVH artifact
   - optional QEMU wake-queue FIFO probe validates `command_wake_queue_pop` end to end, proving the oldest queued manual wake is removed first, the second queued wake becomes the new logical head (`seq=2`, `tick=7`), and a final pop on the empty queue returns `result_not_found`
   - optional QEMU wake-queue selective probe validates timer, interrupt, and manual wake generation plus `pop_reason`, `pop_vector`, `pop_reason_vector`, and `pop_before_tick` queue drains end to end against the freestanding PVH artifact
+  - optional QEMU wake-queue selective wrapper validation now fails directly on the baseline five-entry mixed queue shape, reason-drain survivor ordering, vector-drain survivor ordering, exact reason+vector drain survivor ordering, and the final before-tick/invalid-pair preserved-state boundary on that dedicated mixed-queue lane
   - optional QEMU wake-queue selective-overflow probe validates wrapped-ring selective drains end to end, proving `66` alternating `interrupt@13` / `interrupt@31` wakes retain FIFO survivor ordering through `command_wake_queue_pop_vector` and `command_wake_queue_pop_reason_vector`
   - optional QEMU wake-queue before-tick-overflow probe validates wrapped-ring deadline drains end to end, proving the same `66` alternating `interrupt@13` / `interrupt@31` wakes can be drained in FIFO windows via `command_wake_queue_pop_before_tick` down to empty, with the final empty-queue call returning `result_not_found`
   - optional QEMU wake-queue before-tick wrapper validation now fails directly on the baseline four-entry queue shape, first stale cutoff, bounded second drain to the final survivor, final `result_not_found`, and preserved final survivor state after the rejected drain on that dedicated mixed-queue lane
@@ -652,6 +653,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU scheduler reset config-preservation probe
 - optional bare-metal QEMU manual wait interrupt probe
 - optional bare-metal QEMU wake-queue selective probe
+- optional bare-metal QEMU wake-queue selective wrapper probes
 - optional bare-metal QEMU wake-queue selective-overflow probe
 - optional bare-metal QEMU wake-queue before-tick-overflow probe
 - optional bare-metal QEMU wake-queue before-tick wrapper probes
@@ -734,6 +736,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU interrupt filter validation
 - optional bare-metal QEMU manual wait interrupt validation
 - optional bare-metal QEMU wake-queue selective validation
+- optional bare-metal QEMU wake-queue selective wrapper validation
 - optional bare-metal QEMU wake-queue selective-overflow validation
 - optional bare-metal QEMU wake-queue before-tick-overflow validation
 - optional bare-metal QEMU wake-queue before-tick wrapper validation

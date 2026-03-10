@@ -6071,6 +6071,98 @@ test "baremetal wake queue count snapshot ptr stays live across queue mutations"
     try std.testing.expectEqual(@as(u32, 0), manual_snapshot.reason_vector_count);
 }
 
+test "baremetal wake queue selective mixed command sequence preserves telemetry" {
+    resetBaremetalRuntimeForTest();
+
+    wakeQueuePush(6001, 1, abi.wake_reason_timer, 0, 10, 1);
+    wakeQueuePush(6002, 2, abi.wake_reason_interrupt, 13, 20, 2);
+    wakeQueuePush(6003, 3, abi.wake_reason_interrupt, 13, 30, 3);
+    wakeQueuePush(6004, 4, abi.wake_reason_interrupt, 31, 40, 4);
+    wakeQueuePush(6005, 5, abi.wake_reason_manual, 0, 50, 5);
+    status.ticks = 45;
+
+    const query = oc_wake_queue_count_query_ptr();
+    query.* = .{
+        .vector = 13,
+        .reason = abi.wake_reason_interrupt,
+        .reserved0 = 0,
+        .reserved1 = 0,
+        .max_tick = 40,
+    };
+    const before = oc_wake_queue_count_snapshot_ptr().*;
+    try std.testing.expectEqual(@as(u32, 2), before.vector_count);
+    try std.testing.expectEqual(@as(u32, 4), before.before_tick_count);
+    try std.testing.expectEqual(@as(u32, 2), before.reason_vector_count);
+
+    _ = oc_submit_command(abi.command_wake_queue_pop_reason, abi.wake_reason_interrupt, 1);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 4), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 6001), oc_wake_queue_event(0).task_id);
+    try std.testing.expectEqual(@as(u32, 6003), oc_wake_queue_event(1).task_id);
+    const after_reason = oc_wake_queue_count_snapshot_ptr().*;
+    try std.testing.expectEqual(@as(u32, 1), after_reason.vector_count);
+    try std.testing.expectEqual(@as(u32, 3), after_reason.before_tick_count);
+    try std.testing.expectEqual(@as(u32, 1), after_reason.reason_vector_count);
+
+    _ = oc_submit_command(abi.command_wake_queue_pop_vector, 13, 99);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 3), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 6001), oc_wake_queue_event(0).task_id);
+    try std.testing.expectEqual(@as(u32, 6004), oc_wake_queue_event(1).task_id);
+    try std.testing.expectEqual(@as(u32, 6005), oc_wake_queue_event(2).task_id);
+    const after_vector = oc_wake_queue_count_snapshot_ptr().*;
+    try std.testing.expectEqual(@as(u32, 0), after_vector.vector_count);
+    try std.testing.expectEqual(@as(u32, 2), after_vector.before_tick_count);
+    try std.testing.expectEqual(@as(u32, 0), after_vector.reason_vector_count);
+
+    query.vector = 31;
+    query.max_tick = 55;
+    const before_reason_vector = oc_wake_queue_count_snapshot_ptr().*;
+    try std.testing.expectEqual(@as(u32, 1), before_reason_vector.vector_count);
+    try std.testing.expectEqual(@as(u32, 3), before_reason_vector.before_tick_count);
+    try std.testing.expectEqual(@as(u32, 1), before_reason_vector.reason_vector_count);
+
+    const pair_interrupt_31: u64 = @as(u64, abi.wake_reason_interrupt) | (@as(u64, 31) << 8);
+    _ = oc_submit_command(abi.command_wake_queue_pop_reason_vector, pair_interrupt_31, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 6001), oc_wake_queue_event(0).task_id);
+    try std.testing.expectEqual(@as(u32, 6005), oc_wake_queue_event(1).task_id);
+    const after_reason_vector = oc_wake_queue_count_snapshot_ptr().*;
+    try std.testing.expectEqual(@as(u32, 0), after_reason_vector.vector_count);
+    try std.testing.expectEqual(@as(u32, 2), after_reason_vector.before_tick_count);
+    try std.testing.expectEqual(@as(u32, 0), after_reason_vector.reason_vector_count);
+
+    query.vector = 0;
+    query.reason = abi.wake_reason_manual;
+    query.max_tick = 15;
+    const before_before_tick = oc_wake_queue_count_snapshot_ptr().*;
+    try std.testing.expectEqual(@as(u32, 2), before_before_tick.vector_count);
+    try std.testing.expectEqual(@as(u32, 1), before_before_tick.before_tick_count);
+    try std.testing.expectEqual(@as(u32, 1), before_before_tick.reason_vector_count);
+
+    _ = oc_submit_command(abi.command_wake_queue_pop_before_tick, 15, 99);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 6005), oc_wake_queue_event(0).task_id);
+    const after_before_tick = oc_wake_queue_count_snapshot_ptr().*;
+    try std.testing.expectEqual(@as(u32, 1), after_before_tick.vector_count);
+    try std.testing.expectEqual(@as(u32, 0), after_before_tick.before_tick_count);
+    try std.testing.expectEqual(@as(u32, 1), after_before_tick.reason_vector_count);
+
+    _ = oc_submit_command(abi.command_wake_queue_pop_reason_vector, 0, 1);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 6005), oc_wake_queue_event(0).task_id);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_manual), oc_wake_queue_event(0).reason);
+    try std.testing.expectEqual(@as(u8, 0), oc_wake_queue_event(0).vector);
+}
+
 test "baremetal scheduler priority policy favors highest priority and supports updates" {
     status.mode = abi.mode_running;
     status.ticks = 0;
