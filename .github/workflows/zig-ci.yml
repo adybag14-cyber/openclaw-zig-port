@@ -925,6 +925,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-wake-queue-selective-overflow-probe-check.ps1
 
+      - name: Bare-metal QEMU wake queue selective overflow baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-selective-overflow-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU wake queue selective overflow vector-drain probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-selective-overflow-vector-drain-probe-check.ps1
+
+      - name: Bare-metal QEMU wake queue selective overflow vector-survivors probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-selective-overflow-vector-survivors-probe-check.ps1
+
+      - name: Bare-metal QEMU wake queue selective overflow reason-vector-drain probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-selective-overflow-reason-vector-drain-probe-check.ps1
+
+      - name: Bare-metal QEMU wake queue selective overflow reason-vector-survivors probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-selective-overflow-reason-vector-survivors-probe-check.ps1
+
       - name: Bare-metal QEMU wake queue before tick overflow probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-wake-queue-before-tick-overflow-probe-check.ps1

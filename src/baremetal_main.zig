@@ -5629,6 +5629,8 @@ test "baremetal wake queue selective pop preserves order after overflow" {
     try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_overflow_count());
     try std.testing.expectEqual(@as(u32, 32), oc_wake_queue_vector_count(13));
     try std.testing.expectEqual(@as(u32, 32), oc_wake_queue_vector_count(31));
+    try std.testing.expectEqual(@as(u32, 32), oc_wake_queue_reason_vector_count(abi.wake_reason_interrupt, 13));
+    try std.testing.expectEqual(@as(u32, 32), oc_wake_queue_reason_vector_count(abi.wake_reason_interrupt, 31));
 
     _ = oc_submit_command(abi.command_wake_queue_pop_vector, 13, 31);
     oc_tick();
@@ -5639,6 +5641,8 @@ test "baremetal wake queue selective pop preserves order after overflow" {
     try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_overflow_count());
     try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_vector_count(13));
     try std.testing.expectEqual(@as(u32, 32), oc_wake_queue_vector_count(31));
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_reason_vector_count(abi.wake_reason_interrupt, 13));
+    try std.testing.expectEqual(@as(u32, 32), oc_wake_queue_reason_vector_count(abi.wake_reason_interrupt, 31));
     const first_after_vector = oc_wake_queue_event(0);
     try std.testing.expectEqual(@as(u32, 4), first_after_vector.seq);
     try std.testing.expectEqual(@as(u32, 8003), first_after_vector.task_id);
@@ -5664,6 +5668,7 @@ test "baremetal wake queue selective pop preserves order after overflow" {
     try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_vector_count(13));
     try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_reason_vector_count(abi.wake_reason_interrupt, 13));
     try std.testing.expectEqual(@as(u32, 32), oc_wake_queue_vector_count(31));
+    try std.testing.expectEqual(@as(u32, 32), oc_wake_queue_reason_vector_count(abi.wake_reason_interrupt, 31));
     const first_after_reason_vector = oc_wake_queue_event(0);
     try std.testing.expectEqual(@as(u32, 4), first_after_reason_vector.seq);
     try std.testing.expectEqual(@as(u32, 8003), first_after_reason_vector.task_id);
