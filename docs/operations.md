@@ -134,6 +134,7 @@ Recommended sequence:
 - optional bare-metal QEMU mode-history overflow clear probe (combined overflow + clear + restart proof for the mode-history ring, validating retained `seq 3 -> 66`, dedicated clear collapse, and `seq=1` restart semantics while the boot-phase ring stays intact until its own clear)
 - optional bare-metal QEMU boot-phase-history overflow clear probe (combined overflow + clear + restart proof for the boot-phase-history ring, validating retained `seq 3 -> 66`, dedicated clear collapse, and `seq=1` restart semantics while the mode ring stays intact until its own clear)
 - optional bare-metal QEMU scheduler priority budget probe (live `command_scheduler_set_default_budget` plus `command_task_set_priority` proof, including zero-budget task inheritance and dispatch-order flip under the priority scheduler against the freestanding PVH artifact)
+- optional bare-metal QEMU scheduler priority budget wrapper probes (five isolated checks over the same broad lane: baseline scheduler/task bootstrap, zero-budget default-budget inheritance, initial high-priority dominance, low-task takeover after reprioritize, and invalid-input preservation against the freestanding PVH artifact)
 - optional bare-metal QEMU scheduler default-budget invalid probe (live `command_scheduler_set_default_budget(0)` rejection with active default-budget preservation and clean zero-budget task inheritance after the rejected update against the freestanding PVH artifact)
 - optional bare-metal QEMU scheduler round-robin probe (default scheduler policy remains round-robin under live QEMU execution, rotating dispatch `1/0 -> 1/1 -> 2/1` across a lower-priority first task and higher-priority second task while budgets decrement deterministically)
 - optional bare-metal QEMU scheduler round-robin wrapper probes (five isolated checks over the same broad lane: baseline task/policy bootstrap, first-dispatch first-task-only delivery, second-dispatch rotation, third-dispatch return to the first task, and final scheduler/task-state telemetry against the freestanding PVH artifact)
@@ -377,6 +378,7 @@ Recommended sequence:
 - bare-metal optional QEMU mode-history overflow clear probe in validate stage
 - bare-metal optional QEMU boot-phase-history overflow clear probe in validate stage
 - bare-metal optional QEMU scheduler priority budget probe in validate stage
+- bare-metal optional QEMU scheduler priority budget wrapper probes in validate stage
 - bare-metal optional QEMU scheduler default-budget invalid probe in validate stage
 - bare-metal optional QEMU scheduler round-robin probe in validate stage
 - bare-metal optional QEMU scheduler round-robin wrapper probes in validate stage

@@ -372,11 +372,20 @@ set `$high_id = 0
 set `$default_budget_after_set = 0
 set `$low_budget_ticks = 0
 set `$low_budget_remaining = 0
+set `$high_budget_ticks = 0
+set `$high_budget_remaining = 0
+set `$low_priority_before = 0
+set `$high_priority_before = 0
 set `$high_run_before = 0
 set `$low_run_before = 0
 set `$low_priority_after = 0
 set `$low_run_after = 0
 set `$high_run_after = 0
+set `$invalid_policy_result = 0
+set `$policy_after_invalid = 0
+set `$invalid_task_result = 0
+set `$low_priority_after_invalid = 0
+set `$task_count_after_invalid = 0
 file $artifactForGdb
 handle SIGQUIT nostop noprint pass
 target remote :$GdbPort
@@ -440,6 +449,7 @@ if `$stage == 5
     set `$low_id = *(unsigned int*)(0x$schedulerTasksAddress+$taskIdOffset)
     set `$low_budget_ticks = *(unsigned int*)(0x$schedulerTasksAddress+$taskBudgetOffset)
     set `$low_budget_remaining = *(unsigned int*)(0x$schedulerTasksAddress+$taskBudgetRemainingOffset)
+    set `$low_priority_before = *(unsigned char*)(0x$schedulerTasksAddress+$taskPriorityOffset)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $taskCreateOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 6
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = $highTaskBudget
@@ -451,6 +461,9 @@ end
 if `$stage == 6
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 6 && *(unsigned int*)(0x$schedulerTasksAddress+$taskStride+$taskIdOffset) != 0
     set `$high_id = *(unsigned int*)(0x$schedulerTasksAddress+$taskStride+$taskIdOffset)
+    set `$high_budget_ticks = *(unsigned int*)(0x$schedulerTasksAddress+$taskStride+$taskBudgetOffset)
+    set `$high_budget_remaining = *(unsigned int*)(0x$schedulerTasksAddress+$taskStride+$taskBudgetRemainingOffset)
+    set `$high_priority_before = *(unsigned char*)(0x$schedulerTasksAddress+$taskStride+$taskPriorityOffset)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $schedulerSetPolicyOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 7
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = $schedulerPriorityPolicy
@@ -486,7 +499,32 @@ if `$stage == 9
     set `$low_priority_after = *(unsigned char*)(0x$schedulerTasksAddress+$taskPriorityOffset)
     set `$low_run_after = *(unsigned int*)(0x$schedulerTasksAddress+$taskRunCountOffset)
     set `$high_run_after = *(unsigned int*)(0x$schedulerTasksAddress+$taskStride+$taskRunCountOffset)
+    set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $schedulerSetPolicyOpcode
+    set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 10
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = 9
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg1Offset) = 0
     set `$stage = 10
+  end
+  continue
+end
+if `$stage == 10
+  if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 10
+    set `$invalid_policy_result = *(short*)(0x$statusAddress+$statusLastCommandResultOffset)
+    set `$policy_after_invalid = *(unsigned char*)(0x$schedulerPolicyAddress)
+    set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $taskSetPriorityOpcode
+    set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 11
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = 99999
+    set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg1Offset) = 3
+    set `$stage = 11
+  end
+  continue
+end
+if `$stage == 11
+  if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 11
+    set `$invalid_task_result = *(short*)(0x$statusAddress+$statusLastCommandResultOffset)
+    set `$low_priority_after_invalid = *(unsigned char*)(0x$schedulerTasksAddress+$taskPriorityOffset)
+    set `$task_count_after_invalid = *(unsigned char*)(0x$schedulerStateAddress+$schedulerTaskCountOffset)
+    set `$stage = 12
   end
   continue
 end
@@ -498,8 +536,12 @@ printf "TICKS=%llu\n", *(unsigned long long*)(0x$statusAddress+$statusTicksOffse
 printf "DEFAULT_BUDGET=%u\n", `$default_budget_after_set
 printf "LOW_ID=%u\n", `$low_id
 printf "HIGH_ID=%u\n", `$high_id
+printf "LOW_PRIORITY_BEFORE=%u\n", `$low_priority_before
+printf "HIGH_PRIORITY_BEFORE=%u\n", `$high_priority_before
 printf "LOW_BUDGET_TICKS=%u\n", `$low_budget_ticks
 printf "LOW_BUDGET_REMAINING=%u\n", `$low_budget_remaining
+printf "HIGH_BUDGET_TICKS=%u\n", `$high_budget_ticks
+printf "HIGH_BUDGET_REMAINING=%u\n", `$high_budget_remaining
 printf "TASK_COUNT=%u\n", *(unsigned char*)(0x$schedulerStateAddress+$schedulerTaskCountOffset)
 printf "DISPATCH_COUNT=%llu\n", *(unsigned long long*)(0x$schedulerStateAddress+$schedulerDispatchCountOffset)
 printf "POLICY=%u\n", *(unsigned char*)(0x$schedulerPolicyAddress)
@@ -510,6 +552,11 @@ printf "LOW_RUN_AFTER=%u\n", `$low_run_after
 printf "HIGH_STATE=%u\n", *(unsigned char*)(0x$schedulerTasksAddress+$taskStride+$taskStateOffset)
 printf "HIGH_RUN_BEFORE=%u\n", `$high_run_before
 printf "HIGH_RUN_AFTER=%u\n", `$high_run_after
+printf "INVALID_POLICY_RESULT=%d\n", `$invalid_policy_result
+printf "POLICY_AFTER_INVALID=%u\n", `$policy_after_invalid
+printf "INVALID_TASK_RESULT=%d\n", `$invalid_task_result
+printf "LOW_PRIORITY_AFTER_INVALID=%u\n", `$low_priority_after_invalid
+printf "TASK_COUNT_AFTER_INVALID=%u\n", `$task_count_after_invalid
 quit
 end
 continue
@@ -583,8 +630,12 @@ $ticks = Extract-IntValue -Text $gdbOutput -Name "TICKS"
 $defaultBudgetActual = Extract-IntValue -Text $gdbOutput -Name "DEFAULT_BUDGET"
 $lowId = Extract-IntValue -Text $gdbOutput -Name "LOW_ID"
 $highId = Extract-IntValue -Text $gdbOutput -Name "HIGH_ID"
+$lowPriorityBefore = Extract-IntValue -Text $gdbOutput -Name "LOW_PRIORITY_BEFORE"
+$highPriorityBefore = Extract-IntValue -Text $gdbOutput -Name "HIGH_PRIORITY_BEFORE"
 $lowBudgetTicks = Extract-IntValue -Text $gdbOutput -Name "LOW_BUDGET_TICKS"
 $lowBudgetRemaining = Extract-IntValue -Text $gdbOutput -Name "LOW_BUDGET_REMAINING"
+$highBudgetTicks = Extract-IntValue -Text $gdbOutput -Name "HIGH_BUDGET_TICKS"
+$highBudgetRemaining = Extract-IntValue -Text $gdbOutput -Name "HIGH_BUDGET_REMAINING"
 $taskCount = Extract-IntValue -Text $gdbOutput -Name "TASK_COUNT"
 $dispatchCount = Extract-IntValue -Text $gdbOutput -Name "DISPATCH_COUNT"
 $policy = Extract-IntValue -Text $gdbOutput -Name "POLICY"
@@ -595,17 +646,26 @@ $lowRunAfter = Extract-IntValue -Text $gdbOutput -Name "LOW_RUN_AFTER"
 $highState = Extract-IntValue -Text $gdbOutput -Name "HIGH_STATE"
 $highRunBefore = Extract-IntValue -Text $gdbOutput -Name "HIGH_RUN_BEFORE"
 $highRunAfter = Extract-IntValue -Text $gdbOutput -Name "HIGH_RUN_AFTER"
+$invalidPolicyResult = Extract-IntValue -Text $gdbOutput -Name "INVALID_POLICY_RESULT"
+$policyAfterInvalid = Extract-IntValue -Text $gdbOutput -Name "POLICY_AFTER_INVALID"
+$invalidTaskResult = Extract-IntValue -Text $gdbOutput -Name "INVALID_TASK_RESULT"
+$lowPriorityAfterInvalid = Extract-IntValue -Text $gdbOutput -Name "LOW_PRIORITY_AFTER_INVALID"
+$taskCountAfterInvalid = Extract-IntValue -Text $gdbOutput -Name "TASK_COUNT_AFTER_INVALID"
 
-if ($ack -ne 9) { throw "Expected ACK=9, got $ack" }
+if ($ack -ne 11) { throw "Expected ACK=11, got $ack" }
 if ($lastOpcode -ne $taskSetPriorityOpcode) { throw "Expected LAST_OPCODE=$taskSetPriorityOpcode, got $lastOpcode" }
-if ($lastResult -ne $resultOk) { throw "Expected LAST_RESULT=$resultOk, got $lastResult" }
-if ($ticks -lt 8) { throw "Expected TICKS >= 8, got $ticks" }
+if ($lastResult -ne -2) { throw "Expected LAST_RESULT=-2, got $lastResult" }
+if ($ticks -lt 10) { throw "Expected TICKS >= 10, got $ticks" }
 if ($defaultBudgetActual -ne $defaultBudget) { throw "Expected DEFAULT_BUDGET=$defaultBudget, got $defaultBudgetActual" }
 if ($lowId -le 0) { throw "Expected LOW_ID > 0, got $lowId" }
 if ($highId -le 0) { throw "Expected HIGH_ID > 0, got $highId" }
 if ($highId -le $lowId) { throw "Expected HIGH_ID > LOW_ID, got LOW_ID=$lowId HIGH_ID=$highId" }
+if ($lowPriorityBefore -ne $lowTaskPriority) { throw "Expected LOW_PRIORITY_BEFORE=$lowTaskPriority, got $lowPriorityBefore" }
+if ($highPriorityBefore -ne $highTaskPriority) { throw "Expected HIGH_PRIORITY_BEFORE=$highTaskPriority, got $highPriorityBefore" }
 if ($lowBudgetTicks -ne $defaultBudget) { throw "Expected LOW_BUDGET_TICKS=$defaultBudget, got $lowBudgetTicks" }
 if ($lowBudgetRemaining -ne $defaultBudget) { throw "Expected LOW_BUDGET_REMAINING=$defaultBudget, got $lowBudgetRemaining" }
+if ($highBudgetTicks -ne $highTaskBudget) { throw "Expected HIGH_BUDGET_TICKS=$highTaskBudget, got $highBudgetTicks" }
+if ($highBudgetRemaining -ne $highTaskBudget) { throw "Expected HIGH_BUDGET_REMAINING=$highTaskBudget, got $highBudgetRemaining" }
 if ($taskCount -ne 2) { throw "Expected TASK_COUNT=2, got $taskCount" }
 if ($dispatchCount -lt 2) { throw "Expected DISPATCH_COUNT >= 2, got $dispatchCount" }
 if ($policy -ne $schedulerPriorityPolicy) { throw "Expected POLICY=$schedulerPriorityPolicy, got $policy" }
@@ -616,6 +676,11 @@ if ($lowRunAfter -lt 1) { throw "Expected LOW_RUN_AFTER >= 1, got $lowRunAfter" 
 if ($highState -ne $taskStateReady) { throw "Expected HIGH_STATE=$taskStateReady, got $highState" }
 if ($highRunBefore -lt 1) { throw "Expected HIGH_RUN_BEFORE >= 1, got $highRunBefore" }
 if ($highRunAfter -lt $highRunBefore) { throw "Expected HIGH_RUN_AFTER >= HIGH_RUN_BEFORE, got HIGH_RUN_AFTER=$highRunAfter HIGH_RUN_BEFORE=$highRunBefore" }
+if ($invalidPolicyResult -ne -22) { throw "Expected INVALID_POLICY_RESULT=-22, got $invalidPolicyResult" }
+if ($policyAfterInvalid -ne $schedulerPriorityPolicy) { throw "Expected POLICY_AFTER_INVALID=$schedulerPriorityPolicy, got $policyAfterInvalid" }
+if ($invalidTaskResult -ne -2) { throw "Expected INVALID_TASK_RESULT=-2, got $invalidTaskResult" }
+if ($lowPriorityAfterInvalid -ne $reprioritizedLowPriority) { throw "Expected LOW_PRIORITY_AFTER_INVALID=$reprioritizedLowPriority, got $lowPriorityAfterInvalid" }
+if ($taskCountAfterInvalid -ne 2) { throw "Expected TASK_COUNT_AFTER_INVALID=2, got $taskCountAfterInvalid" }
 
 Write-Output "BAREMETAL_QEMU_AVAILABLE=True"
 Write-Output "BAREMETAL_QEMU_BINARY=$qemu"
@@ -630,12 +695,24 @@ Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_TICKS=$ticks"
 Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_DEFAULT_BUDGET=$defaultBudgetActual"
 Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_LOW_ID=$lowId"
 Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_HIGH_ID=$highId"
+Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_LOW_PRIORITY_BEFORE=$lowPriorityBefore"
+Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_HIGH_PRIORITY_BEFORE=$highPriorityBefore"
 Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_LOW_BUDGET_TICKS=$lowBudgetTicks"
 Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_LOW_BUDGET_REMAINING=$lowBudgetRemaining"
+Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_HIGH_BUDGET_TICKS=$highBudgetTicks"
+Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_HIGH_BUDGET_REMAINING=$highBudgetRemaining"
+Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_TASK_COUNT=$taskCount"
 Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_DISPATCH_COUNT=$dispatchCount"
 Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_POLICY=$policy"
+Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_LOW_STATE=$lowState"
 Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_LOW_RUN_BEFORE=$lowRunBefore"
 Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_LOW_RUN_AFTER=$lowRunAfter"
+Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_HIGH_STATE=$highState"
 Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_HIGH_RUN_BEFORE=$highRunBefore"
 Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_HIGH_RUN_AFTER=$highRunAfter"
 Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_LOW_PRIORITY_AFTER=$lowPriorityAfter"
+Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_INVALID_POLICY_RESULT=$invalidPolicyResult"
+Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_POLICY_AFTER_INVALID=$policyAfterInvalid"
+Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_INVALID_TASK_RESULT=$invalidTaskResult"
+Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_LOW_PRIORITY_AFTER_INVALID=$lowPriorityAfterInvalid"
+Write-Output "BAREMETAL_QEMU_SCHEDULER_PRIORITY_BUDGET_TASK_COUNT_AFTER_INVALID=$taskCountAfterInvalid"

@@ -5966,13 +5966,21 @@ test "baremetal scheduler priority policy favors highest priority and supports u
 
     _ = oc_submit_command(abi.command_scheduler_disable, 0, 0);
     oc_tick();
-    _ = oc_submit_command(abi.command_task_create, 6, 1); // low
+    _ = oc_submit_command(abi.command_scheduler_set_default_budget, 9, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 9), oc_scheduler_state_ptr().default_budget_ticks);
+    _ = oc_submit_command(abi.command_task_create, 0, 1); // low uses default budget
     oc_tick();
     const low_id = oc_scheduler_task(0).task_id;
+    try std.testing.expectEqual(@as(u32, 9), oc_scheduler_task(0).budget_ticks);
+    try std.testing.expectEqual(@as(u32, 9), oc_scheduler_task(0).budget_remaining);
     _ = oc_submit_command(abi.command_task_create, 6, 9); // high
     oc_tick();
     const high_id = oc_scheduler_task(1).task_id;
     try std.testing.expect(low_id != 0 and high_id != 0);
+    try std.testing.expectEqual(@as(u32, 6), oc_scheduler_task(1).budget_ticks);
+    try std.testing.expectEqual(@as(u32, 6), oc_scheduler_task(1).budget_remaining);
 
     _ = oc_submit_command(abi.command_scheduler_set_policy, abi.scheduler_policy_priority, 0);
     oc_tick();
@@ -5985,6 +5993,9 @@ test "baremetal scheduler priority policy favors highest priority and supports u
     var high_task = oc_scheduler_task(1);
     try std.testing.expectEqual(@as(u32, 0), low_task.run_count);
     try std.testing.expectEqual(@as(u32, 1), high_task.run_count);
+    try std.testing.expectEqual(@as(u8, 1), low_task.priority);
+    try std.testing.expectEqual(@as(u8, 9), high_task.priority);
+    const high_run_before = high_task.run_count;
 
     _ = oc_submit_command(abi.command_task_set_priority, low_id, 15);
     oc_tick();
@@ -5993,14 +6004,24 @@ test "baremetal scheduler priority policy favors highest priority and supports u
     high_task = oc_scheduler_task(1);
     try std.testing.expect(low_task.run_count >= 1);
     try std.testing.expectEqual(@as(u8, 15), low_task.priority);
+    try std.testing.expect(high_task.run_count >= high_run_before);
 
     _ = oc_submit_command(abi.command_scheduler_set_policy, 9, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+    try std.testing.expectEqual(@as(u8, abi.scheduler_policy_priority), oc_scheduler_policy());
+    try std.testing.expectEqual(@as(u8, 15), oc_scheduler_task(0).priority);
 
     _ = oc_submit_command(abi.command_task_set_priority, 99999, 3);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_not_found), status.last_command_result);
+    low_task = oc_scheduler_task(0);
+    high_task = oc_scheduler_task(1);
+    try std.testing.expectEqual(@as(u8, abi.scheduler_policy_priority), oc_scheduler_policy());
+    try std.testing.expectEqual(@as(u8, 15), low_task.priority);
+    try std.testing.expectEqual(@as(u32, 2), scheduler_state.task_count);
+    try std.testing.expectEqual(@as(u8, abi.task_state_ready), low_task.state);
+    try std.testing.expectEqual(@as(u8, abi.task_state_ready), high_task.state);
 }
 
 test "baremetal scheduler default round robin dispatch remains stable" {

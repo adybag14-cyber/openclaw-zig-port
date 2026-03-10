@@ -355,6 +355,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-priority-budget-probe-check.ps1
 
+      - name: Bare-metal QEMU scheduler priority budget baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-priority-budget-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler priority budget default-budget inheritance probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-priority-budget-default-budget-inheritance-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler priority budget priority-dominance probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-priority-budget-priority-dominance-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler priority budget reprioritize-low probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-priority-budget-reprioritize-low-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler priority budget invalid-preserve probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-priority-budget-invalid-preserve-probe-check.ps1
+
       - name: Bare-metal QEMU scheduler default-budget invalid probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-default-budget-invalid-probe-check.ps1
