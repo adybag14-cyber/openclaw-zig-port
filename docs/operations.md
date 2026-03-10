@@ -4,7 +4,7 @@
 
 - Latest published edge release: `v0.2.0-zig-edge.27`
 - Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `106/106` passing
-- Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=170`, `ZIG_EVENTS_COUNT=19`
+- Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=172`, `ZIG_EVENTS_COUNT=19`
 - Current head: `main + FS6 bare-metal wrapper coverage batches`
 - Toolchain lane: Codeberg `master` is canonical; `adybag14-cyber/zig` is the Windows release mirror with rolling `latest-master` plus immutable `upstream-<sha>` releases.
 - Latest CI:
@@ -493,4 +493,5 @@ Policy:
 - Use Codeberg `master` as the canonical freshness target.
 - Use `adybag14-cyber/zig` `latest-master` when the goal is a fast Windows toolchain refresh.
 - Use `adybag14-cyber/zig` `upstream-<sha>` when the goal is reproducible CI, bisects, or release recreation.
+
 

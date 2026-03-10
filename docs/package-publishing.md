@@ -8,9 +8,9 @@ This repo ships three package-consumption paths for the Zig RPC client surfaces:
 
 ## Current Edge Release
 
-- GitHub prerelease tag: `v0.2.0-zig-edge.26`
-- npm package version: `0.2.0-zig-edge.26`
-- Python package version: `0.2.0.dev26`
+- GitHub prerelease tag: `v0.2.0-zig-edge.28`
+- npm package version: `0.2.0-zig-edge.28`
+- Python package version: `0.2.0.dev28`
 
 ## Install Paths
 
@@ -19,13 +19,13 @@ This repo ships three package-consumption paths for the Zig RPC client surfaces:
 Preferred when npmjs is configured:
 
 ```bash
-npm install @adybag14-cyber/openclaw-zig-rpc-client@0.2.0-zig-edge.26
+npm install @adybag14-cyber/openclaw-zig-rpc-client@0.2.0-zig-edge.28
 ```
 
 Fallback from the GitHub release tarball:
 
 ```bash
-npm install "https://github.com/adybag14-cyber/openclaw-zig-port/releases/download/v0.2.0-zig-edge.26/adybag14-cyber-openclaw-zig-rpc-client-0.2.0-zig-edge.26.tgz"
+npm install "https://github.com/adybag14-cyber/openclaw-zig-port/releases/download/v0.2.0-zig-edge.28/adybag14-cyber-openclaw-zig-rpc-client-0.2.0-zig-edge.28.tgz"
 ```
 
 ### pip
@@ -33,13 +33,13 @@ npm install "https://github.com/adybag14-cyber/openclaw-zig-port/releases/downlo
 Preferred when PyPI is configured:
 
 ```bash
-pip install openclaw-zig-rpc-client==0.2.0.dev26
+pip install openclaw-zig-rpc-client==0.2.0.dev28
 ```
 
 Fallback from the GitHub release wheel:
 
 ```bash
-pip install "https://github.com/adybag14-cyber/openclaw-zig-port/releases/download/v0.2.0-zig-edge.26/openclaw_zig_rpc_client-0.2.0.dev26-py3-none-any.whl"
+pip install "https://github.com/adybag14-cyber/openclaw-zig-port/releases/download/v0.2.0-zig-edge.28/openclaw_zig_rpc_client-0.2.0.dev28-py3-none-any.whl"
 ```
 
 ### uvx
@@ -53,7 +53,7 @@ uvx --from openclaw-zig-rpc-client openclaw-zig-rpc health --base-url http://127
 Git fallback verified locally against the release tag:
 
 ```bash
-uvx --from "git+https://github.com/adybag14-cyber/openclaw-zig-port@v0.2.0-zig-edge.26#subdirectory=python/openclaw-zig-rpc-client" openclaw-zig-rpc health --base-url http://127.0.0.1:8080
+uvx --from "git+https://github.com/adybag14-cyber/openclaw-zig-port@v0.2.0-zig-edge.28#subdirectory=python/openclaw-zig-rpc-client" openclaw-zig-rpc health --base-url http://127.0.0.1:8080
 ```
 
 ## Registry Configuration Requirements
@@ -67,7 +67,7 @@ The workflow supports two public-publish paths:
 
 If neither public path succeeds, the workflow falls back to GitHub Packages and still attaches the tarball to the GitHub release.
 
-Current blocker observed during `v0.2.0-zig-edge.26`:
+Current blocker observed during `v0.2.0-zig-edge.28`:
 
 - npmjs trusted publishing reached npmjs and emitted signed provenance
 - npmjs then returned `404 Not Found` for `@adybag14-cyber/openclaw-zig-rpc-client`
@@ -90,7 +90,7 @@ The workflow supports two public-publish paths:
 
 If neither public path succeeds, the workflow still attaches the wheel and sdist to the GitHub release.
 
-Current blocker observed during `v0.2.0-zig-edge.26`:
+Current blocker observed during `v0.2.0-zig-edge.28`:
 
 - trusted publishing failed with `invalid-publisher`
 
@@ -140,11 +140,11 @@ Local/operator check:
 
 ```powershell
 pwsh ./scripts/package-registry-status.ps1 `
-  -ReleaseTag v0.2.0-zig-edge.26 `
+  -ReleaseTag v0.2.0-zig-edge.28 `
   -NpmPackageName @adybag14-cyber/openclaw-zig-rpc-client `
-  -NpmVersion 0.2.0-zig-edge.26 `
+  -NpmVersion 0.2.0-zig-edge.28 `
   -PythonPackageName openclaw-zig-rpc-client `
-  -PythonVersion 0.2.0.dev26 `
+  -PythonVersion 0.2.0.dev28 `
   -OutputJsonPath ./release/package-registry-status.json
 ```
 
@@ -161,7 +161,7 @@ Local/operator snapshot:
 
 ```powershell
 pwsh ./scripts/release-status.ps1 `
-  -ReleaseTag v0.2.0-zig-edge.26 `
+  -ReleaseTag v0.2.0-zig-edge.28 `
   -OutputJsonPath ./release/release-status.json `
   -OutputMarkdownPath ./release/release-status.md
 ```
@@ -179,3 +179,4 @@ This emits:
 ## Operator Rule
 
 For edge releases, GitHub release assets are the source of truth when public registries are not yet configured. Do not block a validated edge cut on registry-side configuration drift.
+

@@ -424,6 +424,21 @@ const CompatNodeEvent = struct {
     }
 };
 
+const CompatPendingNodeAction = struct {
+    action_id: []u8,
+    node_id: []u8,
+    command: []u8,
+    params_json: ?[]u8,
+    enqueued_at_ms: i64,
+
+    fn deinit(self: *CompatPendingNodeAction, allocator: std.mem.Allocator) void {
+        allocator.free(self.action_id);
+        allocator.free(self.node_id);
+        allocator.free(self.command);
+        if (self.params_json) |value| allocator.free(value);
+    }
+};
+
 const CompatNodeApproval = struct {
     node_id: []u8,
     mode: []u8,
@@ -484,6 +499,9 @@ const PersistedSessionChannel = struct {
     channel: []const u8,
     updatedAtMs: i64,
 };
+
+const compat_pending_node_action_ttl_ms: i64 = 10 * 60 * 1000;
+const compat_pending_node_action_max_per_node: usize = 64;
 
 const PersistedCompatState = struct {
     heartbeatEnabled: bool = true,
@@ -615,6 +633,8 @@ const CompatState = struct {
     node_pairs: std.ArrayList(CompatNodePair),
     nodes: std.ArrayList(CompatNode),
     node_events: std.ArrayList(CompatNodeEvent),
+    next_pending_node_action_id: u64,
+    pending_node_actions: std.ArrayList(CompatPendingNodeAction),
     next_approval_id: u64,
     global_approval_mode: []u8,
     global_approval_updated_at_ms: i64,
@@ -716,6 +736,8 @@ const CompatState = struct {
             .node_pairs = .empty,
             .nodes = .empty,
             .node_events = .empty,
+            .next_pending_node_action_id = 1,
+            .pending_node_actions = .empty,
             .next_approval_id = 1,
             .global_approval_mode = try allocator.dupe(u8, "prompt"),
             .global_approval_updated_at_ms = now,
@@ -799,6 +821,8 @@ const CompatState = struct {
         self.nodes.deinit(self.allocator);
         for (self.node_events.items) |*entry| entry.deinit(self.allocator);
         self.node_events.deinit(self.allocator);
+        for (self.pending_node_actions.items) |*entry| entry.deinit(self.allocator);
+        self.pending_node_actions.deinit(self.allocator);
         self.allocator.free(self.global_approval_mode);
         for (self.node_approvals.items) |*entry| entry.deinit(self.allocator);
         self.node_approvals.deinit(self.allocator);
@@ -2117,6 +2141,95 @@ const CompatState = struct {
         });
         trimFrontOwnedList(CompatNodeEvent, self.allocator, &self.node_events, 256);
         return self.node_events.items[self.node_events.items.len - 1];
+    }
+
+    fn prunePendingNodeActions(self: *CompatState, node_id: []const u8) void {
+        const normalized_node_id = std.mem.trim(u8, node_id, " \t\r\n");
+        const min_enqueued_at_ms = time_util.nowMs() - compat_pending_node_action_ttl_ms;
+        var kept_for_node: usize = 0;
+        var write_idx: usize = 0;
+        for (self.pending_node_actions.items, 0..) |entry, read_idx| {
+            const keep = entry.enqueued_at_ms >= min_enqueued_at_ms and
+                (!std.ascii.eqlIgnoreCase(entry.node_id, normalized_node_id) or blk: {
+                    const keep_entry = kept_for_node < compat_pending_node_action_max_per_node;
+                    if (keep_entry) kept_for_node += 1;
+                    break :blk keep_entry;
+                });
+            if (!keep) {
+                var doomed = self.pending_node_actions.items[read_idx];
+                doomed.deinit(self.allocator);
+                continue;
+            }
+            if (write_idx != read_idx) {
+                self.pending_node_actions.items[write_idx] = self.pending_node_actions.items[read_idx];
+            }
+            write_idx += 1;
+        }
+        self.pending_node_actions.items.len = write_idx;
+    }
+
+    fn enqueuePendingNodeAction(
+        self: *CompatState,
+        node_id: []const u8,
+        command: []const u8,
+        params_json: ?[]const u8,
+    ) !CompatPendingNodeAction {
+        try self.ensureLocalNode();
+        const normalized_node_id = std.mem.trim(u8, node_id, " \t\r\n");
+        const normalized_command = std.mem.trim(u8, command, " \t\r\n");
+        if (normalized_node_id.len == 0 or normalized_command.len == 0) return error.InvalidPendingNodeAction;
+        self.prunePendingNodeActions(normalized_node_id);
+        const action_id = try std.fmt.allocPrint(self.allocator, "pending-node-action-{d:0>6}", .{self.next_pending_node_action_id});
+        self.next_pending_node_action_id += 1;
+        try self.pending_node_actions.append(self.allocator, .{
+            .action_id = action_id,
+            .node_id = try self.allocator.dupe(u8, normalized_node_id),
+            .command = try self.allocator.dupe(u8, normalized_command),
+            .params_json = if (params_json) |value| try self.allocator.dupe(u8, value) else null,
+            .enqueued_at_ms = time_util.nowMs(),
+        });
+        self.prunePendingNodeActions(normalized_node_id);
+        return self.pending_node_actions.items[self.pending_node_actions.items.len - 1];
+    }
+
+    fn ackPendingNodeActions(self: *CompatState, node_id: []const u8, ids: []const []const u8) usize {
+        const normalized_node_id = std.mem.trim(u8, node_id, " \t\r\n");
+        self.prunePendingNodeActions(normalized_node_id);
+        var acked_count: usize = 0;
+        var write_idx: usize = 0;
+        for (self.pending_node_actions.items, 0..) |entry, read_idx| {
+            var should_remove = false;
+            if (std.ascii.eqlIgnoreCase(entry.node_id, normalized_node_id)) {
+                for (ids) |id| {
+                    if (std.ascii.eqlIgnoreCase(entry.action_id, id)) {
+                        should_remove = true;
+                        break;
+                    }
+                }
+            }
+            if (should_remove) {
+                acked_count += 1;
+                var doomed = self.pending_node_actions.items[read_idx];
+                doomed.deinit(self.allocator);
+                continue;
+            }
+            if (write_idx != read_idx) {
+                self.pending_node_actions.items[write_idx] = self.pending_node_actions.items[read_idx];
+            }
+            write_idx += 1;
+        }
+        self.pending_node_actions.items.len = write_idx;
+        return acked_count;
+    }
+
+    fn countPendingNodeActions(self: *CompatState, node_id: []const u8) usize {
+        const normalized_node_id = std.mem.trim(u8, node_id, " \t\r\n");
+        self.prunePendingNodeActions(normalized_node_id);
+        var count: usize = 0;
+        for (self.pending_node_actions.items) |entry| {
+            if (std.ascii.eqlIgnoreCase(entry.node_id, normalized_node_id)) count += 1;
+        }
+        return count;
     }
 
     fn findNodeApprovalIndex(self: *const CompatState, node_id: []const u8) ?usize {
@@ -3808,6 +3921,95 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                 .canvasHostUrl = node.canvas_host_url,
                 .canvasBaseHostUrl = node.canvas_base_host_url,
             },
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "node.pending.pull")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const node_id = firstParamString(params, "nodeId", "node-local");
+        if (std.mem.trim(u8, node_id, " \t\r\n").len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "missing nodeId",
+            });
+        }
+        const compat = try getCompatState();
+        try compat.ensureLocalNode();
+        compat.prunePendingNodeActions(node_id);
+        const PendingActionView = struct {
+            id: []const u8,
+            command: []const u8,
+            paramsJSON: ?[]const u8,
+            enqueuedAtMs: i64,
+        };
+        var actions: std.ArrayList(PendingActionView) = .empty;
+        defer actions.deinit(allocator);
+        for (compat.pending_node_actions.items) |entry| {
+            if (!std.ascii.eqlIgnoreCase(entry.node_id, node_id)) continue;
+            try actions.append(allocator, .{
+                .id = entry.action_id,
+                .command = entry.command,
+                .paramsJSON = entry.params_json,
+                .enqueuedAtMs = entry.enqueued_at_ms,
+            });
+        }
+        return protocol.encodeResult(allocator, req.id, .{
+            .nodeId = node_id,
+            .actions = actions.items,
+        });
+    }
+
+    if (std.ascii.eqlIgnoreCase(req.method, "node.pending.ack")) {
+        var parsed = try std.json.parseFromSlice(std.json.Value, allocator, frame_json, .{});
+        defer parsed.deinit();
+        const params = getParamsObjectOrNull(parsed.value);
+        const node_id = firstParamString(params, "nodeId", "node-local");
+        if (std.mem.trim(u8, node_id, " \t\r\n").len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "missing nodeId",
+            });
+        }
+        const ids_value = if (params) |obj| obj.get("ids") else null;
+        if (ids_value == null or ids_value.? != .array or ids_value.?.array.items.len == 0) {
+            return protocol.encodeError(allocator, req.id, .{
+                .code = -32602,
+                .message = "missing ids",
+            });
+        }
+        var acked_ids: std.ArrayList([]const u8) = .empty;
+        defer acked_ids.deinit(allocator);
+        for (ids_value.?.array.items) |entry| {
+            if (entry != .string) {
+                return protocol.encodeError(allocator, req.id, .{
+                    .code = -32602,
+                    .message = "invalid ids",
+                });
+            }
+            const trimmed = std.mem.trim(u8, entry.string, " \t\r\n");
+            if (trimmed.len == 0) {
+                return protocol.encodeError(allocator, req.id, .{
+                    .code = -32602,
+                    .message = "invalid ids",
+                });
+            }
+            var duplicate = false;
+            for (acked_ids.items) |existing| {
+                if (std.ascii.eqlIgnoreCase(existing, trimmed)) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate) try acked_ids.append(allocator, trimmed);
+        }
+        const compat = try getCompatState();
+        _ = compat.ackPendingNodeActions(node_id, acked_ids.items);
+        return protocol.encodeResult(allocator, req.id, .{
+            .nodeId = node_id,
+            .ackedIds = acked_ids.items,
+            .remainingCount = compat.countPendingNodeActions(node_id),
         });
     }
 
@@ -8762,6 +8964,8 @@ fn shouldEnforceGuard(method: []const u8) bool {
     if (std.ascii.eqlIgnoreCase(method, "node.rename")) return false;
     if (std.ascii.eqlIgnoreCase(method, "node.list")) return false;
     if (std.ascii.eqlIgnoreCase(method, "node.describe")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "node.pending.pull")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "node.pending.ack")) return false;
     if (std.ascii.eqlIgnoreCase(method, "node.invoke")) return false;
     if (std.ascii.eqlIgnoreCase(method, "node.invoke.result")) return false;
     if (std.ascii.eqlIgnoreCase(method, "node.event")) return false;
@@ -15371,6 +15575,47 @@ test "dispatch compat node methods return contracts" {
     const described = try dispatch(allocator, describe_frame);
     defer allocator.free(described);
     try std.testing.expect(std.mem.indexOf(u8, described, "\"node\"") != null);
+
+    const compat = try getCompatState();
+    _ = try compat.enqueuePendingNodeAction(node_id, "canvas.present", "{\"route\":\"/debug\"}");
+    _ = try compat.enqueuePendingNodeAction(node_id, "agent", "{\"message\":\"hello node\"}");
+
+    const pending_pull_frame = try encodeFrame(allocator, "compat-node-pending-pull", "node.pending.pull", .{
+        .nodeId = node_id,
+    });
+    defer allocator.free(pending_pull_frame);
+    const pending_pull = try dispatch(allocator, pending_pull_frame);
+    defer allocator.free(pending_pull);
+    try std.testing.expect(std.mem.indexOf(u8, pending_pull, "\"actions\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, pending_pull, "\"canvas.present\"") != null);
+    var pending_pull_parsed = try std.json.parseFromSlice(std.json.Value, allocator, pending_pull, .{});
+    defer pending_pull_parsed.deinit();
+    const pending_pull_result = pending_pull_parsed.value.object.get("result").?;
+    const pending_pull_actions = pending_pull_result.object.get("actions").?;
+    try std.testing.expect(pending_pull_actions == .array);
+    try std.testing.expect(pending_pull_actions.array.items.len == 2);
+    try std.testing.expect(pending_pull_actions.array.items[0] == .object);
+    const pending_action_id = pending_pull_actions.array.items[0].object.get("id").?.string;
+
+    const pending_ack_frame = try encodeFrame(allocator, "compat-node-pending-ack", "node.pending.ack", .{
+        .nodeId = node_id,
+        .ids = .{ pending_action_id, pending_action_id },
+    });
+    defer allocator.free(pending_ack_frame);
+    const pending_ack = try dispatch(allocator, pending_ack_frame);
+    defer allocator.free(pending_ack);
+    try std.testing.expect(std.mem.indexOf(u8, pending_ack, "\"ackedIds\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, pending_ack, "\"remainingCount\":1") != null);
+
+    const pending_pull_after_ack = try dispatch(allocator, pending_pull_frame);
+    defer allocator.free(pending_pull_after_ack);
+    try std.testing.expect(std.mem.indexOf(u8, pending_pull_after_ack, "\"canvas.present\"") == null);
+    try std.testing.expect(std.mem.indexOf(u8, pending_pull_after_ack, "\"agent\"") != null);
+
+    const pending_ack_invalid = try dispatch(allocator, "{\"id\":\"compat-node-pending-ack-invalid\",\"method\":\"node.pending.ack\",\"params\":{\"nodeId\":\"node-local\",\"ids\":[]}}");
+    defer allocator.free(pending_ack_invalid);
+    try std.testing.expect(std.mem.indexOf(u8, pending_ack_invalid, "\"error\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, pending_ack_invalid, "missing ids") != null);
 
     const invoke_frame = try encodeFrame(allocator, "compat-node-invoke", "node.invoke", .{
         .nodeId = node_id,

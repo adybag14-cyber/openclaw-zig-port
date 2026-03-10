@@ -58,7 +58,7 @@ Full-stack replacement execution reference:
 
 - Note: historical milestone bullets below retain their original validation counts at the time they were logged; current project-wide test gate is `203/203`.
 - Release/package lane status (2026-03-06):
-  - GitHub prerelease `v0.2.0-zig-edge.26` is live with desktop/android/bare-metal artifacts, parity reports, manifest, SBOM, provenance, npm tarball, wheel, and sdist.
+  - GitHub prerelease `v0.2.0-zig-edge.28` is live with desktop/android/bare-metal artifacts, parity reports, manifest, SBOM, provenance, npm tarball, wheel, and sdist.
   - release evidence now also includes `release-status.json` + `release-status.md` so every edge cut carries a frozen workflow-status + registry-status snapshot in addition to package preflight evidence.
   - Zig toolchain evidence is now mirror-aware:
     - `scripts/zig-github-mirror-release-check.ps1` snapshots the `adybag14-cyber/zig` release target commitish, Windows asset URL, and SHA256 digest.
@@ -68,7 +68,7 @@ Full-stack replacement execution reference:
     - `latest-master` is the fast Windows refresh lane.
     - `upstream-<sha>` is the reproducible lane for CI, bisects, and release recreation.
   - `uvx` fallback from the tagged Git repo was validated locally:
-    - `uvx --from "git+https://github.com/adybag14-cyber/openclaw-zig-port@v0.2.0-zig-edge.26#subdirectory=python/openclaw-zig-rpc-client" openclaw-zig-rpc --help`
+    - `uvx --from "git+https://github.com/adybag14-cyber/openclaw-zig-port@v0.2.0-zig-edge.28#subdirectory=python/openclaw-zig-rpc-client" openclaw-zig-rpc --help`
   - npm public publish remains externally blocked by npm scope/package permission on npmjs; GitHub Packages fallback remains available.
   - PyPI public publish remains externally blocked by missing trusted-publisher mapping, but the workflow now emits the confirmed OIDC claim shape:
     - `sub=repo:adybag14-cyber/openclaw-zig-port:environment:pypi`
@@ -1561,4 +1561,5 @@ Full-stack replacement execution reference:
     - node-pair protocol handling consolidated across payload variants: request aliases (`node_id/deviceId`) and action aliases (`pair_id/nodePairId/id` + optional `status|decision`) now normalize into the same state transitions and response schema.
     - node-pair responses now include a consolidated `pairing` envelope for easier adapter compatibility, and `node.pair.list` now mirrors `items` into `pairs`.
     - validated with `zig build test --summary all` (`117/117`).
+
 

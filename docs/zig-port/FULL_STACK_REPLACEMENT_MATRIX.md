@@ -11,7 +11,7 @@ Master tracking:
 | Baseline | Ref Type | Value | Status |
 |---|---|---|---|
 | OpenClaw Zig Port | Commit | `caaedd9` | Locked |
-| OpenClaw Zig Port | Release | `v0.2.0-zig-edge.26` | Locked |
+| OpenClaw Zig Port | Release | `v0.2.0-zig-edge.28` | Locked |
 | OpenClaw Go Port | Release/Commit | `v2.14.0-go @ 3614cf457cf26220e486d7f3dc8df09353b38a32` | Locked |
 | OpenClaw Rust Port | Release/Commit | `v1.7.15 @ b2abb0d1fa747e371a53ea0890ffd80e4e29ea79` | Locked |
 | Original OpenClaw Stable | Release/Commit | `v2026.3.2 @ 85377a28175695c224f6589eb5c1460841ecd65c` | Locked |
@@ -67,3 +67,4 @@ Any intentional behavior changes must be:
 - [ ] Finalize parity policy for each domain row.
 - [ ] Map each domain row to exact tests/workflows and evidence links.
 - [ ] Attach matrix evidence to issue `#2` and roll up to issue `#1`.
+

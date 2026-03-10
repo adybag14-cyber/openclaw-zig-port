@@ -58,6 +58,8 @@ pub const supported_methods = [_][]const u8{
     "node.rename",
     "node.list",
     "node.describe",
+    "node.pending.pull",
+    "node.pending.ack",
     "node.invoke",
     "node.invoke.result",
     "node.event",

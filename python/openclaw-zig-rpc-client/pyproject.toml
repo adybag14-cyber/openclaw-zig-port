@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openclaw-zig-rpc-client"
-version = "0.2.0.dev26"
+version = "0.2.0.dev28"
 description = "Python JSON-RPC client for OpenClaw Zig gateway endpoints."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -37,3 +37,4 @@ openclaw-zig-rpc = "openclaw_zig_rpc_client.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/openclaw_zig_rpc_client"]
+

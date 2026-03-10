@@ -4,12 +4,12 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 
 ## Current Status
 
-- RPC method surface in Zig: `170`
+- RPC method surface in Zig: `172`
 - Latest parity gate (tri-baseline):
   - Go baseline (`v2.14.0-go`): `134/134` covered
-  - Original OpenClaw baseline (`v2026.3.7`): `95/95` covered
-  - Original OpenClaw beta baseline (`v2026.3.7-beta.1`): `95/95` covered
-  - Union baseline: `136/136` covered (`MISSING_IN_ZIG=0`)
+  - Original OpenClaw baseline (`v2026.3.8`): `97/97` covered
+  - Original OpenClaw beta baseline (`v2026.3.8-beta.1`): `97/97` covered
+  - Union baseline: `138/138` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
 - Latest local validation: `zig build test --summary all` -> main `203/203` + bare-metal host `106/106` passing
 - Latest published edge release tag: `v0.2.0-zig-edge.27`
@@ -806,4 +806,5 @@ Manual python release trigger:
 ```powershell
 gh workflow run python-release.yml -R adybag14-cyber/openclaw-zig-port -f version=<pep440-version> -f release_tag=<release-tag>
 ```
+
 
