@@ -5005,11 +5005,23 @@ test "baremetal timer cancel task command cancels armed task timers" {
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
     try std.testing.expectEqual(@as(u32, 0), oc_timer_entry_count());
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u16, 0), oc_timer_state_ptr().pending_wake_count);
+    try std.testing.expectEqual(@as(u64, 0), oc_timer_state_ptr().dispatch_count);
     try std.testing.expectEqual(@as(u8, abi.timer_entry_state_canceled), oc_timer_entry(0).state);
+    try std.testing.expectEqual(task_id, oc_timer_entry(0).task_id);
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(0).state);
 
     _ = oc_submit_command(abi.command_timer_cancel_task, task_id, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_not_found), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 0), oc_timer_entry_count());
+    try std.testing.expectEqual(@as(u8, abi.timer_entry_state_canceled), oc_timer_entry(0).state);
+    try std.testing.expectEqual(task_id, oc_timer_entry(0).task_id);
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u16, 0), oc_timer_state_ptr().pending_wake_count);
+    try std.testing.expectEqual(@as(u64, 0), oc_timer_state_ptr().dispatch_count);
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(0).state);
 }
 
 test "baremetal timer disable suppresses timer wake but not interrupt wake" {

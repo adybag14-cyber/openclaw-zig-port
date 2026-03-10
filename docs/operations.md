@@ -149,6 +149,7 @@ Recommended sequence:
 - optional bare-metal QEMU timer wake probe (timer reset/quantum/task-wait to fired timer entry + wake queue telemetry against the freestanding PVH artifact)
 - optional bare-metal QEMU timer quantum probe (one-shot `command_timer_schedule` respects `command_timer_set_quantum`, keeps the task waiting with `wake_queue_len=0` at the pre-boundary tick, and only wakes on the next quantum boundary against the freestanding PVH artifact)
 - optional bare-metal QEMU timer cancel probe (capture the live timer ID from the armed entry, cancel that exact timer via `command_timer_cancel`, preserve the canceled slot state, and get `result_not_found` on a second cancel against the freestanding PVH artifact)
+- optional bare-metal QEMU timer cancel wrapper validation (armed baseline capture, cancel collapse to zero live timer entries, preserved canceled-slot metadata, second-cancel `result_not_found`, and zero wake/dispatch telemetry on the dedicated timer-cancel lane)
 - optional bare-metal QEMU timer cancel-task interrupt-timeout probe (`command_timer_cancel_task` on a `task_wait_interrupt_for` waiter clears the timeout arm back to steady state, keeps `wait_timeout=0`, and still allows the later real interrupt wake to land exactly once against the freestanding PVH artifact)
 - optional bare-metal QEMU timer cancel task probe (one-shot + periodic task timer arming followed by `command_timer_cancel_task`, proving the first cancel collapses `timer_entry_count` to `0`, preserves the canceled timer slot state, and the second cancel returns `result_not_found` against the freestanding PVH artifact)
 - optional bare-metal QEMU timer pressure probe (fills the 16 runnable task slots with live one-shot timers, proves timer IDs `1 -> 16`, cancels one task timer, then reuses that exact slot with fresh timer ID `17` and no stray wake/dispatch activity against the freestanding PVH artifact)
@@ -309,6 +310,7 @@ Recommended sequence:
 - bare-metal optional QEMU timer wake probe in validate stage
 - bare-metal optional QEMU timer quantum probe in validate stage
 - bare-metal optional QEMU timer cancel probe in validate stage
+- bare-metal optional QEMU timer cancel wrapper probes in validate stage
 - bare-metal optional QEMU timer cancel-task interrupt-timeout probe in validate stage
 - bare-metal optional QEMU timer cancel task probe in validate stage
 - bare-metal optional QEMU timer reset recovery probe in validate stage

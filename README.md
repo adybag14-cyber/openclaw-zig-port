@@ -118,6 +118,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - optional QEMU timer wake probe validates timer reset/quantum/task-wait flow end to end, including fired timer entries and wake-queue telemetry against the freestanding PVH artifact
   - optional QEMU timer quantum probe validates one-shot timer quantum suppression end to end, proving the task stays waiting with an empty wake queue at the pre-boundary tick and only wakes on the next quantum boundary against the freestanding PVH artifact
   - optional QEMU timer cancel probe validates `command_timer_cancel` by live timer ID end to end, proving the armed timer entry is canceled in place, `timer_entry_count` drops to `0`, and a second cancel of the same timer ID returns `result_not_found`
+  - optional QEMU timer cancel wrapper probes validate that same broad lane at five narrower boundaries, failing directly on the armed baseline, cancel collapse to zero live timer entries, preserved canceled-slot metadata, second-cancel `result_not_found`, and zero wake/dispatch telemetry
   - optional QEMU timer cancel-task probe validates `command_timer_cancel_task` end to end, proving the first cancellation collapses `timer_entry_count` to `0`, preserves the canceled timer slot state, and the second cancellation returns `result_not_found` against the freestanding PVH artifact
   - optional QEMU timer pressure probe validates the full runnable timer window end to end, proving 16 live task timers arm cleanly with IDs `1 -> 16`, one canceled slot is reused in place with fresh timer ID `17`, and the timer subsystem stays free of stray wakes or dispatches while the scheduler remains disabled
   - optional QEMU timer reset recovery probe validates `command_timer_reset` recovery end to end, proving live timer entries, timeout-backed interrupt waits, and disabled/quantized timer state collapse back to steady baseline, stale timeout wakes do not leak after reset, manual and interrupt wake recovery still work, and the next timer re-arms cleanly from `timer_id=1`
@@ -711,6 +712,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU timer wake validation
 - optional bare-metal QEMU timer quantum validation
 - optional bare-metal QEMU timer cancel validation
+- optional bare-metal QEMU timer cancel wrapper validation
 - optional bare-metal QEMU timer pressure validation
 - optional bare-metal QEMU periodic timer validation
 - optional bare-metal QEMU interrupt timeout validation

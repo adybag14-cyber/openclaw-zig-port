@@ -497,6 +497,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-timer-cancel-probe-check.ps1
 
+      - name: Bare-metal QEMU timer cancel baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-cancel-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU timer cancel collapse probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-cancel-cancel-collapse-probe-check.ps1
+
+      - name: Bare-metal QEMU timer cancel canceled-entry preserve probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-cancel-canceled-entry-preserve-probe-check.ps1
+
+      - name: Bare-metal QEMU timer cancel second-cancel notfound probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-cancel-second-cancel-notfound-probe-check.ps1
+
+      - name: Bare-metal QEMU timer cancel zero-wake telemetry probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-cancel-zero-wake-telemetry-probe-check.ps1
+
       - name: Bare-metal QEMU timer pressure probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-timer-pressure-probe-check.ps1
