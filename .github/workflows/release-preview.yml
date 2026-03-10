@@ -1159,6 +1159,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-wake-queue-clear-probe-check.ps1
 
+      - name: Bare-metal QEMU wake queue clear baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-clear-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU wake queue clear collapse probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-clear-collapse-probe-check.ps1
+
+      - name: Bare-metal QEMU wake queue clear pending-reset probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-clear-pending-reset-probe-check.ps1
+
+      - name: Bare-metal QEMU wake queue clear reuse-shape probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-clear-reuse-shape-probe-check.ps1
+
+      - name: Bare-metal QEMU wake queue clear reuse-payload probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-wake-queue-clear-reuse-payload-probe-check.ps1
+
       - name: Bare-metal QEMU allocator syscall probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-allocator-syscall-probe-check.ps1

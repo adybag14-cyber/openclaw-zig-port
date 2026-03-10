@@ -5530,15 +5530,18 @@ test "baremetal wake queue clear command resets wrapped queue and reuse" {
     try std.testing.expectEqual(@as(u32, 0), cleared.len);
     try std.testing.expectEqual(@as(u32, 0), cleared.overflow_count);
     try std.testing.expectEqual(@as(u32, 0), cleared.reason_manual_count);
+    try std.testing.expectEqual(@as(u16, 0), oc_timer_state_ptr().pending_wake_count);
 
     wakeQueuePush(6600, 0, abi.wake_reason_manual, 0, 900, 0);
     try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
     try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_head_index());
     try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_tail_index());
     try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_overflow_count());
+    try std.testing.expectEqual(@as(u16, 1), oc_timer_state_ptr().pending_wake_count);
     const reused = oc_wake_queue_event(0);
     try std.testing.expectEqual(@as(u32, 1), reused.seq);
     try std.testing.expectEqual(@as(u32, 6600), reused.task_id);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_manual), reused.reason);
     try std.testing.expectEqual(@as(u64, 900), reused.tick);
 }
 

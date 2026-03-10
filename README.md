@@ -182,6 +182,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - optional QEMU wake-queue count-snapshot wrapper probes validate the live count-query lane directly, failing on baseline queue ordering, staged query-count deltas, and nonmutating mailbox-read invariants without relying only on the broad mixed-queue script output
   - optional QEMU wake-queue overflow probe validates sustained manual wake pressure end to end, proving the 64-entry ring saturates cleanly with `head/tail=2`, `overflow=2`, and retained oldest/newest manual wake payloads at `seq 3` and `seq 66`
   - optional QEMU wake-queue clear probe validates wrapped-ring clear-and-reuse end to end, proving `command_wake_queue_clear` resets `count/head/tail/overflow` to `0`, clears pending wake telemetry, and restarts the next manual wake at `seq 1`
+  - optional QEMU wake-queue clear wrapper validation now fails directly on the wrapped baseline, post-clear ring collapse, post-clear pending-wake reset, post-reuse queue shape, and post-reuse payload invariants on that dedicated clear-and-reuse lane
   - optional QEMU wake-queue batch-pop probe validates post-overflow recovery end to end, proving a `62`-entry batch drain leaves `seq 65/66`, a default pop leaves only `seq 66`, a final drain empties the queue, and the next manual wake reuses the ring at `seq 67`
   - optional QEMU wake-queue batch-pop wrapper probes validate that same broad lane at five narrower boundaries, failing directly on overflow baseline stability, retained survivor pair `seq 65/66`, single-survivor state, drained-empty state, and refill/reuse receipt invariants instead of only at the end of the full overflow-to-refill sequence
   - optional QEMU wake-queue vector-pop probe validates the dedicated `command_wake_queue_pop_vector` lane end to end, proving a four-entry mixed queue (`manual`, `interrupt@13`, `interrupt@13`, `interrupt@31`) removes only the matching vector-`13` wakes in FIFO order and returns `result_not_found` for vector `255`
@@ -664,6 +665,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU wake-queue reason-overflow wrapper probes
 - optional bare-metal QEMU wake-queue summary/age probe
 - optional bare-metal QEMU wake-queue overflow probe
+- optional bare-metal QEMU wake-queue clear wrapper probes
 - optional bare-metal QEMU wake-queue batch-pop probe
 - optional bare-metal QEMU wake-queue batch-pop wrapper probes
 - optional bare-metal QEMU wake-queue vector-pop probe
@@ -749,6 +751,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU wake-queue reason-overflow wrapper validation
 - optional bare-metal QEMU wake-queue summary/age validation
 - optional bare-metal QEMU wake-queue overflow validation
+- optional bare-metal QEMU wake-queue clear wrapper validation
 - optional bare-metal QEMU wake-queue batch-pop validation
 - optional bare-metal QEMU wake-queue batch-pop wrapper validation
 - optional bare-metal QEMU wake-queue vector-pop validation
