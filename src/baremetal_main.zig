@@ -6547,13 +6547,19 @@ test "baremetal scheduler reset clears active state and restarts ids" {
     try std.testing.expectEqual(@as(u32, 6), task.budget_ticks);
     try std.testing.expectEqual(@as(u32, 6), task.budget_remaining);
     try std.testing.expectEqual(@as(u32, 0), task.run_count);
+    try std.testing.expect(!oc_scheduler_enabled());
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_task_count());
+    try std.testing.expectEqual(@as(u8, scheduler_no_slot), oc_scheduler_state_ptr().running_slot);
+    try std.testing.expectEqual(@as(u32, 2), oc_scheduler_state_ptr().next_task_id);
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_state_ptr().dispatch_count);
 
     _ = oc_submit_command(abi.command_scheduler_enable, 0, 0);
     oc_tick();
     try std.testing.expect(oc_scheduler_enabled());
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_state_ptr().dispatch_count);
+    try std.testing.expectEqual(@as(u32, 2), oc_scheduler_state_ptr().next_task_id);
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_state_ptr().timeslice_ticks);
+    try std.testing.expectEqual(@as(u32, 8), oc_scheduler_state_ptr().default_budget_ticks);
     task = oc_scheduler_task(0);
     try std.testing.expectEqual(@as(u32, 1), task.run_count);
     try std.testing.expectEqual(@as(u32, 5), task.budget_remaining);

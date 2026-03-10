@@ -455,6 +455,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-reset-probe-check.ps1
 
+      - name: Bare-metal QEMU scheduler reset baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-reset-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler reset collapse probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-reset-collapse-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler reset id-restart probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-reset-id-restart-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler reset defaults-preserve probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-reset-defaults-preserve-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler reset final task-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-reset-final-task-state-probe-check.ps1
+
       - name: Bare-metal QEMU scheduler reset mixed-state probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-reset-mixed-state-probe-check.ps1
