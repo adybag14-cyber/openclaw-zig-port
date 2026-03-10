@@ -4,16 +4,24 @@ param(
 
 $ErrorActionPreference = "Stop"
 $probe = Join-Path $PSScriptRoot "baremetal-qemu-scheduler-saturation-probe-check.ps1"
-$output = if ($SkipBuild) {
-    & powershell -ExecutionPolicy Bypass -File $probe -SkipBuild | Out-String
-} else {
-    & powershell -ExecutionPolicy Bypass -File $probe | Out-String
-}
+$skipToken = 'BAREMETAL_QEMU_SCHEDULER_SATURATION_BASELINE_PROBE=skipped'
 
 function Get-Int([string] $name) {
-    $match = [regex]::Match($output, '(?m)^' + [regex]::Escape($name) + '=(-?\d+)\r?$')
+    $match = [regex]::Match($probeText, '(?m)^' + [regex]::Escape($name) + '=(-?\d+)\r?$')
     if (-not $match.Success) { throw "Missing $name" }
     return [int64]::Parse($match.Groups[1].Value)
+}
+
+$probeOutput = if ($SkipBuild) { & $probe -SkipBuild 2>&1 } else { & $probe 2>&1 }
+$probeExitCode = $LASTEXITCODE
+$probeText = ($probeOutput | Out-String)
+$probeOutput | Write-Output
+if ($probeText -match 'BAREMETAL_QEMU_SCHEDULER_SATURATION_PROBE=skipped') {
+    Write-Output $skipToken
+    exit 0
+}
+if ($probeExitCode -ne 0) {
+    throw "Underlying scheduler saturation probe failed with exit code $probeExitCode"
 }
 
 $taskCapacity = Get-Int "BAREMETAL_QEMU_SCHEDULER_SATURATION_TASK_CAPACITY"
