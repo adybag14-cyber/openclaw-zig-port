@@ -5822,6 +5822,11 @@ test "baremetal wake queue before-tick pop preserves order after overflow" {
     _ = oc_submit_command(abi.command_wake_queue_pop_before_tick, 565, 1);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_not_found), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_tail_index());
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_overflow_count());
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_before_tick_count(565));
 }
 
 test "baremetal wake queue reason pop command removes only matching reasons" {
