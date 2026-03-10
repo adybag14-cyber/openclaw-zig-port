@@ -179,6 +179,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - optional QEMU wake-queue batch-pop wrapper probes validate that same broad lane at five narrower boundaries, failing directly on overflow baseline stability, retained survivor pair `seq 65/66`, single-survivor state, drained-empty state, and refill/reuse receipt invariants instead of only at the end of the full overflow-to-refill sequence
   - optional QEMU wake-queue vector-pop probe validates the dedicated `command_wake_queue_pop_vector` lane end to end, proving a four-entry mixed queue (`manual`, `interrupt@13`, `interrupt@13`, `interrupt@31`) removes only the matching vector-`13` wakes in FIFO order and returns `result_not_found` for vector `255`
   - optional QEMU wake-queue reason-vector-pop probe validates the dedicated `command_wake_queue_pop_reason_vector` lane end to end, proving a four-entry mixed queue (`manual`, `interrupt@13`, `interrupt@13`, `interrupt@19`) removes only the exact `interrupt@13` pairs in FIFO order and rejects `reason+vector=0` with `-22`
+  - optional QEMU wake-queue reason-vector-pop wrapper validation now fails directly on baseline composition, first exact-pair removal, final survivor ordering, invalid-pair rejection, and invalid-pair state preservation on that dedicated four-entry mixed queue lane
   - optional QEMU allocator/syscall probe validates alloc/free plus syscall register/invoke/block/disable/re-enable/clear-flags/unregister flow end to end against the freestanding PVH artifact, then proves `command_allocator_reset` and `command_syscall_reset` collapse the dirty runtime state back to allocator/syscall steady baseline
   - optional QEMU allocator/syscall reset probe validates the dedicated dirty-state recovery lane without saturation noise, proving live allocator alloc plus syscall register/invoke state is visible before reset, `command_allocator_reset` and `command_syscall_reset` independently collapse both subsystems back to steady baseline, and a final missing-entry invoke returns `result_not_found`
   - optional QEMU syscall saturation probe validates the dedicated syscall-table capacity and reuse lane without allocator noise, proving 64/64 registration, overflow rejection, reclaimed-slot reuse, and fresh invoke telemetry against the freestanding PVH artifact
@@ -655,6 +656,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU wake-queue batch-pop wrapper probes
 - optional bare-metal QEMU wake-queue vector-pop probe
 - optional bare-metal QEMU wake-queue reason-vector-pop probe
+- optional bare-metal QEMU wake-queue reason-vector-pop wrapper probes
 - optional bare-metal QEMU allocator syscall probe
 - optional bare-metal QEMU allocator syscall reset probe
 - optional bare-metal QEMU syscall saturation probe
@@ -735,6 +737,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU wake-queue vector-pop validation
 - optional bare-metal QEMU wake-queue reason-pop wrapper validation
 - optional bare-metal QEMU wake-queue reason-vector-pop validation
+- optional bare-metal QEMU wake-queue reason-vector-pop wrapper validation
 - optional bare-metal QEMU allocator syscall validation
 - optional bare-metal QEMU allocator syscall reset wrapper validation
 - optional bare-metal QEMU syscall saturation validation

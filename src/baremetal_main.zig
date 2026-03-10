@@ -5909,6 +5909,16 @@ test "baremetal wake queue reason-vector pop command removes only exact pairs" {
     _ = oc_submit_command(abi.command_wake_queue_pop_reason_vector, 0, 1);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 2), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_reason_vector_count(abi.wake_reason_interrupt, 13));
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_reason_vector_count(abi.wake_reason_interrupt, 19));
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_reason_vector_count(abi.wake_reason_timer, 13));
+    try std.testing.expectEqual(@as(u32, 4003), oc_wake_queue_event(0).task_id);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_interrupt), oc_wake_queue_event(0).reason);
+    try std.testing.expectEqual(@as(u8, 19), oc_wake_queue_event(0).vector);
+    try std.testing.expectEqual(@as(u32, 4004), oc_wake_queue_event(1).task_id);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_timer), oc_wake_queue_event(1).reason);
+    try std.testing.expectEqual(@as(u8, 13), oc_wake_queue_event(1).vector);
 }
 
 test "baremetal wake queue count snapshot ptr reflects live query" {

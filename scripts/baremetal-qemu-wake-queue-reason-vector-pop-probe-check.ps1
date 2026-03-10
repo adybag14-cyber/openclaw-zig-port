@@ -334,13 +334,22 @@ set `$_pre_vector1 = 0
 set `$_pre_vector2 = 0
 set `$_pre_vector3 = 0
 set `$_mid_count = 0
+set `$_mid_task0 = 0
 set `$_mid_task1 = 0
+set `$_mid_task2 = 0
+set `$_mid_vector0 = 0
 set `$_mid_vector1 = 0
+set `$_mid_vector2 = 0
 set `$_post_count = 0
 set `$_post_task0 = 0
 set `$_post_task1 = 0
 set `$_post_vector0 = 0
 set `$_post_vector1 = 0
+set `$_final_count = 0
+set `$_final_task0 = 0
+set `$_final_task1 = 0
+set `$_final_vector0 = 0
+set `$_final_vector1 = 0
 file $artifactForGdb
 handle SIGQUIT nostop noprint pass
 target remote :$GdbPort
@@ -562,8 +571,12 @@ end
 if `$_stage == 17
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == `$_expected_seq && *(unsigned int*)0x$wakeQueueCountAddress == 3 && *(unsigned int*)(0x$wakeQueueAddress + (1 * $wakeEventStride) + $wakeEventTaskIdOffset) == `$_task3_id && *(unsigned char*)(0x$wakeQueueAddress + (1 * $wakeEventStride) + $wakeEventVectorOffset) == $interruptVectorA
     set `$_mid_count = *(unsigned int*)0x$wakeQueueCountAddress
+    set `$_mid_task0 = *(unsigned int*)(0x$wakeQueueAddress + (0 * $wakeEventStride) + $wakeEventTaskIdOffset)
     set `$_mid_task1 = *(unsigned int*)(0x$wakeQueueAddress + (1 * $wakeEventStride) + $wakeEventTaskIdOffset)
+    set `$_mid_task2 = *(unsigned int*)(0x$wakeQueueAddress + (2 * $wakeEventStride) + $wakeEventTaskIdOffset)
+    set `$_mid_vector0 = *(unsigned char*)(0x$wakeQueueAddress + (0 * $wakeEventStride) + $wakeEventVectorOffset)
     set `$_mid_vector1 = *(unsigned char*)(0x$wakeQueueAddress + (1 * $wakeEventStride) + $wakeEventVectorOffset)
+    set `$_mid_vector2 = *(unsigned char*)(0x$wakeQueueAddress + (2 * $wakeEventStride) + $wakeEventVectorOffset)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $wakeQueuePopReasonVectorOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = (`$_expected_seq + 1)
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = $pairInterrupt13
@@ -591,6 +604,11 @@ if `$_stage == 18
 end
 if `$_stage == 19
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == `$_expected_seq && *(short*)(0x$statusAddress+$statusLastCommandResultOffset) == $resultInvalidArgument && *(unsigned int*)0x$wakeQueueCountAddress == 2
+    set `$_final_count = *(unsigned int*)0x$wakeQueueCountAddress
+    set `$_final_task0 = *(unsigned int*)(0x$wakeQueueAddress + (0 * $wakeEventStride) + $wakeEventTaskIdOffset)
+    set `$_final_task1 = *(unsigned int*)(0x$wakeQueueAddress + (1 * $wakeEventStride) + $wakeEventTaskIdOffset)
+    set `$_final_vector0 = *(unsigned char*)(0x$wakeQueueAddress + (0 * $wakeEventStride) + $wakeEventVectorOffset)
+    set `$_final_vector1 = *(unsigned char*)(0x$wakeQueueAddress + (1 * $wakeEventStride) + $wakeEventVectorOffset)
     printf "AFTER_WAKE_QUEUE_REASON_VECTOR_POP\n"
     printf "ACK=%u\n", *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset)
     printf "LAST_OPCODE=%u\n", *(unsigned short*)(0x$statusAddress+$statusLastCommandOpcodeOffset)
@@ -610,13 +628,22 @@ if `$_stage == 19
     printf "PRE_VECTOR2=%u\n", `$_pre_vector2
     printf "PRE_VECTOR3=%u\n", `$_pre_vector3
     printf "MID_COUNT=%u\n", `$_mid_count
+    printf "MID_TASK0=%u\n", `$_mid_task0
     printf "MID_TASK1=%u\n", `$_mid_task1
+    printf "MID_TASK2=%u\n", `$_mid_task2
+    printf "MID_VECTOR0=%u\n", `$_mid_vector0
     printf "MID_VECTOR1=%u\n", `$_mid_vector1
+    printf "MID_VECTOR2=%u\n", `$_mid_vector2
     printf "POST_COUNT=%u\n", `$_post_count
     printf "POST_TASK0=%u\n", `$_post_task0
     printf "POST_TASK1=%u\n", `$_post_task1
     printf "POST_VECTOR0=%u\n", `$_post_vector0
     printf "POST_VECTOR1=%u\n", `$_post_vector1
+    printf "FINAL_COUNT=%u\n", `$_final_count
+    printf "FINAL_TASK0=%u\n", `$_final_task0
+    printf "FINAL_TASK1=%u\n", `$_final_task1
+    printf "FINAL_VECTOR0=%u\n", `$_final_vector0
+    printf "FINAL_VECTOR1=%u\n", `$_final_vector1
     quit
   end
   continue
@@ -709,13 +736,22 @@ $preVector1 = Extract-IntValue -Text $gdbOutput -Name "PRE_VECTOR1"
 $preVector2 = Extract-IntValue -Text $gdbOutput -Name "PRE_VECTOR2"
 $preVector3 = Extract-IntValue -Text $gdbOutput -Name "PRE_VECTOR3"
 $midCount = Extract-IntValue -Text $gdbOutput -Name "MID_COUNT"
+$midTask0 = Extract-IntValue -Text $gdbOutput -Name "MID_TASK0"
 $midTask1 = Extract-IntValue -Text $gdbOutput -Name "MID_TASK1"
+$midTask2 = Extract-IntValue -Text $gdbOutput -Name "MID_TASK2"
+$midVector0 = Extract-IntValue -Text $gdbOutput -Name "MID_VECTOR0"
 $midVector1 = Extract-IntValue -Text $gdbOutput -Name "MID_VECTOR1"
+$midVector2 = Extract-IntValue -Text $gdbOutput -Name "MID_VECTOR2"
 $postCount = Extract-IntValue -Text $gdbOutput -Name "POST_COUNT"
 $postTask0 = Extract-IntValue -Text $gdbOutput -Name "POST_TASK0"
 $postTask1 = Extract-IntValue -Text $gdbOutput -Name "POST_TASK1"
 $postVector0 = Extract-IntValue -Text $gdbOutput -Name "POST_VECTOR0"
 $postVector1 = Extract-IntValue -Text $gdbOutput -Name "POST_VECTOR1"
+$finalCount = Extract-IntValue -Text $gdbOutput -Name "FINAL_COUNT"
+$finalTask0 = Extract-IntValue -Text $gdbOutput -Name "FINAL_TASK0"
+$finalTask1 = Extract-IntValue -Text $gdbOutput -Name "FINAL_TASK1"
+$finalVector0 = Extract-IntValue -Text $gdbOutput -Name "FINAL_VECTOR0"
+$finalVector1 = Extract-IntValue -Text $gdbOutput -Name "FINAL_VECTOR1"
 
 $expectedAck = 19
 if ($ack -ne $expectedAck) { throw "Expected ACK=$expectedAck, got $ack" }
@@ -733,13 +769,22 @@ if ($preVector1 -ne $interruptVectorA) { throw "Expected PRE_VECTOR1=$interruptV
 if ($preVector2 -ne $interruptVectorA) { throw "Expected PRE_VECTOR2=$interruptVectorA, got $preVector2" }
 if ($preVector3 -ne $interruptVectorB) { throw "Expected PRE_VECTOR3=$interruptVectorB, got $preVector3" }
 if ($midCount -ne 3) { throw "Expected MID_COUNT=3, got $midCount" }
+if ($midTask0 -ne $task1Id) { throw "Expected MID_TASK0=$task1Id, got $midTask0" }
 if ($midTask1 -ne $task3Id) { throw "Expected MID_TASK1=$task3Id, got $midTask1" }
+if ($midTask2 -ne $task4Id) { throw "Expected MID_TASK2=$task4Id, got $midTask2" }
+if ($midVector0 -ne 0) { throw "Expected MID_VECTOR0=0, got $midVector0" }
 if ($midVector1 -ne $interruptVectorA) { throw "Expected MID_VECTOR1=$interruptVectorA, got $midVector1" }
+if ($midVector2 -ne $interruptVectorB) { throw "Expected MID_VECTOR2=$interruptVectorB, got $midVector2" }
 if ($postCount -ne 2) { throw "Expected POST_COUNT=2, got $postCount" }
 if ($postTask0 -ne $task1Id) { throw "Expected POST_TASK0=$task1Id, got $postTask0" }
 if ($postTask1 -ne $task4Id) { throw "Expected POST_TASK1=$task4Id, got $postTask1" }
 if ($postVector0 -ne 0) { throw "Expected POST_VECTOR0=0, got $postVector0" }
 if ($postVector1 -ne $interruptVectorB) { throw "Expected POST_VECTOR1=$interruptVectorB, got $postVector1" }
+if ($finalCount -ne 2) { throw "Expected FINAL_COUNT=2, got $finalCount" }
+if ($finalTask0 -ne $task1Id) { throw "Expected FINAL_TASK0=$task1Id, got $finalTask0" }
+if ($finalTask1 -ne $task4Id) { throw "Expected FINAL_TASK1=$task4Id, got $finalTask1" }
+if ($finalVector0 -ne 0) { throw "Expected FINAL_VECTOR0=0, got $finalVector0" }
+if ($finalVector1 -ne $interruptVectorB) { throw "Expected FINAL_VECTOR1=$interruptVectorB, got $finalVector1" }
 
 Write-Output "BAREMETAL_QEMU_AVAILABLE=True"
 Write-Output "BAREMETAL_QEMU_BINARY=$qemu"
@@ -774,12 +819,21 @@ Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_PRE_VECTOR1=$preVector
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_PRE_VECTOR2=$preVector2"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_PRE_VECTOR3=$preVector3"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_MID_COUNT=$midCount"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_MID_TASK0=$midTask0"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_MID_TASK1=$midTask1"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_MID_TASK2=$midTask2"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_MID_VECTOR0=$midVector0"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_MID_VECTOR1=$midVector1"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_MID_VECTOR2=$midVector2"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_POST_COUNT=$postCount"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_POST_TASK0=$postTask0"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_POST_TASK1=$postTask1"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_POST_VECTOR0=$postVector0"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_POST_VECTOR1=$postVector1"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_FINAL_COUNT=$finalCount"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_FINAL_TASK0=$finalTask0"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_FINAL_TASK1=$finalTask1"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_FINAL_VECTOR0=$finalVector0"
+Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_FINAL_VECTOR1=$finalVector1"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_VECTOR_POP_PROBE=pass"
 
