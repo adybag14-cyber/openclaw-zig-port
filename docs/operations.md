@@ -56,6 +56,9 @@ Recommended sequence:
 ./scripts/baremetal-qemu-task-resume-interrupt-timeout-probe-check.ps1
 ./scripts/baremetal-qemu-task-resume-interrupt-timeout-wait-clear-probe-check.ps1
 ./scripts/baremetal-qemu-task-resume-interrupt-timeout-manual-wake-probe-check.ps1
+./scripts/baremetal-qemu-task-resume-interrupt-timeout-ready-state-probe-check.ps1
+./scripts/baremetal-qemu-task-resume-interrupt-timeout-no-stale-timeout-probe-check.ps1
+./scripts/baremetal-qemu-task-resume-interrupt-timeout-telemetry-preserve-probe-check.ps1
 ./scripts/baremetal-qemu-scheduler-wake-timer-clear-probe-check.ps1
 ./scripts/baremetal-qemu-scheduler-wake-timer-clear-manual-wake-probe-check.ps1
 ./scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-interrupt-recovery-probe-check.ps1
@@ -173,6 +176,7 @@ Recommended sequence:
 - optional bare-metal QEMU timer reset recovery probe (dirty live timer entries plus `task_wait_interrupt_for` timeout state, then `command_timer_reset` proving timer state collapses back to baseline, stale timeout wakes do not leak after reset, manual/interrupt wake recovery still works, and the next timer re-arms from `timer_id=1` against the freestanding PVH artifact)
 - optional bare-metal QEMU task-resume timer-clear probe (`command_task_resume` on a timer-backed wait cancels the armed timer entry, queues exactly one manual wake, prevents a later ghost timer wake after idle ticks, preserves timer quantum, and restarts fresh timer scheduling from the preserved `next_timer_id` against the freestanding PVH artifact)
 - optional bare-metal QEMU task-resume interrupt-timeout probe (`command_task_resume` on a `task_wait_interrupt_for` waiter clears the pending timeout to `none`, queues exactly one manual wake, prevents any delayed timer wake after additional slack ticks, and leaves the timer subsystem at `next_timer_id=1` against the freestanding PVH artifact)
+- optional bare-metal QEMU task-resume interrupt-timeout wrapper probes (`baremetal-qemu-task-resume-interrupt-timeout-wait-clear-probe-check.ps1`, `baremetal-qemu-task-resume-interrupt-timeout-manual-wake-probe-check.ps1`, `baremetal-qemu-task-resume-interrupt-timeout-ready-state-probe-check.ps1`, `baremetal-qemu-task-resume-interrupt-timeout-no-stale-timeout-probe-check.ps1`, and `baremetal-qemu-task-resume-interrupt-timeout-telemetry-preserve-probe-check.ps1`) reuse the broad timeout-backed resume lane and fail directly on the cleared wait state, manual wake payload, ready-task baseline, settled no-stale-timeout window, and final mailbox/interrupt telemetry invariants
 - optional bare-metal QEMU scheduler-wake timer-clear probe (`command_scheduler_wake_task` on a pure timer waiter cancels the armed timer entry, queues exactly one manual wake, prevents a later ghost timer wake after idle ticks, and preserves fresh timer scheduling from the current `next_timer_id` against the freestanding PVH artifact)
 - optional bare-metal QEMU task-resume interrupt probe (`command_task_resume` on a pure `task_wait_interrupt` waiter clears the interrupt wait back to `none`, queues exactly one manual wake, prevents a later interrupt from creating a second wake, and leaves the timer subsystem idle at `next_timer_id=1` against the freestanding PVH artifact)
 - optional bare-metal QEMU periodic timer probe (periodic schedule + timer disable/enable pause-resume, capturing the first resumed periodic fire and queued wake telemetry against the freestanding PVH artifact)
