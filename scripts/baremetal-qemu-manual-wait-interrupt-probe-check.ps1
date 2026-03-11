@@ -641,6 +641,7 @@ if ($afterInterruptWakeQueueLen -ne 0) { throw "Expected AFTER_INTERRUPT_WAKE_QU
 if ($afterInterruptInterruptCount -lt 1) { throw "Expected AFTER_INTERRUPT_INTERRUPT_COUNT >= 1, got $afterInterruptInterruptCount" }
 if ($afterInterruptLastInterruptVector -ne $interruptVector) { throw "Expected AFTER_INTERRUPT_LAST_INTERRUPT_VECTOR=$interruptVector, got $afterInterruptLastInterruptVector" }
 if ($manualWakeTaskState -ne $taskStateReady) { throw "Expected MANUAL_WAKE_TASK_STATE=$taskStateReady, got $manualWakeTaskState" }
+if ($manualWakeTaskCount -ne 1) { throw "Expected MANUAL_WAKE_TASK_COUNT=1, got $manualWakeTaskCount" }
 if ($manualWakeQueueLen -ne 1) { throw "Expected MANUAL_WAKE_QUEUE_LEN=1, got $manualWakeQueueLen" }
 if ($manualWakeReason -ne $wakeReasonManual) { throw "Expected MANUAL_WAKE_REASON=$wakeReasonManual, got $manualWakeReason" }
 if ($manualWakeTaskId -ne $taskId) { throw "Expected MANUAL_WAKE_TASK_ID=$taskId, got $manualWakeTaskId" }

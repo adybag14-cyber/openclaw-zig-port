@@ -698,6 +698,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU scheduler reset timer-clear probe
 - optional bare-metal QEMU scheduler reset config-preservation probe
 - optional bare-metal QEMU manual wait interrupt probe
+- optional bare-metal QEMU manual wait interrupt wrapper probes
 - optional bare-metal QEMU wake-queue selective probe
 - optional bare-metal QEMU wake-queue selective wrapper probes
 - optional bare-metal QEMU wake-queue selective-overflow probe
@@ -793,6 +794,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU interrupt timeout clamp validation
 - optional bare-metal QEMU interrupt filter validation
 - optional bare-metal QEMU manual wait interrupt validation
+- optional bare-metal QEMU manual wait interrupt wrapper validation
 - optional bare-metal QEMU wake-queue selective validation
 - optional bare-metal QEMU wake-queue selective wrapper validation
 - optional bare-metal QEMU wake-queue selective-overflow validation

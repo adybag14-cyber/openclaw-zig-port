@@ -8425,6 +8425,8 @@ test "baremetal manual wait does not wake on interrupt path" {
 
     oc_tick_n(4);
     try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_task_count());
+    try std.testing.expectEqual(abi.task_state_ready, oc_scheduler_task(0).state);
     try std.testing.expectEqual(@as(u64, 1), x86_bootstrap.oc_interrupt_count());
     try std.testing.expectEqual(@as(u16, 44), x86_bootstrap.oc_last_interrupt_vector());
     try std.testing.expectEqual(evt.tick, oc_timer_state_ptr().last_wake_tick);
