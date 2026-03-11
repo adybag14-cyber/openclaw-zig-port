@@ -27,6 +27,7 @@ $idleTicksAfterResume = 20
 $taskStateReady = 1
 $taskStateWaiting = 6
 $timerEntryStateCanceled = 3
+$waitConditionNone = 0
 $wakeReasonManual = 3
 
 $statusTicksOffset = 8
@@ -54,6 +55,7 @@ $timerEntryStateOffset = 8
 
 $wakeEventStride = 32
 $wakeEventTaskIdOffset = 4
+$wakeEventTimerIdOffset = 8
 $wakeEventReasonOffset = 12
 $wakeEventTickOffset = 16
 
@@ -306,6 +308,8 @@ $spinPauseAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\
 $statusAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal_main\.status$' -SymbolName "baremetal_main.status"
 $commandMailboxAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal_main\.command_mailbox$' -SymbolName "baremetal_main.command_mailbox"
 $schedulerTasksAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal_main\.scheduler_tasks$' -SymbolName "baremetal_main.scheduler_tasks"
+$schedulerWaitKindAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal_main\.scheduler_wait_kind$' -SymbolName "baremetal_main.scheduler_wait_kind"
+$schedulerWaitTimeoutTickAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal_main\.scheduler_wait_timeout_tick$' -SymbolName "baremetal_main.scheduler_wait_timeout_tick"
 $timerStateAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal_main\.timer_state$' -SymbolName "baremetal_main.timer_state"
 $timerEntriesAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal_main\.timer_entries$' -SymbolName "baremetal_main.timer_entries"
 $wakeQueueAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal_main\.wake_queue$' -SymbolName "baremetal_main.wake_queue"
@@ -329,6 +333,9 @@ set `$_post_resume_timer_count = 0
 set `$_post_resume_entry_state = 0
 set `$_post_resume_wake_count = 0
 set `$_post_resume_wake_reason = 0
+set `$_post_resume_wait_kind = 0
+set `$_post_resume_wait_timeout = 0
+set `$_post_resume_wake_timer_id = 0
 set `$_post_resume_next_timer_id = 0
 set `$_post_resume_dispatch_count = 0
 set `$_post_resume_wake_tick = 0
@@ -420,12 +427,15 @@ if `$_stage == 6
   continue
 end
 if `$_stage == 7
-  if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 7 && *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset) == $taskStateReady && *(unsigned char*)(0x$timerStateAddress+$timerEntryCountOffset) == 0 && *(unsigned int*)(0x$wakeQueueCountAddress) == 1
+  if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 7 && *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset) == $taskStateReady && *(unsigned char*)(0x$schedulerWaitKindAddress) == $waitConditionNone && *(unsigned long long*)(0x$schedulerWaitTimeoutTickAddress) == 0 && *(unsigned char*)(0x$timerStateAddress+$timerEntryCountOffset) == 0 && *(unsigned int*)(0x$wakeQueueCountAddress) == 1
     set `$_post_resume_task_state = *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset)
     set `$_post_resume_timer_count = *(unsigned char*)(0x$timerStateAddress+$timerEntryCountOffset)
     set `$_post_resume_entry_state = *(unsigned char*)(0x$timerEntriesAddress+$timerEntryStateOffset)
     set `$_post_resume_wake_count = *(unsigned int*)(0x$wakeQueueCountAddress)
     set `$_post_resume_wake_reason = *(unsigned char*)(0x$wakeQueueAddress+$wakeEventReasonOffset)
+    set `$_post_resume_wait_kind = *(unsigned char*)(0x$schedulerWaitKindAddress)
+    set `$_post_resume_wait_timeout = *(unsigned long long*)(0x$schedulerWaitTimeoutTickAddress)
+    set `$_post_resume_wake_timer_id = *(unsigned int*)(0x$wakeQueueAddress+$wakeEventTimerIdOffset)
     set `$_post_resume_next_timer_id = *(unsigned int*)(0x$timerStateAddress+$timerNextTimerIdOffset)
     set `$_post_resume_dispatch_count = *(unsigned long long*)(0x$timerStateAddress+$timerDispatchCountOffset)
     set `$_post_resume_wake_tick = *(unsigned long long*)(0x$wakeQueueAddress+$wakeEventTickOffset)
@@ -469,7 +479,10 @@ printf "POST_RESUME_TIMER_COUNT=%u\n", `$_post_resume_timer_count
 printf "POST_RESUME_ENTRY_STATE=%u\n", `$_post_resume_entry_state
 printf "POST_RESUME_WAKE_COUNT=%u\n", `$_post_resume_wake_count
 printf "POST_RESUME_WAKE_REASON=%u\n", `$_post_resume_wake_reason
+printf "POST_RESUME_WAIT_KIND=%u\n", `$_post_resume_wait_kind
+printf "POST_RESUME_WAIT_TIMEOUT=%llu\n", `$_post_resume_wait_timeout
 printf "POST_RESUME_WAKE_TASK_ID=%u\n", *(unsigned int*)(0x$wakeQueueAddress+$wakeEventTaskIdOffset)
+printf "POST_RESUME_WAKE_TIMER_ID=%u\n", `$_post_resume_wake_timer_id
 printf "POST_RESUME_WAKE_TICK=%llu\n", `$_post_resume_wake_tick
 printf "POST_RESUME_NEXT_TIMER_ID=%u\n", `$_post_resume_next_timer_id
 printf "POST_RESUME_DISPATCH_COUNT=%llu\n", `$_post_resume_dispatch_count
@@ -534,7 +547,10 @@ $postResumeTimerCount = $null
 $postResumeEntryState = $null
 $postResumeWakeCount = $null
 $postResumeWakeReason = $null
+$postResumeWaitKind = $null
+$postResumeWaitTimeout = $null
 $postResumeWakeTaskId = $null
+$postResumeWakeTimerId = $null
 $postResumeWakeTick = $null
 $postResumeNextTimerId = $null
 $postResumeDispatchCount = $null
@@ -565,7 +581,10 @@ if (Test-Path $gdbStdout) {
     $postResumeEntryState = Extract-IntValue -Text $gdbOutput -Name "POST_RESUME_ENTRY_STATE"
     $postResumeWakeCount = Extract-IntValue -Text $gdbOutput -Name "POST_RESUME_WAKE_COUNT"
     $postResumeWakeReason = Extract-IntValue -Text $gdbOutput -Name "POST_RESUME_WAKE_REASON"
+    $postResumeWaitKind = Extract-IntValue -Text $gdbOutput -Name "POST_RESUME_WAIT_KIND"
+    $postResumeWaitTimeout = Extract-IntValue -Text $gdbOutput -Name "POST_RESUME_WAIT_TIMEOUT"
     $postResumeWakeTaskId = Extract-IntValue -Text $gdbOutput -Name "POST_RESUME_WAKE_TASK_ID"
+    $postResumeWakeTimerId = Extract-IntValue -Text $gdbOutput -Name "POST_RESUME_WAKE_TIMER_ID"
     $postResumeWakeTick = Extract-IntValue -Text $gdbOutput -Name "POST_RESUME_WAKE_TICK"
     $postResumeNextTimerId = Extract-IntValue -Text $gdbOutput -Name "POST_RESUME_NEXT_TIMER_ID"
     $postResumeDispatchCount = Extract-IntValue -Text $gdbOutput -Name "POST_RESUME_DISPATCH_COUNT"
@@ -608,7 +627,10 @@ if ($postResumeTimerCount -ne 0) { throw "Expected POST_RESUME_TIMER_COUNT=0, go
 if ($postResumeEntryState -ne $timerEntryStateCanceled) { throw "Expected POST_RESUME_ENTRY_STATE=$timerEntryStateCanceled, got $postResumeEntryState" }
 if ($postResumeWakeCount -ne 1) { throw "Expected POST_RESUME_WAKE_COUNT=1, got $postResumeWakeCount" }
 if ($postResumeWakeReason -ne $wakeReasonManual) { throw "Expected POST_RESUME_WAKE_REASON=$wakeReasonManual, got $postResumeWakeReason" }
+if ($postResumeWaitKind -ne $waitConditionNone) { throw "Expected POST_RESUME_WAIT_KIND=$waitConditionNone, got $postResumeWaitKind" }
+if ($postResumeWaitTimeout -ne 0) { throw "Expected POST_RESUME_WAIT_TIMEOUT=0, got $postResumeWaitTimeout" }
 if ($postResumeWakeTaskId -ne $taskId) { throw "Expected POST_RESUME_WAKE_TASK_ID=$taskId, got $postResumeWakeTaskId" }
+if ($postResumeWakeTimerId -ne 0) { throw "Expected POST_RESUME_WAKE_TIMER_ID=0, got $postResumeWakeTimerId" }
 if ($postResumeNextTimerId -ne 2) { throw "Expected POST_RESUME_NEXT_TIMER_ID=2, got $postResumeNextTimerId" }
 if ($postResumeDispatchCount -ne 0) { throw "Expected POST_RESUME_DISPATCH_COUNT=0, got $postResumeDispatchCount" }
 if ($postIdleWakeCount -ne 1) { throw "Expected POST_IDLE_WAKE_COUNT=1, got $postIdleWakeCount" }
@@ -637,7 +659,10 @@ Write-Output "POST_RESUME_TIMER_COUNT=$postResumeTimerCount"
 Write-Output "POST_RESUME_ENTRY_STATE=$postResumeEntryState"
 Write-Output "POST_RESUME_WAKE_COUNT=$postResumeWakeCount"
 Write-Output "POST_RESUME_WAKE_REASON=$postResumeWakeReason"
+Write-Output "POST_RESUME_WAIT_KIND=$postResumeWaitKind"
+Write-Output "POST_RESUME_WAIT_TIMEOUT=$postResumeWaitTimeout"
 Write-Output "POST_RESUME_WAKE_TASK_ID=$postResumeWakeTaskId"
+Write-Output "POST_RESUME_WAKE_TIMER_ID=$postResumeWakeTimerId"
 Write-Output "POST_RESUME_WAKE_TICK=$postResumeWakeTick"
 Write-Output "POST_RESUME_NEXT_TIMER_ID=$postResumeNextTimerId"
 Write-Output "POST_RESUME_DISPATCH_COUNT=$postResumeDispatchCount"

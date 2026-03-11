@@ -1573,6 +1573,11 @@ Full-stack replacement execution reference:
     - live PVH/QEMU+GDB sequence proves a timer-backed wait resumes through exactly one manual wake, the armed timer entry is canceled in place, no ghost timer wake appears after idle ticks, timer quantum is preserved, and fresh timer scheduling restarts from the preserved `next_timer_id`.
     - key probe evidence: `ACK=8`, `LAST_OPCODE=27`, `LAST_RESULT=0`, `PRE_TIMER_COUNT=1`, `POST_RESUME_TIMER_COUNT=0`, `POST_RESUME_WAKE_COUNT=1`, `POST_RESUME_WAKE_REASON=3`, `POST_IDLE_WAKE_COUNT=1`, `POST_IDLE_TIMER_COUNT=0`, `REARM_TIMER_ID=2`, `REARM_NEXT_TIMER_ID=3`.
     - probe is wired into both `zig-ci` and `release-preview` validate stages so timer-backed task-resume regressions now block CI.
+  - bare-metal task-resume timer-clear wrapper validation shipped:
+    - new scripts: `scripts/baremetal-qemu-task-resume-timer-clear-baseline-probe-check.ps1`, `scripts/baremetal-qemu-task-resume-timer-clear-wait-clear-probe-check.ps1`, `scripts/baremetal-qemu-task-resume-timer-clear-canceled-entry-preserve-probe-check.ps1`, `scripts/baremetal-qemu-task-resume-timer-clear-manual-wake-payload-probe-check.ps1`, and `scripts/baremetal-qemu-task-resume-timer-clear-rearm-telemetry-probe-check.ps1`.
+    - the broad probe now emits direct wait-clear and wake payload fields (`POST_RESUME_WAIT_KIND`, `POST_RESUME_WAIT_TIMEOUT`, `POST_RESUME_WAKE_TIMER_ID`) so wrapper failures point at the exact timer-backed resume boundary instead of only later end-state counts.
+    - the host regression now also asserts cleared wait-kind/timeout state, preserved canceled timer metadata, exact manual wake payload semantics, and preserved timer `next_timer_id` / dispatch telemetry before the post-resume rearm.
+    - the wrapper family reuses the broad timer-backed resume lane but fails directly on the pre-resume waiting baseline, cleared wait-kind/timeout state after `command_task_resume`, preserved canceled-slot metadata, exact manual wake payload, and final no-stale-timer plus rearm/telemetry invariants.
   - bare-metal task-resume interrupt-timeout validation shipped:
     - new script: `scripts/baremetal-qemu-task-resume-interrupt-timeout-probe-check.ps1`.
     - added matching host regression in `src/baremetal_main.zig`.

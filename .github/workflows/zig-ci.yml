@@ -640,6 +640,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-task-resume-timer-clear-probe-check.ps1
 
+      - name: Bare-metal QEMU task resume timer-clear baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-resume-timer-clear-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU task resume timer-clear wait-clear probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-resume-timer-clear-wait-clear-probe-check.ps1
+
+      - name: Bare-metal QEMU task resume timer-clear canceled-entry preserve probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-resume-timer-clear-canceled-entry-preserve-probe-check.ps1
+
+      - name: Bare-metal QEMU task resume timer-clear manual-wake payload probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-resume-timer-clear-manual-wake-payload-probe-check.ps1
+
+      - name: Bare-metal QEMU task resume timer-clear rearm-telemetry probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-resume-timer-clear-rearm-telemetry-probe-check.ps1
+
       - name: Bare-metal QEMU scheduler wake timer-clear probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-wake-timer-clear-probe-check.ps1
