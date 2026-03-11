@@ -157,6 +157,7 @@ Recommended sequence:
 - optional bare-metal QEMU scheduler saturation wrapper probes (`baremetal-qemu-scheduler-saturation-baseline-probe-check.ps1`, `baremetal-qemu-scheduler-saturation-overflow-preserve-probe-check.ps1`, `baremetal-qemu-scheduler-saturation-terminate-state-probe-check.ps1`, `baremetal-qemu-scheduler-saturation-reuse-state-probe-check.ps1`, and `baremetal-qemu-scheduler-saturation-final-state-probe-check.ps1`) reuse the broad pressure lane and fail directly on the 16-slot baseline fill, overflow rejection without task-count drift, terminated-slot capture, reuse-slot replacement semantics, and final scheduler state
 - optional bare-metal QEMU timer wake probe (timer reset/quantum/task-wait to fired timer entry + wake queue telemetry against the freestanding PVH artifact)
 - optional bare-metal QEMU timer quantum probe (one-shot `command_timer_schedule` respects `command_timer_set_quantum`, keeps the task waiting with `wake_queue_len=0` at the pre-boundary tick, and only wakes on the next quantum boundary against the freestanding PVH artifact)
+- optional bare-metal QEMU timer quantum wrapper probes (`baremetal-qemu-timer-quantum-baseline-probe-check.ps1`, `baremetal-qemu-timer-quantum-boundary-probe-check.ps1`, `baremetal-qemu-timer-quantum-preboundary-blocked-probe-check.ps1`, `baremetal-qemu-timer-quantum-wake-payload-probe-check.ps1`, and `baremetal-qemu-timer-quantum-final-state-probe-check.ps1`) reuse the broad one-shot quantum lane and fail directly on the armed baseline, computed boundary hold, blocked pre-boundary state, exact timer wake payload, and final timer/task-state telemetry
 - optional bare-metal QEMU timer cancel probe (capture the live timer ID from the armed entry, cancel that exact timer via `command_timer_cancel`, preserve the canceled slot state, and get `result_not_found` on a second cancel against the freestanding PVH artifact)
 - optional bare-metal QEMU timer cancel wrapper validation (armed baseline capture, cancel collapse to zero live timer entries, preserved canceled-slot metadata, second-cancel `result_not_found`, and zero wake/dispatch telemetry on the dedicated timer-cancel lane)
 - optional bare-metal QEMU timer cancel-task interrupt-timeout probe (`command_timer_cancel_task` on a `task_wait_interrupt_for` waiter clears the timeout arm back to steady state, keeps `wait_timeout=0`, and still allows the later real interrupt wake to land exactly once against the freestanding PVH artifact)
@@ -338,6 +339,7 @@ Recommended sequence:
 - bare-metal optional QEMU scheduler saturation wrapper probes in validate stage
 - bare-metal optional QEMU timer wake probe in validate stage
 - bare-metal optional QEMU timer quantum probe in validate stage
+- bare-metal optional QEMU timer quantum wrapper probes in validate stage
 - bare-metal optional QEMU timer cancel probe in validate stage
 - bare-metal optional QEMU timer cancel wrapper probes in validate stage
 - bare-metal optional QEMU timer cancel-task interrupt-timeout probe in validate stage

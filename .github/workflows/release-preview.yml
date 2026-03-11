@@ -542,6 +542,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-timer-quantum-probe-check.ps1
 
+      - name: Bare-metal QEMU timer quantum baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-quantum-baseline-probe-check.ps1 -SkipBuild
+
+      - name: Bare-metal QEMU timer quantum boundary probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-quantum-boundary-probe-check.ps1 -SkipBuild
+
+      - name: Bare-metal QEMU timer quantum preboundary blocked probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-quantum-preboundary-blocked-probe-check.ps1 -SkipBuild
+
+      - name: Bare-metal QEMU timer quantum wake payload probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-quantum-wake-payload-probe-check.ps1 -SkipBuild
+
+      - name: Bare-metal QEMU timer quantum final state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-quantum-final-state-probe-check.ps1 -SkipBuild
+
       - name: Bare-metal QEMU timer cancel task probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-timer-cancel-task-probe-check.ps1

@@ -4724,26 +4724,61 @@ test "baremetal timer quantum delays one shot dispatch until quantum boundary" {
 
     _ = oc_submit_command(abi.command_scheduler_disable, 0, 0);
     oc_tick();
-    _ = oc_submit_command(abi.command_task_create, 5, 0);
+    _ = oc_submit_command(abi.command_task_create, 9, 2);
     oc_tick();
-    const task_id = oc_scheduler_task(0).task_id;
+    var task = oc_scheduler_task(0);
+    const task_id = task.task_id;
     try std.testing.expect(task_id != 0);
+    try std.testing.expectEqual(@as(u8, 1), oc_scheduler_state_ptr().task_count);
+    try std.testing.expectEqual(@as(u8, abi.task_state_ready), task.state);
+    try std.testing.expectEqual(@as(u8, 2), task.priority);
+    try std.testing.expectEqual(@as(u32, 9), task.budget_ticks);
+    try std.testing.expectEqual(@as(u32, 9), task.budget_remaining);
+    try std.testing.expectEqual(@as(u32, 0), task.run_count);
 
     _ = oc_submit_command(abi.command_timer_set_quantum, 3, 0);
     oc_tick();
+    try std.testing.expectEqual(@as(u16, abi.command_timer_set_quantum), status.last_command_opcode);
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
     try std.testing.expectEqual(@as(u32, 3), oc_timer_quantum());
 
     _ = oc_submit_command(abi.command_timer_schedule, task_id, 1);
     oc_tick();
+    try std.testing.expectEqual(@as(u16, abi.command_timer_schedule), status.last_command_opcode);
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 1), oc_timer_entry_count());
+    var timer_entry = oc_timer_entry(0);
+    try std.testing.expectEqual(@as(u32, 1), timer_entry.timer_id);
+    try std.testing.expectEqual(task_id, timer_entry.task_id);
+    try std.testing.expectEqual(@as(u8, abi.timer_entry_state_armed), timer_entry.state);
+    try std.testing.expectEqual(status.ticks, timer_entry.next_fire_tick);
+    const quantum: u64 = @as(u64, oc_timer_quantum());
+    const expected_boundary_tick = ((timer_entry.next_fire_tick / quantum) + 1) * quantum;
 
-    // current tick has advanced to 4 here; next timer scan boundary is 6
-    oc_tick(); // current_tick=4
+    oc_tick();
     try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
-    oc_tick(); // current_tick=5
+    task = oc_scheduler_task(0);
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), task.state);
+    oc_tick();
     try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
-    oc_tick(); // current_tick=6
+    task = oc_scheduler_task(0);
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), task.state);
+    oc_tick();
     try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 0), oc_timer_entry_count());
+    task = oc_scheduler_task(0);
+    try std.testing.expectEqual(@as(u8, abi.task_state_ready), task.state);
+    const wake = oc_wake_queue_event(0);
+    try std.testing.expectEqual(@as(u32, 1), wake.seq);
+    try std.testing.expectEqual(task_id, wake.task_id);
+    try std.testing.expectEqual(@as(u32, 1), wake.timer_id);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_timer), wake.reason);
+    try std.testing.expectEqual(@as(u8, 0), wake.vector);
+    try std.testing.expectEqual(expected_boundary_tick, wake.tick);
+    timer_entry = oc_timer_entry(0);
+    try std.testing.expectEqual(@as(u8, abi.timer_entry_state_fired), timer_entry.state);
+    try std.testing.expectEqual(@as(u64, 1), timer_entry.fire_count);
+    try std.testing.expectEqual(expected_boundary_tick, timer_entry.last_fire_tick);
 }
 
 test "baremetal task lifecycle commands control runnable state wake queue and post-terminate rejection" {

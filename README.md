@@ -123,6 +123,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - optional QEMU scheduler saturation wrapper validation now fails directly on the 16-slot baseline fill, overflow rejection without task-count drift, terminated-slot capture, reuse-slot replacement semantics, and final scheduler state on that pressure lane
   - optional QEMU timer wake probe validates timer reset/quantum/task-wait flow end to end, including fired timer entries and wake-queue telemetry against the freestanding PVH artifact
   - optional QEMU timer quantum probe validates one-shot timer quantum suppression end to end, proving the task stays waiting with an empty wake queue at the pre-boundary tick and only wakes on the next quantum boundary against the freestanding PVH artifact
+  - optional QEMU timer quantum wrapper probes validate the same lane in five isolated checks: armed baseline capture, computed quantum-boundary hold, pre-boundary blocked state, exact timer wake payload, and final timer/task-state telemetry after the delayed one-shot fire
   - optional QEMU timer cancel probe validates `command_timer_cancel` by live timer ID end to end, proving the armed timer entry is canceled in place, `timer_entry_count` drops to `0`, and a second cancel of the same timer ID returns `result_not_found`
   - optional QEMU timer cancel wrapper probes validate that same broad lane at five narrower boundaries, failing directly on the armed baseline, cancel collapse to zero live timer entries, preserved canceled-slot metadata, second-cancel `result_not_found`, and zero wake/dispatch telemetry
   - optional QEMU timer cancel-task probe validates `command_timer_cancel_task` end to end, proving the first cancellation collapses `timer_entry_count` to `0`, preserves the canceled timer slot state, and the second cancellation returns `result_not_found` against the freestanding PVH artifact
@@ -635,6 +636,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU scheduler saturation probe
 - optional bare-metal QEMU timer wake probe
 - optional bare-metal QEMU timer quantum probe
+- optional bare-metal QEMU timer quantum wrapper probes
 - optional bare-metal QEMU timer cancel probe
 - optional bare-metal QEMU timer cancel-task interrupt-timeout probe
 - optional bare-metal QEMU timer cancel task probe
@@ -741,6 +743,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU scheduler validation
 - optional bare-metal QEMU timer wake validation
 - optional bare-metal QEMU timer quantum validation
+- optional bare-metal QEMU timer quantum wrapper validation
 - optional bare-metal QEMU timer cancel validation
 - optional bare-metal QEMU timer cancel wrapper validation
 - optional bare-metal QEMU timer pressure validation
