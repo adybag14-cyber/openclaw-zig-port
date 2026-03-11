@@ -325,9 +325,14 @@ if $stage == 10
     printf "POST_PENDING_WAKE_COUNT=%u\n", *(unsigned short*)(0x__TIMER_STATE__+__TIMER_PENDING_WAKE_COUNT_OFFSET__)
     printf "POST_TIMER_COUNT=%u\n", *(unsigned char*)(0x__TIMER_STATE__+__TIMER_ENTRY_COUNT_OFFSET__)
     printf "POST_NEXT_TIMER_ID=%u\n", *(unsigned int*)(0x__TIMER_STATE__+__TIMER_NEXT_ID_OFFSET__)
+    printf "POST_QUANTUM=%u\n", *(unsigned int*)(0x__TIMER_STATE__+__TIMER_QUANTUM_OFFSET__)
     printf "POST_TIMER0_STATE=%u\n", *(unsigned char*)(0x__TIMER_ENTRIES__+__TIMER_ENTRY_STATE_OFFSET__)
     printf "POST_TASK0_STATE=%u\n", *(unsigned char*)(0x__TASKS__+__TASK_STATE_OFFSET__)
     printf "POST_TASK1_STATE=%u\n", *(unsigned char*)(0x__TASKS__+__TASK_STRIDE__+__TASK_STATE_OFFSET__)
+    printf "POST_WAIT_KIND0=%u\n", *(unsigned char*)(0x__WAIT_KIND__)
+    printf "POST_WAIT_KIND1=%u\n", *(unsigned char*)(0x__WAIT_KIND__+1)
+    printf "POST_WAIT_TIMEOUT0=%llu\n", *(unsigned long long*)(0x__WAIT_TIMEOUT__)
+    printf "POST_WAIT_TIMEOUT1=%llu\n", *(unsigned long long*)(0x__WAIT_TIMEOUT__+8)
     printf "POST_WAKE0_TASK_ID=%u\n", *(unsigned int*)(0x__WAKE_QUEUE__+__WAKE0_TASK_ID_OFFSET__)
     set $idle_start_ticks = *(unsigned long long*)(0x__STATUS__+__STATUS_TICKS_OFFSET__)
     set $stage = 11
@@ -345,6 +350,8 @@ if $stage == 11
     printf "AFTER_IDLE_PENDING_WAKE_COUNT=%u\n", *(unsigned short*)(0x__TIMER_STATE__+__TIMER_PENDING_WAKE_COUNT_OFFSET__)
     printf "AFTER_IDLE_TIMER_COUNT=%u\n", *(unsigned char*)(0x__TIMER_STATE__+__TIMER_ENTRY_COUNT_OFFSET__)
     printf "AFTER_IDLE_TIMER_DISPATCH_COUNT=%llu\n", *(unsigned long long*)(0x__TIMER_STATE__+__TIMER_DISPATCH_COUNT_OFFSET__)
+    printf "AFTER_IDLE_NEXT_TIMER_ID=%u\n", *(unsigned int*)(0x__TIMER_STATE__+__TIMER_NEXT_ID_OFFSET__)
+    printf "AFTER_IDLE_QUANTUM=%u\n", *(unsigned int*)(0x__TIMER_STATE__+__TIMER_QUANTUM_OFFSET__)
     printf "AFTER_IDLE_WAKE0_TASK_ID=%u\n", *(unsigned int*)(0x__WAKE_QUEUE__+__WAKE0_TASK_ID_OFFSET__)
     detach
     quit
@@ -493,13 +500,20 @@ $required = @(
     @{ Name = 'POST_PENDING_WAKE_COUNT'; Expected = 1 },
     @{ Name = 'POST_TIMER_COUNT'; Expected = 0 },
     @{ Name = 'POST_NEXT_TIMER_ID'; Expected = 2 },
+    @{ Name = 'POST_QUANTUM'; Expected = $timerQuantum },
     @{ Name = 'POST_TIMER0_STATE'; Expected = 3 },
     @{ Name = 'POST_TASK0_STATE'; Expected = $taskStateTerminated },
     @{ Name = 'POST_TASK1_STATE'; Expected = $taskStateReady },
+    @{ Name = 'POST_WAIT_KIND0'; Expected = $waitConditionNone },
+    @{ Name = 'POST_WAIT_KIND1'; Expected = $waitConditionNone },
+    @{ Name = 'POST_WAIT_TIMEOUT0'; Expected = 0 },
+    @{ Name = 'POST_WAIT_TIMEOUT1'; Expected = 0 },
     @{ Name = 'AFTER_IDLE_WAKE_COUNT'; Expected = 1 },
     @{ Name = 'AFTER_IDLE_PENDING_WAKE_COUNT'; Expected = 1 },
     @{ Name = 'AFTER_IDLE_TIMER_COUNT'; Expected = 0 },
-    @{ Name = 'AFTER_IDLE_TIMER_DISPATCH_COUNT'; Expected = 0 }
+    @{ Name = 'AFTER_IDLE_TIMER_DISPATCH_COUNT'; Expected = 0 },
+    @{ Name = 'AFTER_IDLE_NEXT_TIMER_ID'; Expected = 2 },
+    @{ Name = 'AFTER_IDLE_QUANTUM'; Expected = $timerQuantum }
 )
 
 foreach ($item in $required) {

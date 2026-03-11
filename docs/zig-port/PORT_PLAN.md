@@ -1578,6 +1578,11 @@ Full-stack replacement execution reference:
     - the broad probe now emits direct wait-clear and wake payload fields (`POST_RESUME_WAIT_KIND`, `POST_RESUME_WAIT_TIMEOUT`, `POST_RESUME_WAKE_TIMER_ID`) so wrapper failures point at the exact timer-backed resume boundary instead of only later end-state counts.
     - the host regression now also asserts cleared wait-kind/timeout state, preserved canceled timer metadata, exact manual wake payload semantics, and preserved timer `next_timer_id` / dispatch telemetry before the post-resume rearm.
     - the wrapper family reuses the broad timer-backed resume lane but fails directly on the pre-resume waiting baseline, cleared wait-kind/timeout state after `command_task_resume`, preserved canceled-slot metadata, exact manual wake payload, and final no-stale-timer plus rearm/telemetry invariants.
+  - bare-metal task-terminate mixed-state wrapper validation shipped:
+    - new scripts: `scripts/baremetal-qemu-task-terminate-mixed-state-baseline-probe-check.ps1`, `scripts/baremetal-qemu-task-terminate-mixed-state-target-clear-probe-check.ps1`, `scripts/baremetal-qemu-task-terminate-mixed-state-survivor-wake-probe-check.ps1`, `scripts/baremetal-qemu-task-terminate-mixed-state-wait-clear-probe-check.ps1`, and `scripts/baremetal-qemu-task-terminate-mixed-state-idle-stability-probe-check.ps1`.
+    - the broad mixed-state probe now emits explicit `POST_QUANTUM`, `POST_WAIT_KIND0`, `POST_WAIT_KIND1`, `POST_WAIT_TIMEOUT0`, `POST_WAIT_TIMEOUT1`, `AFTER_IDLE_NEXT_TIMER_ID`, and `AFTER_IDLE_QUANTUM` fields so wrapper failures bind to the exact terminate-cleanup boundary instead of inferring state from queue counts alone.
+    - the host regression now also asserts survivor-slot wait clear, preserved timer quantum, and preserved `next_timer_id` after the idle settle window.
+    - the wrapper family reuses the broad mixed terminate lane but fails directly on the pre-terminate wrapped baseline, immediate target-clear collapse, survivor wake preservation, explicit wait-kind/timeout clearing, and settled idle no-stale-dispatch plus preserved quantum/next-timer invariants.
   - bare-metal task-resume interrupt-timeout validation shipped:
     - new script: `scripts/baremetal-qemu-task-resume-interrupt-timeout-probe-check.ps1`.
     - added matching host regression in `src/baremetal_main.zig`.

@@ -1086,6 +1086,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-task-terminate-mixed-state-survivor-probe-check.ps1
 
+      - name: Bare-metal QEMU task terminate mixed-state baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-terminate-mixed-state-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU task terminate mixed-state target-clear probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-terminate-mixed-state-target-clear-probe-check.ps1
+
+      - name: Bare-metal QEMU task terminate mixed-state survivor-wake probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-terminate-mixed-state-survivor-wake-probe-check.ps1
+
+      - name: Bare-metal QEMU task terminate mixed-state wait-clear probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-terminate-mixed-state-wait-clear-probe-check.ps1
+
+      - name: Bare-metal QEMU task terminate mixed-state idle-stability probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-terminate-mixed-state-idle-stability-probe-check.ps1
+
       - name: Bare-metal QEMU wake queue selective probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-wake-queue-selective-probe-check.ps1
