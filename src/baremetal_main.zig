@@ -7945,15 +7945,27 @@ test "baremetal task resume clears interrupt wait and prevents later interrupt w
     _ = oc_submit_command(abi.command_task_resume, task_id, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_task_count());
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_waiting_count());
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_interrupt_count());
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_timeout_count());
+    try std.testing.expectEqual(@as(u8, abi.task_state_ready), oc_scheduler_task(0).state);
     try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u8, wait_condition_none), scheduler_wait_kind[0]);
+    try std.testing.expectEqual(@as(u16, 0), scheduler_wait_interrupt_vector[0]);
+    try std.testing.expectEqual(@as(u64, 0), scheduler_wait_timeout_tick[0]);
+    try std.testing.expectEqual(@as(u32, 0), oc_timer_entry_count());
+    try std.testing.expectEqual(@as(u32, 1), oc_timer_state_ptr().next_timer_id);
+    try std.testing.expectEqual(@as(u64, 0), oc_timer_state_ptr().dispatch_count);
+    try std.testing.expectEqual(@as(u64, 0), oc_timer_state_ptr().last_interrupt_count);
+    try std.testing.expectEqual(@as(u16, 0), x86_bootstrap.oc_last_interrupt_vector());
 
     const evt = oc_wake_queue_event(0);
     try std.testing.expectEqual(task_id, evt.task_id);
+    try std.testing.expectEqual(@as(u32, 0), evt.timer_id);
     try std.testing.expectEqual(@as(u8, abi.wake_reason_manual), evt.reason);
     try std.testing.expectEqual(@as(u8, 0), evt.vector);
+    try std.testing.expectEqual(evt.tick, oc_timer_state_ptr().last_wake_tick);
 
     _ = oc_submit_command(abi.command_trigger_interrupt, 200, 0);
     oc_tick();
@@ -7963,6 +7975,9 @@ test "baremetal task resume clears interrupt wait and prevents later interrupt w
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_waiting_count());
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_interrupt_count());
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_timeout_count());
+    try std.testing.expectEqual(@as(u32, 0), oc_timer_entry_count());
+    try std.testing.expectEqual(@as(u32, 1), oc_timer_state_ptr().next_timer_id);
+    try std.testing.expectEqual(@as(u64, 0), oc_timer_state_ptr().dispatch_count);
 
     oc_tick_n(4);
     try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
