@@ -4402,6 +4402,107 @@ test "baremetal allocator and syscall reset commands clear dirty runtime state" 
     try std.testing.expectEqual(@as(i16, abi.result_not_found), status.last_command_result);
 }
 
+test "baremetal allocator and syscall failure paths preserve allocator and syscall state" {
+    status.mode = abi.mode_running;
+    status.ticks = 0;
+    status.command_seq_ack = 0;
+    status.last_command_opcode = abi.command_nop;
+    status.last_command_result = abi.result_ok;
+    status.tick_batch_hint = 1;
+    command_mailbox = .{
+        .magic = abi.command_magic,
+        .api_version = abi.api_version,
+        .opcode = abi.command_nop,
+        .seq = 0,
+        .arg0 = 0,
+        .arg1 = 0,
+    };
+    oc_allocator_reset();
+    oc_syscall_reset();
+    oc_scheduler_reset();
+    oc_command_result_counters_clear();
+
+    const allocator_initial = oc_allocator_state_ptr().*;
+    const invalid_align_size: u64 = allocator_default_page_size;
+    const invalid_align: u64 = 3000;
+    const valid_align: u64 = allocator_default_page_size;
+    const syscall_id: u64 = 9;
+    const handler_token: u64 = 0xBEEF;
+
+    _ = oc_submit_command(abi.command_allocator_alloc, invalid_align_size, invalid_align);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+    try std.testing.expectEqual(abi.command_allocator_alloc, status.last_command_opcode);
+    const state_after_invalid_align = oc_allocator_state_ptr().*;
+    try std.testing.expectEqual(allocator_initial.free_pages, state_after_invalid_align.free_pages);
+    try std.testing.expectEqual(@as(u32, 0), state_after_invalid_align.allocation_count);
+    try std.testing.expectEqual(@as(u64, 0), state_after_invalid_align.bytes_in_use);
+
+    _ = oc_submit_command(abi.command_allocator_alloc, allocator_initial.heap_size + valid_align, valid_align);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_no_space), status.last_command_result);
+    try std.testing.expectEqual(abi.command_allocator_alloc, status.last_command_opcode);
+    const state_after_no_space = oc_allocator_state_ptr().*;
+    try std.testing.expectEqual(allocator_initial.free_pages, state_after_no_space.free_pages);
+    try std.testing.expectEqual(@as(u32, 0), state_after_no_space.allocation_count);
+    try std.testing.expectEqual(@as(u64, 0), state_after_no_space.bytes_in_use);
+
+    _ = oc_submit_command(abi.command_syscall_register, syscall_id, handler_token);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(abi.command_syscall_register, status.last_command_opcode);
+
+    _ = oc_submit_command(abi.command_syscall_set_flags, syscall_id, abi.syscall_entry_flag_blocked);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(abi.command_syscall_set_flags, status.last_command_opcode);
+    try std.testing.expectEqual(abi.syscall_entry_flag_blocked, oc_syscall_entry(0).flags);
+
+    _ = oc_submit_command(abi.command_syscall_invoke, syscall_id, 0x1234);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_conflict), status.last_command_result);
+    try std.testing.expectEqual(abi.command_syscall_invoke, status.last_command_opcode);
+    try std.testing.expectEqual(@as(u64, 0), oc_syscall_entry(0).invoke_count);
+    try std.testing.expectEqual(@as(u64, 0), oc_syscall_entry(0).last_arg);
+    try std.testing.expectEqual(@as(i64, 0), oc_syscall_entry(0).last_result);
+    try std.testing.expectEqual(@as(u64, 0), oc_syscall_state_ptr().dispatch_count);
+    try std.testing.expectEqual(@as(u32, 0), oc_syscall_state_ptr().last_syscall_id);
+
+    _ = oc_submit_command(abi.command_syscall_disable, 0, 0);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(abi.command_syscall_disable, status.last_command_opcode);
+    try std.testing.expect(!oc_syscall_enabled());
+
+    _ = oc_submit_command(abi.command_syscall_invoke, syscall_id, 0x1234);
+    oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_not_supported), status.last_command_result);
+    try std.testing.expectEqual(abi.command_syscall_invoke, status.last_command_opcode);
+
+    const counters = command_result_counters;
+    try std.testing.expectEqual(@as(u32, 3), counters.ok_count);
+    try std.testing.expectEqual(@as(u32, 1), counters.invalid_argument_count);
+    try std.testing.expectEqual(@as(u32, 1), counters.not_supported_count);
+    try std.testing.expectEqual(@as(u32, 2), counters.other_error_count);
+    try std.testing.expectEqual(@as(u32, 7), counters.total_count);
+    try std.testing.expectEqual(@as(i16, abi.result_not_supported), counters.last_result);
+    try std.testing.expectEqual(abi.command_syscall_invoke, counters.last_opcode);
+    try std.testing.expectEqual(status.command_seq_ack, counters.last_seq);
+
+    const syscall_state_final = oc_syscall_state_ptr().*;
+    try std.testing.expectEqual(@as(u32, 1), syscall_state_final.entry_count);
+    try std.testing.expectEqual(@as(u32, 0), syscall_state_final.last_syscall_id);
+    try std.testing.expectEqual(@as(u64, 0), syscall_state_final.dispatch_count);
+    try std.testing.expectEqual(@as(u64, 0), syscall_state_final.last_invoke_tick);
+    try std.testing.expectEqual(@as(i64, 0), syscall_state_final.last_result);
+    try std.testing.expectEqual(@as(u8, abi.syscall_entry_state_registered), oc_syscall_entry(0).state);
+    try std.testing.expectEqual(@as(u8, abi.syscall_entry_flag_blocked), oc_syscall_entry(0).flags);
+    try std.testing.expectEqual(handler_token, oc_syscall_entry(0).handler_token);
+    try std.testing.expectEqual(@as(u64, 0), oc_syscall_entry(0).invoke_count);
+    try std.testing.expectEqual(@as(u64, 0), oc_syscall_entry(0).last_arg);
+    try std.testing.expectEqual(@as(i64, 0), oc_syscall_entry(0).last_result);
+}
+
 test "baremetal allocator saturation reset command clears full table and restarts cleanly" {
     status.mode = abi.mode_running;
     status.ticks = 0;

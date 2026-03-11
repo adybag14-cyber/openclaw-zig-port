@@ -1729,6 +1729,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-allocator-syscall-failure-probe-check.ps1
 
+      - name: Bare-metal QEMU allocator syscall failure baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-allocator-syscall-failure-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU allocator syscall failure invalid-align probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-allocator-syscall-failure-invalid-align-probe-check.ps1
+
+      - name: Bare-metal QEMU allocator syscall failure no-space probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-allocator-syscall-failure-no-space-probe-check.ps1
+
+      - name: Bare-metal QEMU allocator syscall failure blocked probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-allocator-syscall-failure-blocked-probe-check.ps1
+
+      - name: Bare-metal QEMU allocator syscall failure final-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-allocator-syscall-failure-final-state-probe-check.ps1
+
       - name: Bare-metal QEMU command result counters probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-command-result-counters-probe-check.ps1
