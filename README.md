@@ -42,6 +42,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - bare-metal interrupt-mask profile control is now enforced by a live QEMU+GDB probe (`command_interrupt_mask_apply_profile`, `command_interrupt_mask_set`, `command_interrupt_mask_reset_ignored_counts`, `command_interrupt_mask_clear_all`) covering external-all, custom unmask/remask, external-high, invalid profile rejection, and clear-all recovery
   - bare-metal scheduler-wake timer-clear recovery is now enforced by both the host suite and a dedicated live QEMU+GDB probe, proving `command_scheduler_wake_task` clears a pure timer wait, queues exactly one manual wake, prevents a later ghost timer wake, and preserves fresh timer allocation from the current `next_timer_id`
   - bare-metal timer-cancel-task interrupt-timeout recovery is now enforced by both the host suite and a dedicated live QEMU+GDB probe, proving `command_timer_cancel_task` clears timeout-backed interrupt waits back to steady state without losing the later real interrupt wake path
+  - bare-metal timer-cancel-task interrupt-timeout wrapper validation now fails directly on the armed timeout snapshot, immediate cancel-clear state, preserved interrupt-only recovery, no-stale-timeout settle window, and final mailbox/telemetry envelope on that dedicated cancel-task recovery lane
   - bare-metal interrupt-mask clear-all recovery is now enforced by a dedicated live QEMU+GDB probe, proving `command_interrupt_mask_clear_all` restores real interrupt wake delivery, clears ignored-count telemetry, and returns the runtime to the `none` profile after direct mask manipulation
   - bare-metal task-terminate interrupt-timeout cleanup is now enforced by both the host suite and a dedicated live QEMU+GDB probe, proving `command_task_terminate` clears timeout-backed interrupt waits, leaves no queued wake or timer residue, and prevents later ghost interrupt/timeout wake delivery for the terminated task
   - bare-metal panic freeze and recovery behavior is now enforced by a live QEMU+GDB probe (`command_trigger_panic_flag`, `command_set_mode(mode_running)`, `command_set_boot_phase(runtime)`) proving panic freezes dispatch cleanly, mode recovery resumes the same task immediately, and boot diagnostics stay panicked until explicitly restored
@@ -641,6 +642,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU timer quantum wrapper probes
 - optional bare-metal QEMU timer cancel probe
 - optional bare-metal QEMU timer cancel-task interrupt-timeout probe
+- optional bare-metal QEMU timer cancel-task interrupt-timeout wrapper probes
 - optional bare-metal QEMU timer cancel task probe
 - optional bare-metal QEMU timer cancel task wrapper probes
 - optional bare-metal QEMU timer pressure probe

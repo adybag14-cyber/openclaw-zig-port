@@ -594,6 +594,22 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-interrupt-recovery-probe-check.ps1
 
+      - name: Bare-metal QEMU timer cancel task interrupt-timeout arm-preservation probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-arm-preservation-probe-check.ps1
+
+      - name: Bare-metal QEMU timer cancel task interrupt-timeout cancel-clear probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-cancel-clear-probe-check.ps1
+
+      - name: Bare-metal QEMU timer cancel task interrupt-timeout no-stale-timeout probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-no-stale-timeout-probe-check.ps1
+
+      - name: Bare-metal QEMU timer cancel task interrupt-timeout telemetry-preserve probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-telemetry-preserve-probe-check.ps1
+
       - name: Bare-metal QEMU timer cancel probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-timer-cancel-probe-check.ps1

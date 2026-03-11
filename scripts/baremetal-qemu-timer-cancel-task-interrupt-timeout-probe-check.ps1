@@ -401,7 +401,29 @@ if (Test-Path $qemuStderr) { Remove-Item -Force $qemuStderr }
 set pagination off
 set confirm off
 set `$stage = 0
+set `$armed_tick = 0
+set `$armed_task0_state = 0
+set `$armed_wait_kind0 = 0
+set `$armed_wait_vector0 = 0
+set `$armed_wait_timeout0 = 0
+set `$armed_wake_queue_count = 0
+set `$cancel_tick = 0
+set `$cancel_task0_state = 0
+set `$cancel_wait_kind0 = 0
+set `$cancel_wait_vector0 = 0
+set `$cancel_wait_timeout0 = 0
+set `$cancel_timer_entry_count = 0
+set `$cancel_timer_pending_wake_count = 0
+set `$cancel_wake_queue_count = 0
 set `$post_wake_tick = 0
+set `$post_idle_tick = 0
+set `$post_idle_task0_state = 0
+set `$post_idle_wait_kind0 = 0
+set `$post_idle_wait_vector0 = 0
+set `$post_idle_wait_timeout0 = 0
+set `$post_idle_timer_entry_count = 0
+set `$post_idle_timer_pending_wake_count = 0
+set `$post_idle_wake_queue_count = 0
 file $artifactForGdb
 handle SIGQUIT nostop noprint pass
 target remote :$GdbPort
@@ -471,6 +493,12 @@ if `$stage == 5
 end
 if `$stage == 6
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 6 && *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset) == $taskStateWaiting && *(unsigned char*)(0x$schedulerWaitKindAddress) == $waitConditionInterruptAny && *(unsigned long long*)(0x$schedulerWaitTimeoutTickAddress) > *(unsigned long long*)(0x$statusAddress+$statusTicksOffset) && *(unsigned int*)(0x$wakeQueueCountAddress) == 0
+    set `$armed_tick = *(unsigned long long*)(0x$statusAddress+$statusTicksOffset)
+    set `$armed_task0_state = *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset)
+    set `$armed_wait_kind0 = *(unsigned char*)(0x$schedulerWaitKindAddress)
+    set `$armed_wait_vector0 = *(unsigned char*)(0x$schedulerWaitInterruptVectorAddress)
+    set `$armed_wait_timeout0 = *(unsigned long long*)(0x$schedulerWaitTimeoutTickAddress)
+    set `$armed_wake_queue_count = *(unsigned int*)(0x$wakeQueueCountAddress)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $timerCancelTaskOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 7
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = 1
@@ -481,6 +509,14 @@ if `$stage == 6
 end
 if `$stage == 7
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 7 && *(unsigned int*)(0x$wakeQueueCountAddress) == 0 && *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset) == $taskStateWaiting && *(unsigned char*)(0x$schedulerWaitKindAddress) == $waitConditionInterruptAny && *(unsigned long long*)(0x$schedulerWaitTimeoutTickAddress) == 0
+    set `$cancel_tick = *(unsigned long long*)(0x$statusAddress+$statusTicksOffset)
+    set `$cancel_task0_state = *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset)
+    set `$cancel_wait_kind0 = *(unsigned char*)(0x$schedulerWaitKindAddress)
+    set `$cancel_wait_vector0 = *(unsigned char*)(0x$schedulerWaitInterruptVectorAddress)
+    set `$cancel_wait_timeout0 = *(unsigned long long*)(0x$schedulerWaitTimeoutTickAddress)
+    set `$cancel_timer_entry_count = *(unsigned char*)(0x$timerStateAddress+$timerEntryCountOffset)
+    set `$cancel_timer_pending_wake_count = *(unsigned short*)(0x$timerStateAddress+$timerPendingWakeCountOffset)
+    set `$cancel_wake_queue_count = *(unsigned int*)(0x$wakeQueueCountAddress)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $triggerInterruptOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 8
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = $interruptVector
@@ -498,6 +534,14 @@ if `$stage == 8
 end
 if `$stage == 9
   if *(unsigned long long*)(0x$statusAddress+$statusTicksOffset) >= `$post_wake_tick + $postWakeSlackTicks && *(unsigned int*)(0x$wakeQueueCountAddress) == 1
+    set `$post_idle_tick = *(unsigned long long*)(0x$statusAddress+$statusTicksOffset)
+    set `$post_idle_task0_state = *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset)
+    set `$post_idle_wait_kind0 = *(unsigned char*)(0x$schedulerWaitKindAddress)
+    set `$post_idle_wait_vector0 = *(unsigned char*)(0x$schedulerWaitInterruptVectorAddress)
+    set `$post_idle_wait_timeout0 = *(unsigned long long*)(0x$schedulerWaitTimeoutTickAddress)
+    set `$post_idle_timer_entry_count = *(unsigned char*)(0x$timerStateAddress+$timerEntryCountOffset)
+    set `$post_idle_timer_pending_wake_count = *(unsigned short*)(0x$timerStateAddress+$timerPendingWakeCountOffset)
+    set `$post_idle_wake_queue_count = *(unsigned int*)(0x$wakeQueueCountAddress)
     set `$stage = 10
   end
   continue
@@ -516,6 +560,28 @@ printf "TASK0_PRIORITY=%u\n", *(unsigned char*)(0x$schedulerTasksAddress+$taskPr
 printf "TASK0_RUN_COUNT=%u\n", *(unsigned int*)(0x$schedulerTasksAddress+$taskRunCountOffset)
 printf "TASK0_BUDGET=%u\n", *(unsigned int*)(0x$schedulerTasksAddress+$taskBudgetOffset)
 printf "TASK0_BUDGET_REMAINING=%u\n", *(unsigned int*)(0x$schedulerTasksAddress+$taskBudgetRemainingOffset)
+printf "ARMED_TICK=%llu\n", `$armed_tick
+printf "ARMED_TASK0_STATE=%u\n", `$armed_task0_state
+printf "ARMED_WAIT_KIND0=%u\n", `$armed_wait_kind0
+printf "ARMED_WAIT_VECTOR0=%u\n", `$armed_wait_vector0
+printf "ARMED_WAIT_TIMEOUT0=%llu\n", `$armed_wait_timeout0
+printf "ARMED_WAKE_QUEUE_COUNT=%u\n", `$armed_wake_queue_count
+printf "CANCEL_TICK=%llu\n", `$cancel_tick
+printf "CANCEL_TASK0_STATE=%u\n", `$cancel_task0_state
+printf "CANCEL_WAIT_KIND0=%u\n", `$cancel_wait_kind0
+printf "CANCEL_WAIT_VECTOR0=%u\n", `$cancel_wait_vector0
+printf "CANCEL_WAIT_TIMEOUT0=%llu\n", `$cancel_wait_timeout0
+printf "CANCEL_TIMER_ENTRY_COUNT=%u\n", `$cancel_timer_entry_count
+printf "CANCEL_TIMER_PENDING_WAKE_COUNT=%u\n", `$cancel_timer_pending_wake_count
+printf "CANCEL_WAKE_QUEUE_COUNT=%u\n", `$cancel_wake_queue_count
+printf "POST_IDLE_TICK=%llu\n", `$post_idle_tick
+printf "POST_IDLE_TASK0_STATE=%u\n", `$post_idle_task0_state
+printf "POST_IDLE_WAIT_KIND0=%u\n", `$post_idle_wait_kind0
+printf "POST_IDLE_WAIT_VECTOR0=%u\n", `$post_idle_wait_vector0
+printf "POST_IDLE_WAIT_TIMEOUT0=%llu\n", `$post_idle_wait_timeout0
+printf "POST_IDLE_TIMER_ENTRY_COUNT=%u\n", `$post_idle_timer_entry_count
+printf "POST_IDLE_TIMER_PENDING_WAKE_COUNT=%u\n", `$post_idle_timer_pending_wake_count
+printf "POST_IDLE_WAKE_QUEUE_COUNT=%u\n", `$post_idle_wake_queue_count
 printf "WAIT_KIND0=%u\n", *(unsigned char*)(0x$schedulerWaitKindAddress)
 printf "WAIT_VECTOR0=%u\n", *(unsigned char*)(0x$schedulerWaitInterruptVectorAddress)
 printf "WAIT_TIMEOUT0=%llu\n", *(unsigned long long*)(0x$schedulerWaitTimeoutTickAddress)
@@ -590,6 +656,28 @@ $task0Priority = $null
 $task0RunCount = $null
 $task0Budget = $null
 $task0BudgetRemaining = $null
+$armedTick = $null
+$armedTask0State = $null
+$armedWaitKind0 = $null
+$armedWaitVector0 = $null
+$armedWaitTimeout0 = $null
+$armedWakeQueueCount = $null
+$cancelTick = $null
+$cancelTask0State = $null
+$cancelWaitKind0 = $null
+$cancelWaitVector0 = $null
+$cancelWaitTimeout0 = $null
+$cancelTimerEntryCount = $null
+$cancelTimerPendingWakeCount = $null
+$cancelWakeQueueCount = $null
+$postIdleTick = $null
+$postIdleTask0State = $null
+$postIdleWaitKind0 = $null
+$postIdleWaitVector0 = $null
+$postIdleWaitTimeout0 = $null
+$postIdleTimerEntryCount = $null
+$postIdleTimerPendingWakeCount = $null
+$postIdleWakeQueueCount = $null
 $waitKind0 = $null
 $waitVector0 = $null
 $waitTimeout0 = $null
@@ -627,6 +715,28 @@ if (Test-Path $gdbStdout) {
     $task0RunCount = Extract-IntValue -Text $gdbOutput -Name "TASK0_RUN_COUNT"
     $task0Budget = Extract-IntValue -Text $gdbOutput -Name "TASK0_BUDGET"
     $task0BudgetRemaining = Extract-IntValue -Text $gdbOutput -Name "TASK0_BUDGET_REMAINING"
+    $armedTick = Extract-IntValue -Text $gdbOutput -Name "ARMED_TICK"
+    $armedTask0State = Extract-IntValue -Text $gdbOutput -Name "ARMED_TASK0_STATE"
+    $armedWaitKind0 = Extract-IntValue -Text $gdbOutput -Name "ARMED_WAIT_KIND0"
+    $armedWaitVector0 = Extract-IntValue -Text $gdbOutput -Name "ARMED_WAIT_VECTOR0"
+    $armedWaitTimeout0 = Extract-IntValue -Text $gdbOutput -Name "ARMED_WAIT_TIMEOUT0"
+    $armedWakeQueueCount = Extract-IntValue -Text $gdbOutput -Name "ARMED_WAKE_QUEUE_COUNT"
+    $cancelTick = Extract-IntValue -Text $gdbOutput -Name "CANCEL_TICK"
+    $cancelTask0State = Extract-IntValue -Text $gdbOutput -Name "CANCEL_TASK0_STATE"
+    $cancelWaitKind0 = Extract-IntValue -Text $gdbOutput -Name "CANCEL_WAIT_KIND0"
+    $cancelWaitVector0 = Extract-IntValue -Text $gdbOutput -Name "CANCEL_WAIT_VECTOR0"
+    $cancelWaitTimeout0 = Extract-IntValue -Text $gdbOutput -Name "CANCEL_WAIT_TIMEOUT0"
+    $cancelTimerEntryCount = Extract-IntValue -Text $gdbOutput -Name "CANCEL_TIMER_ENTRY_COUNT"
+    $cancelTimerPendingWakeCount = Extract-IntValue -Text $gdbOutput -Name "CANCEL_TIMER_PENDING_WAKE_COUNT"
+    $cancelWakeQueueCount = Extract-IntValue -Text $gdbOutput -Name "CANCEL_WAKE_QUEUE_COUNT"
+    $postIdleTick = Extract-IntValue -Text $gdbOutput -Name "POST_IDLE_TICK"
+    $postIdleTask0State = Extract-IntValue -Text $gdbOutput -Name "POST_IDLE_TASK0_STATE"
+    $postIdleWaitKind0 = Extract-IntValue -Text $gdbOutput -Name "POST_IDLE_WAIT_KIND0"
+    $postIdleWaitVector0 = Extract-IntValue -Text $gdbOutput -Name "POST_IDLE_WAIT_VECTOR0"
+    $postIdleWaitTimeout0 = Extract-IntValue -Text $gdbOutput -Name "POST_IDLE_WAIT_TIMEOUT0"
+    $postIdleTimerEntryCount = Extract-IntValue -Text $gdbOutput -Name "POST_IDLE_TIMER_ENTRY_COUNT"
+    $postIdleTimerPendingWakeCount = Extract-IntValue -Text $gdbOutput -Name "POST_IDLE_TIMER_PENDING_WAKE_COUNT"
+    $postIdleWakeQueueCount = Extract-IntValue -Text $gdbOutput -Name "POST_IDLE_WAKE_QUEUE_COUNT"
     $waitKind0 = Extract-IntValue -Text $gdbOutput -Name "WAIT_KIND0"
     $waitVector0 = Extract-IntValue -Text $gdbOutput -Name "WAIT_VECTOR0"
     $waitTimeout0 = Extract-IntValue -Text $gdbOutput -Name "WAIT_TIMEOUT0"
@@ -685,6 +795,28 @@ Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_TASK0_PRI
 Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_TASK0_RUN_COUNT=$task0RunCount"
 Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_TASK0_BUDGET=$task0Budget"
 Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_TASK0_BUDGET_REMAINING=$task0BudgetRemaining"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_ARMED_TICK=$armedTick"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_ARMED_TASK0_STATE=$armedTask0State"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_ARMED_WAIT_KIND0=$armedWaitKind0"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_ARMED_WAIT_VECTOR0=$armedWaitVector0"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_ARMED_WAIT_TIMEOUT0=$armedWaitTimeout0"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_ARMED_WAKE_QUEUE_COUNT=$armedWakeQueueCount"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_CANCEL_TICK=$cancelTick"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_CANCEL_TASK0_STATE=$cancelTask0State"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_CANCEL_WAIT_KIND0=$cancelWaitKind0"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_CANCEL_WAIT_VECTOR0=$cancelWaitVector0"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_CANCEL_WAIT_TIMEOUT0=$cancelWaitTimeout0"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_CANCEL_TIMER_ENTRY_COUNT=$cancelTimerEntryCount"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_CANCEL_TIMER_PENDING_WAKE_COUNT=$cancelTimerPendingWakeCount"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_CANCEL_WAKE_QUEUE_COUNT=$cancelWakeQueueCount"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_POST_IDLE_TICK=$postIdleTick"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_POST_IDLE_TASK0_STATE=$postIdleTask0State"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_POST_IDLE_WAIT_KIND0=$postIdleWaitKind0"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_POST_IDLE_WAIT_VECTOR0=$postIdleWaitVector0"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_POST_IDLE_WAIT_TIMEOUT0=$postIdleWaitTimeout0"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_POST_IDLE_TIMER_ENTRY_COUNT=$postIdleTimerEntryCount"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_POST_IDLE_TIMER_PENDING_WAKE_COUNT=$postIdleTimerPendingWakeCount"
+Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_POST_IDLE_WAKE_QUEUE_COUNT=$postIdleWakeQueueCount"
 Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_WAIT_KIND0=$waitKind0"
 Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_WAIT_VECTOR0=$waitVector0"
 Write-Output "BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_WAIT_TIMEOUT0=$waitTimeout0"
@@ -725,16 +857,17 @@ $probePassed = $hitStart -and
     ($task0RunCount -eq 0) -and
     ($task0Budget -eq $taskBudget) -and
     ($task0BudgetRemaining -eq $taskBudget) -and
-    ($waitKind0 -eq $waitConditionNone) -and
-    ($waitVector0 -eq 0) -and
-    ($waitTimeout0 -eq 0) -and
+    ($postIdleTask0State -eq $taskStateReady) -and
+    ($postIdleWaitKind0 -eq $waitConditionNone) -and
+    ($postIdleWaitVector0 -eq 0) -and
+    ($postIdleWaitTimeout0 -eq 0) -and
     ($timerEnabled -eq $timerStateEnabled) -and
-    ($timerEntryCount -eq 0) -and
-    ($timerPendingWakeCount -eq 1) -and
+    ($postIdleTimerEntryCount -eq 0) -and
+    ($postIdleTimerPendingWakeCount -eq 1) -and
     ($timerNextTimerId -eq 1) -and
     ($timerDispatchCount -eq 0) -and
     ($timerLastInterruptCount -eq 1) -and
-    ($wakeQueueCount -eq 1) -and
+    ($postIdleWakeQueueCount -eq 1) -and
     ($wake0Seq -eq 1) -and
     ($wake0TaskId -eq 1) -and
     ($wake0TimerId -eq 0) -and

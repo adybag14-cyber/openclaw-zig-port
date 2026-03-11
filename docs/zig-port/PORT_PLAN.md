@@ -725,6 +725,10 @@ Full-stack replacement execution reference:
     - added matching host regression in `src/baremetal_main.zig`.
     - live PVH/QEMU+GDB sequence proves `command_timer_cancel_task` on a `task_wait_interrupt_for` waiter clears the timeout arm back to `none`, leaves `TIMER_ENTRY_COUNT=0`, and still allows the later real interrupt wake to land exactly once.
     - key probe evidence: `ACK=8`, `LAST_OPCODE=7`, `LAST_RESULT=0`, `TASK0_STATE=1`, `WAIT_KIND0=0`, `WAIT_TIMEOUT0=0`, `TIMER_ENTRY_COUNT=0`, `WAKE_QUEUE_COUNT=1`, `WAKE0_REASON=2`, `WAKE0_VECTOR=200`.
+  - bare-metal QEMU timer cancel-task interrupt-timeout wrapper validation shipped:
+    - new scripts: `scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-arm-preservation-probe-check.ps1`, `scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-cancel-clear-probe-check.ps1`, `scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-interrupt-recovery-probe-check.ps1`, `scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-no-stale-timeout-probe-check.ps1`, and `scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-telemetry-preserve-probe-check.ps1`.
+    - the broad `scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-probe-check.ps1` path was hardened for wrapper reuse: it now emits explicit armed, post-cancel, and post-idle snapshots so wrappers fail directly on the live recovery boundaries instead of inferring from a single final receipt.
+    - the matching host regression in `src/baremetal_main.zig` now asserts timeout-arm clearing, zero pending wake/interrupt telemetry after cancel, and preserved interrupt telemetry after the later real wake.
   - Bare-metal deadline-wait + wake-queue consumption depth expansion shipped:
     - new opcodes: `command_task_wait_for`, `command_wake_queue_pop`.
     - wake queue exports extended: `oc_wake_queue_tail_index`, `oc_wake_queue_pop`.

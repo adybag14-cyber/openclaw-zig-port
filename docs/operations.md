@@ -50,6 +50,8 @@ Recommended sequence:
 ./scripts/baremetal-qemu-timer-wake-probe-check.ps1
 ./scripts/baremetal-qemu-timer-cancel-probe-check.ps1
 ./scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-probe-check.ps1
+./scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-arm-preservation-probe-check.ps1
+./scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-cancel-clear-probe-check.ps1
 ./scripts/baremetal-qemu-task-resume-timer-clear-probe-check.ps1
 ./scripts/baremetal-qemu-task-resume-interrupt-timeout-probe-check.ps1
 ./scripts/baremetal-qemu-task-resume-interrupt-timeout-wait-clear-probe-check.ps1
@@ -57,6 +59,8 @@ Recommended sequence:
 ./scripts/baremetal-qemu-scheduler-wake-timer-clear-probe-check.ps1
 ./scripts/baremetal-qemu-scheduler-wake-timer-clear-manual-wake-probe-check.ps1
 ./scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-interrupt-recovery-probe-check.ps1
+./scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-no-stale-timeout-probe-check.ps1
+./scripts/baremetal-qemu-timer-cancel-task-interrupt-timeout-telemetry-preserve-probe-check.ps1
 ./scripts/baremetal-qemu-task-terminate-mixed-state-survivor-probe-check.ps1
 ./scripts/baremetal-qemu-periodic-timer-probe-check.ps1
 ./scripts/baremetal-qemu-periodic-timer-clamp-probe-check.ps1
@@ -161,6 +165,7 @@ Recommended sequence:
 - optional bare-metal QEMU timer cancel probe (capture the live timer ID from the armed entry, cancel that exact timer via `command_timer_cancel`, preserve the canceled slot state, and get `result_not_found` on a second cancel against the freestanding PVH artifact)
 - optional bare-metal QEMU timer cancel wrapper validation (armed baseline capture, cancel collapse to zero live timer entries, preserved canceled-slot metadata, second-cancel `result_not_found`, and zero wake/dispatch telemetry on the dedicated timer-cancel lane)
 - optional bare-metal QEMU timer cancel-task interrupt-timeout probe (`command_timer_cancel_task` on a `task_wait_interrupt_for` waiter clears the timeout arm back to steady state, keeps `wait_timeout=0`, and still allows the later real interrupt wake to land exactly once against the freestanding PVH artifact)
+- optional bare-metal QEMU timer cancel-task interrupt-timeout wrapper probes (`baremetal-qemu-timer-cancel-task-interrupt-timeout-arm-preservation-probe-check.ps1`, `baremetal-qemu-timer-cancel-task-interrupt-timeout-cancel-clear-probe-check.ps1`, `baremetal-qemu-timer-cancel-task-interrupt-timeout-interrupt-recovery-probe-check.ps1`, `baremetal-qemu-timer-cancel-task-interrupt-timeout-no-stale-timeout-probe-check.ps1`, and `baremetal-qemu-timer-cancel-task-interrupt-timeout-telemetry-preserve-probe-check.ps1`) reuse the broad timeout-backed task-cancel lane and fail directly on the armed timeout snapshot, immediate cancel-clear state, preserved interrupt-only recovery, no-stale-timeout settle window, and final mailbox/interrupt telemetry
 - optional bare-metal QEMU timer cancel task probe (one-shot + periodic task timer arming followed by `command_timer_cancel_task`, proving the first cancel collapses `timer_entry_count` to `0`, preserves the canceled timer slot state, and the second cancel returns `result_not_found` against the freestanding PVH artifact)
 - optional bare-metal QEMU timer cancel task wrapper probes (`baremetal-qemu-timer-cancel-task-baseline-probe-check.ps1`, `baremetal-qemu-timer-cancel-task-cancel-collapse-probe-check.ps1`, `baremetal-qemu-timer-cancel-task-canceled-entry-preserve-probe-check.ps1`, `baremetal-qemu-timer-cancel-task-second-cancel-notfound-probe-check.ps1`, and `baremetal-qemu-timer-cancel-task-zero-wake-telemetry-probe-check.ps1`) reuse the broad task-cancel lane and fail directly on the live armed baseline, first-cancel collapse, preserved canceled-slot metadata, second-cancel `result_not_found`, and zero wake/dispatch telemetry invariants
 - optional bare-metal QEMU timer pressure probe (fills the 16 runnable task slots with live one-shot timers, proves timer IDs `1 -> 16`, cancels one task timer, then reuses that exact slot with fresh timer ID `17` and no stray wake/dispatch activity against the freestanding PVH artifact)

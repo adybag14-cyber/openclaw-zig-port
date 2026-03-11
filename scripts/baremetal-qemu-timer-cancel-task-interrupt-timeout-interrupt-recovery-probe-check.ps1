@@ -28,12 +28,12 @@ if ($probeExitCode -ne 0) {
 }
 
 $taskId = Extract-IntValue -Text $probeText -Name 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_TASK0_ID'
-$waitKind = Extract-IntValue -Text $probeText -Name 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_WAIT_KIND0'
-$waitTimeout = Extract-IntValue -Text $probeText -Name 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_WAIT_TIMEOUT0'
-$timerEntryCount = Extract-IntValue -Text $probeText -Name 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_TIMER_ENTRY_COUNT'
-$timerPendingWakeCount = Extract-IntValue -Text $probeText -Name 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_TIMER_PENDING_WAKE_COUNT'
+$waitKind = Extract-IntValue -Text $probeText -Name 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_POST_IDLE_WAIT_KIND0'
+$waitTimeout = Extract-IntValue -Text $probeText -Name 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_POST_IDLE_WAIT_TIMEOUT0'
+$timerEntryCount = Extract-IntValue -Text $probeText -Name 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_POST_IDLE_TIMER_ENTRY_COUNT'
+$timerPendingWakeCount = Extract-IntValue -Text $probeText -Name 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_POST_IDLE_TIMER_PENDING_WAKE_COUNT'
 $timerNextTimerId = Extract-IntValue -Text $probeText -Name 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_TIMER_NEXT_TIMER_ID'
-$wakeQueueCount = Extract-IntValue -Text $probeText -Name 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_WAKE_QUEUE_COUNT'
+$wakeQueueCount = Extract-IntValue -Text $probeText -Name 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_POST_IDLE_WAKE_QUEUE_COUNT'
 $wakeTaskId = Extract-IntValue -Text $probeText -Name 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_WAKE0_TASK_ID'
 $wakeReason = Extract-IntValue -Text $probeText -Name 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_WAKE0_REASON'
 $wakeVector = Extract-IntValue -Text $probeText -Name 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_PROBE_WAKE0_VECTOR'
@@ -61,12 +61,12 @@ if ($lastInterruptVector -ne 200) { throw "Expected LAST_INTERRUPT_VECTOR=200. g
 Write-Output 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_INTERRUPT_RECOVERY_PROBE=pass'
 Write-Output 'BAREMETAL_QEMU_TIMER_CANCEL_TASK_INTERRUPT_TIMEOUT_INTERRUPT_RECOVERY_PROBE_SOURCE=baremetal-qemu-timer-cancel-task-interrupt-timeout-probe-check.ps1'
 Write-Output "TASK0_ID=$taskId"
-Write-Output "WAIT_KIND0=$waitKind"
-Write-Output "WAIT_TIMEOUT0=$waitTimeout"
-Write-Output "TIMER_ENTRY_COUNT=$timerEntryCount"
-Write-Output "TIMER_PENDING_WAKE_COUNT=$timerPendingWakeCount"
+Write-Output "POST_IDLE_WAIT_KIND0=$waitKind"
+Write-Output "POST_IDLE_WAIT_TIMEOUT0=$waitTimeout"
+Write-Output "POST_IDLE_TIMER_ENTRY_COUNT=$timerEntryCount"
+Write-Output "POST_IDLE_TIMER_PENDING_WAKE_COUNT=$timerPendingWakeCount"
 Write-Output "TIMER_NEXT_TIMER_ID=$timerNextTimerId"
-Write-Output "WAKE_QUEUE_COUNT=$wakeQueueCount"
+Write-Output "POST_IDLE_WAKE_QUEUE_COUNT=$wakeQueueCount"
 Write-Output "WAKE0_TASK_ID=$wakeTaskId"
 Write-Output "WAKE0_REASON=$wakeReason"
 Write-Output "WAKE0_VECTOR=$wakeVector"
