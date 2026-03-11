@@ -147,6 +147,26 @@ jobs:
           zig build --summary all
           zig build test --summary all
 
+      - name: Setup Zig (0.16.0) for bare-metal validate lane
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+          use-cache: true
+
+      - name: Export stable Zig for bare-metal validate lane
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIG_BIN="$(command -v zig)"
+          echo "OPENCLAW_ZIG_BIN=${ZIG_BIN}" >> "$GITHUB_ENV"
+          echo "BAREMETAL_ZIG_BIN=${ZIG_BIN}" >> "$GITHUB_ENV"
+
+      - name: Bare-metal validate Zig version
+        shell: pwsh
+        run: |
+          Write-Output "BAREMETAL_ZIG_BIN=$env:BAREMETAL_ZIG_BIN"
+          & $env:OPENCLAW_ZIG_BIN version
+
       - name: Bare-metal smoke check (freestanding build)
         shell: pwsh
         run: ./scripts/baremetal-smoke-check.ps1
@@ -1893,33 +1913,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Zig (master) primary
-        id: setup_zig_primary
-        continue-on-error: true
+      - name: Setup Zig (0.16.0) for bare-metal asset
         uses: mlugg/setup-zig@v2
         with:
-          version: master
+          version: 0.16.0
           use-cache: true
 
-      - name: Setup Zig (master) mirror fallback
-        id: setup_zig_mirror_mach
-        if: steps.setup_zig_primary.outcome == 'failure'
-        continue-on-error: true
-        uses: mlugg/setup-zig@v2
-        with:
-          version: master
-          mirror: https://pkg.machengine.org/zig
-          use-cache: true
-
-      - name: Setup Zig (master) mirror fallback (ziglang.org)
-        if: steps.setup_zig_primary.outcome == 'failure' && steps.setup_zig_mirror_mach.outcome == 'failure'
-        uses: mlugg/setup-zig@v2
-        with:
-          version: master
-          mirror: https://ziglang.org/builds
-          use-cache: true
-
-      - name: Zig version
+      - name: Bare-metal asset Zig version
         run: zig version
 
       - name: Build bare-metal artifact

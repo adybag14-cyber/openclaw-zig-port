@@ -121,6 +121,26 @@ jobs:
       - name: Build release (x86_64-linux)
         run: zig build -Dtarget=x86_64-linux -Doptimize=ReleaseFast --summary all
 
+      - name: Setup Zig (0.16.0) for bare-metal lane
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+          use-cache: true
+
+      - name: Export stable Zig for bare-metal lane
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIG_BIN="$(command -v zig)"
+          echo "OPENCLAW_ZIG_BIN=${ZIG_BIN}" >> "$GITHUB_ENV"
+          echo "BAREMETAL_ZIG_BIN=${ZIG_BIN}" >> "$GITHUB_ENV"
+
+      - name: Bare-metal Zig version
+        shell: pwsh
+        run: |
+          Write-Output "BAREMETAL_ZIG_BIN=$env:BAREMETAL_ZIG_BIN"
+          & $env:OPENCLAW_ZIG_BIN version
+
       - name: Bare-metal smoke check (freestanding build)
         shell: pwsh
         run: ./scripts/baremetal-smoke-check.ps1

@@ -67,6 +67,10 @@ Full-stack replacement execution reference:
   - Toolchain policy:
     - `latest-master` is the fast Windows refresh lane.
     - `upstream-<sha>` is the reproducible lane for CI, bisects, and release recreation.
+  - CI split policy:
+    - hosted validation remains on Zig `master` for broad regression coverage.
+    - freestanding bare-metal smoke/probe validation and `build-baremetal-asset` are pinned to stable Zig `0.16.0`.
+    - reason: current upstream Linux `master` can segfault on `zig build baremetal -Doptimize=ReleaseFast` even though the local stable `0.16.0` bare-metal lane validates cleanly.
   - `uvx` fallback from the tagged Git repo was validated locally:
     - `uvx --from "git+https://github.com/adybag14-cyber/openclaw-zig-port@v0.2.0-zig-edge.28#subdirectory=python/openclaw-zig-rpc-client" openclaw-zig-rpc --help`
   - npm public publish remains externally blocked by npm scope/package permission on npmjs; GitHub Packages fallback remains available.

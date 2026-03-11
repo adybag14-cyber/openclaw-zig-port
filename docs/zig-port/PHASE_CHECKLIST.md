@@ -396,6 +396,7 @@ Registry status:
 - [ ] FS5 - Edge/WASM/marketplace depth
 - [ ] FS6 - Appliance/bare-metal maturity track
   - mirror-aware toolchain bootstrap/reproducibility is now required operator evidence for Windows-hosted FS6 work.
+  - CI now explicitly splits toolchains by lane: hosted validation stays on Zig `master`, while the freestanding bare-metal smoke/probe and bare-metal asset lanes are pinned to stable Zig `0.16.0` until the upstream Linux `master` compiler crash on `zig build baremetal -Doptimize=ReleaseFast` is resolved.
   - rollout boundary is now defined at the runtime contract level: `stable`, `canary`, and `edge` are separate update lanes, with `canary` no longer collapsing into `edge`.
   - latest required evidence now includes `scripts/appliance-rollout-boundary-smoke-check.ps1` (secure-boot block, canary apply, stable promotion).
   - latest required bare-metal evidence now also includes `scripts/baremetal-qemu-interrupt-timeout-manual-wake-probe-check.ps1` (live `command_task_wait_interrupt_for` + `command_scheduler_wake_task` proof, clearing interrupt-timeout wait state to `none`, queueing exactly one manual wake, and proving no delayed timer wake appears against the freestanding PVH artifact).

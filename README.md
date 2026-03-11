@@ -14,6 +14,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 - Latest local validation: `zig build test --summary all` -> main `203/203` + bare-metal host `111/111` passing
 - Latest published edge release tag: `v0.2.0-zig-edge.28`
 - Toolchain policy: Codeberg `master` is canonical; `adybag14-cyber/zig` publishes rolling `latest-master` and immutable `upstream-<sha>` Windows releases for refresh and reproducibility.
+- CI policy: keep hosted build/test/parity/docs on Zig `master`, but pin the freestanding bare-metal compile/probe lane to stable Zig `0.16.0` until the upstream Linux `master` compiler crash on `zig build baremetal -Doptimize=ReleaseFast` is resolved.
 - Recent FS1 progress (2026-03-06):
   - runtime recovery posture is now surfaced on live diagnostics and maintenance RPCs
   - `doctor.memory.status` now includes Go-visible health envelope fields
