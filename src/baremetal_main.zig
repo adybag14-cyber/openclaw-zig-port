@@ -7481,8 +7481,22 @@ test "baremetal interrupt mask commands gate non-exception interrupt wakeups" {
     oc_tick();
     try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
     try std.testing.expectEqual(task_id, oc_wake_queue_event(0).task_id);
+    try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_event(0).timer_id);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_interrupt), oc_wake_queue_event(0).reason);
     try std.testing.expectEqual(@as(u8, 13), oc_wake_queue_event(0).vector);
+    try std.testing.expect(oc_wake_queue_event(0).tick >= 1);
     try std.testing.expectEqual(@as(u64, 1), x86_bootstrap.oc_interrupt_mask_ignored_count());
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_task_count());
+    try std.testing.expectEqual(task_id, oc_scheduler_task(0).task_id);
+    try std.testing.expectEqual(@as(u8, abi.task_state_ready), oc_scheduler_task(0).state);
+    try std.testing.expectEqual(@as(u8, 0), oc_scheduler_task(0).priority);
+    try std.testing.expectEqual(@as(u32, 0), oc_scheduler_task(0).run_count);
+    try std.testing.expectEqual(@as(u32, 5), oc_scheduler_task(0).budget_ticks);
+    try std.testing.expectEqual(@as(u32, 5), oc_scheduler_task(0).budget_remaining);
+    try std.testing.expect(x86_bootstrap.oc_interrupt_mask_is_set(200));
+    try std.testing.expect(!x86_bootstrap.oc_interrupt_mask_is_set(13));
+    try std.testing.expectEqual(abi.interrupt_mask_profile_external_all, x86_bootstrap.oc_interrupt_mask_profile());
+    try std.testing.expectEqual(@as(u32, 224), x86_bootstrap.oc_interrupt_masked_count());
 
     _ = oc_submit_command(abi.command_interrupt_mask_set, 200, 0);
     oc_tick();

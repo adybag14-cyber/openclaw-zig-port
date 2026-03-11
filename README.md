@@ -221,6 +221,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - optional QEMU reset-preservation wrapper probes now enforce the narrow recovery boundaries directly: `reset-counters` preserves configured `feature_flags` and `tick_batch_hint`; `reset_boot_diagnostics` preserves runtime mode and existing histories; `clear_command_history` preserves health history; `clear_health_history` preserves command history; and `reset_command_result_counters` preserves live runtime posture while collapsing counters to the single reset receipt
   - optional QEMU interrupt/exception reset-isolation wrapper probes now enforce the narrow vector-control boundaries directly: `reset_interrupt_counters` preserves interrupt history plus exception aggregates; `reset_exception_counters` preserves exception history plus interrupt history; `clear_interrupt_history` preserves sibling exception history; and `reset_vector_counters` preserves aggregate counts plus last-vector telemetry while the per-vector tables zero
   - optional QEMU interrupt-mask/exception probe validates masked external vectors stay blocked while exception vectors still flow through wait/wake and history telemetry against the freestanding PVH artifact
+  - optional QEMU interrupt-mask/exception wrapper probes isolate the masked baseline, blocked external suppression, exception wake delivery, captured histories, and final ready-state wake payload on top of the same PVH lane
   - optional QEMU interrupt-mask profile probe validates profile application, selective unmask/remask, ignored-count reset, external-high masking, invalid profile rejection, and clear-all recovery against the freestanding PVH artifact
   - bare-metal ABI now includes exported kernel info + command mailbox hooks (`oc_kernel_info_ptr`, `oc_command_ptr`, `oc_submit_command`, `oc_tick_n`)
   - bare-metal boot diagnostics ABI now exported with phase/command/tick telemetry and stack snapshot helpers (`oc_boot_diag_ptr`, `oc_boot_diag_capture_stack`)
@@ -723,7 +724,11 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU interrupt mask invalid-input preserve-state probe
 - optional bare-metal QEMU interrupt mask reset-ignored preserve-mask probe
 - optional bare-metal QEMU interrupt mask profile boundary probe
+- optional bare-metal QEMU interrupt mask exception baseline probe
+- optional bare-metal QEMU interrupt mask exception masked-interrupt blocked probe
 - optional bare-metal QEMU interrupt mask exception-delivery probe
+- optional bare-metal QEMU interrupt mask exception history-capture probe
+- optional bare-metal QEMU interrupt mask exception final-state probe
 - runtime smoke gate
 - appliance control-plane smoke gate (`system.boot.*`, `system.rollback.*`, secure-boot-gated `update.run`)
 - appliance restart recovery smoke gate (persisted `compat-state.json` replay across stop/start)

@@ -328,11 +328,12 @@ $bootObj = Join-Path $releaseDir "openclaw-zig-pvh-boot-interrupt-mask-exception
 $artifact = Join-Path $releaseDir "openclaw-zig-baremetal-pvh-interrupt-mask-exception-probe.elf"
 $bootSource = Join-Path $repo "scripts\baremetal\pvh_boot.S"
 $linkerScript = Join-Path $repo "scripts\baremetal\pvh_lld.ld"
-$gdbScript = Join-Path $releaseDir "qemu-interrupt-mask-exception-probe.gdb"
-$gdbStdout = Join-Path $releaseDir "qemu-interrupt-mask-exception-probe.gdb.stdout.log"
-$gdbStderr = Join-Path $releaseDir "qemu-interrupt-mask-exception-probe.gdb.stderr.log"
-$qemuStdout = Join-Path $releaseDir "qemu-interrupt-mask-exception-probe.qemu.stdout.log"
-$qemuStderr = Join-Path $releaseDir "qemu-interrupt-mask-exception-probe.qemu.stderr.log"
+$runStamp = [DateTime]::UtcNow.ToString("yyyyMMddHHmmssfff")
+$gdbScript = Join-Path $releaseDir "qemu-interrupt-mask-exception-probe-$runStamp.gdb"
+$gdbStdout = Join-Path $releaseDir "qemu-interrupt-mask-exception-probe-$runStamp.gdb.stdout.log"
+$gdbStderr = Join-Path $releaseDir "qemu-interrupt-mask-exception-probe-$runStamp.gdb.stderr.log"
+$qemuStdout = Join-Path $releaseDir "qemu-interrupt-mask-exception-probe-$runStamp.qemu.stdout.log"
+$qemuStderr = Join-Path $releaseDir "qemu-interrupt-mask-exception-probe-$runStamp.qemu.stderr.log"
 
 if (-not $SkipBuild) {
     New-Item -ItemType Directory -Force -Path $zigGlobalCacheDir | Out-Null

@@ -297,6 +297,7 @@ Recommended sequence:
 - optional bare-metal QEMU active-task terminate probe (live `command_task_terminate` against the currently running high-priority task, proving immediate failover to the remaining ready task, idempotent repeat terminate semantics, and final empty-run collapse against the freestanding PVH artifact)
 - optional bare-metal QEMU active-task terminate wrapper probes (five isolated checks over the same broad lane: pre-terminate active baseline, immediate failover after the first terminate, repeat-idempotent receipt, survivor low-task progress after the repeat terminate, and final empty-run collapse telemetry against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt mask exception probe (masked external vector remains blocked while an exception vector still wakes the waiting task and records history telemetry against the freestanding PVH artifact)
+- optional bare-metal QEMU interrupt mask exception wrapper probes (five isolated checks over the same broad lane: masked baseline, blocked external suppression, exception wake delivery, history capture, and final ready-state wake payload against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt mask profile probe (external-all, custom unmask/remask, ignored-count reset, external-high, invalid profile rejection, and clear-all recovery against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt mask control probe (direct `command_interrupt_mask_set`, invalid vector/state rejection, ignored-count reset, and final `clear_all` recovery against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt mask clear-all recovery probe (dedicated `command_interrupt_mask_clear_all` proof after direct mask manipulation, showing wake delivery resumes, ignored-count telemetry collapses back to `0`, and the runtime returns to profile `none` against the freestanding PVH artifact)
@@ -507,6 +508,10 @@ Recommended sequence:
 - bare-metal optional QEMU panic-recovery probe in validate stage
 - bare-metal optional QEMU panic-wake recovery probe in validate stage
 - bare-metal optional QEMU interrupt mask exception probe in validate stage
+- bare-metal optional QEMU interrupt mask exception baseline probe in validate stage
+- bare-metal optional QEMU interrupt mask exception masked-interrupt blocked probe in validate stage
+- bare-metal optional QEMU interrupt mask exception history-capture probe in validate stage
+- bare-metal optional QEMU interrupt mask exception final-state probe in validate stage
 - bare-metal optional QEMU interrupt mask profile probe in validate stage
 - bare-metal optional QEMU interrupt mask control probe in validate stage
 - bare-metal optional QEMU interrupt mask clear-all recovery probe in validate stage

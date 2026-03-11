@@ -1656,9 +1656,25 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-mask-exception-probe-check.ps1
 
+      - name: Bare-metal QEMU interrupt mask exception baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-exception-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt mask exception masked-interrupt blocked probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-exception-masked-interrupt-blocked-probe-check.ps1
+
       - name: Bare-metal QEMU interrupt mask exception-delivery probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-mask-exception-delivery-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt mask exception history-capture probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-exception-history-capture-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt mask exception final-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-exception-final-state-probe-check.ps1
 
   cross-targets:
     runs-on: ubuntu-latest
