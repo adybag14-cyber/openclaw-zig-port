@@ -896,6 +896,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-filter-probe-check.ps1
 
+      - name: Bare-metal QEMU interrupt filter any baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-filter-any-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt filter any wake payload probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-filter-any-wake-payload-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt filter vector blocked nonmatch probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-filter-vector-blocked-nonmatch-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt filter vector match wake payload probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-filter-vector-match-wake-payload-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt filter invalid vector preserve-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-filter-invalid-vector-preserve-state-probe-check.ps1
+
       - name: Bare-metal QEMU timer-disable interrupt probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-timer-disable-interrupt-probe-check.ps1

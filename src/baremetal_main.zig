@@ -7261,12 +7261,22 @@ test "baremetal task wait interrupt command honors vector filters and any mode" 
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_interrupt_count());
+    try std.testing.expectEqual(@as(u32, 0), oc_scheduler_task_count());
+    try std.testing.expectEqual(@as(u8, 0), scheduler_wait_interrupt_vector[0]);
+    try std.testing.expectEqual(@as(u8, wait_condition_interrupt_any), scheduler_wait_kind[0]);
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(0).state);
 
     _ = oc_submit_command(abi.command_trigger_interrupt, 200, 0);
     oc_tick();
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_interrupt_count());
     try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
     try std.testing.expectEqual(task_any_id, oc_wake_queue_event(0).task_id);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_interrupt), oc_wake_queue_event(0).reason);
+    try std.testing.expectEqual(@as(u8, 200), oc_wake_queue_event(0).vector);
+    try std.testing.expectEqual(@as(u8, abi.task_state_ready), oc_scheduler_task(0).state);
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_task_count());
+    try std.testing.expectEqual(@as(u8, wait_condition_none), scheduler_wait_kind[0]);
+    try std.testing.expectEqual(@as(u8, 0), scheduler_wait_interrupt_vector[0]);
 
     oc_wake_queue_clear();
 
@@ -7277,11 +7287,19 @@ test "baremetal task wait interrupt command honors vector filters and any mode" 
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_interrupt_count());
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_task_count());
+    try std.testing.expectEqual(@as(u8, 13), scheduler_wait_interrupt_vector[1]);
+    try std.testing.expectEqual(@as(u8, wait_condition_interrupt_vector), scheduler_wait_kind[1]);
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(1).state);
 
     _ = oc_submit_command(abi.command_trigger_interrupt, 200, 0);
     oc_tick();
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_interrupt_count());
     try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u8, wait_condition_interrupt_vector), scheduler_wait_kind[1]);
+    try std.testing.expectEqual(@as(u8, 13), scheduler_wait_interrupt_vector[1]);
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(1).state);
+    try std.testing.expectEqual(@as(u32, 1), oc_scheduler_task_count());
 
     _ = oc_submit_command(abi.command_trigger_interrupt, 13, 0);
     oc_tick();
@@ -7290,10 +7308,22 @@ test "baremetal task wait interrupt command honors vector filters and any mode" 
     const vec_evt = oc_wake_queue_event(0);
     try std.testing.expectEqual(task_vec_id, vec_evt.task_id);
     try std.testing.expectEqual(@as(u8, 13), vec_evt.vector);
+    try std.testing.expectEqual(@as(u8, abi.wake_reason_interrupt), vec_evt.reason);
+    try std.testing.expectEqual(@as(u8, abi.task_state_ready), oc_scheduler_task(1).state);
+    try std.testing.expectEqual(@as(u32, 2), oc_scheduler_task_count());
+    try std.testing.expectEqual(@as(u8, wait_condition_none), scheduler_wait_kind[1]);
+    try std.testing.expectEqual(@as(u8, 0), scheduler_wait_interrupt_vector[1]);
 
     _ = oc_submit_command(abi.command_task_wait_interrupt, task_vec_id, @as(u64, abi.wait_interrupt_any_vector) + 1);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_invalid_argument), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_task_wait_interrupt), status.last_command_opcode);
+    try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+    try std.testing.expectEqual(task_vec_id, oc_wake_queue_event(0).task_id);
+    try std.testing.expectEqual(@as(u8, 13), oc_wake_queue_event(0).vector);
+    try std.testing.expectEqual(@as(u8, abi.task_state_ready), oc_scheduler_task(1).state);
+    try std.testing.expectEqual(@as(u8, wait_condition_none), scheduler_wait_kind[1]);
+    try std.testing.expectEqual(@as(u8, 0), scheduler_wait_interrupt_vector[1]);
 }
 
 test "baremetal interrupt and exception history clear commands preserve counters" {

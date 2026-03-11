@@ -248,6 +248,8 @@ Recommended sequence:
 - optional bare-metal QEMU panic-recovery wrapper probes (five isolated checks over the same broad lane: pre-panic baseline state, panic freeze-state, idle panic preservation, mode-recovery resume semantics, and final recovered task-state telemetry)
 - optional bare-metal QEMU panic-wake recovery probe (`command_trigger_panic_flag` preserves interrupt + timer wake delivery while dispatch stays frozen, then `command_set_mode(mode_running)` and `command_set_boot_phase(runtime)` resume the preserved ready queue in order against the freestanding PVH artifact)
 - optional bare-metal QEMU panic-wake recovery wrapper probes (five isolated checks over the same broad lane: pre-panic waiting baseline, panic freeze-state, preserved interrupt+timer wake queue delivery, mode-recovery dispatch resume, and final recovered task-state telemetry)
+- optional bare-metal QEMU interrupt-filter probe (`command_task_wait_interrupt` any-vector wake, vector-scoped non-match filtering, matching-vector wake, and invalid-vector rejection against the freestanding PVH artifact)
+- optional bare-metal QEMU interrupt-filter wrapper validation (five isolated wrappers over the same lane, failing directly on the interrupt-any waiting baseline, exact any-wake payload, blocked vector-scoped nonmatch state, exact matching-vector wake payload, and invalid-vector preserved mailbox/wake invariants)
 - optional bare-metal QEMU manual-wait interrupt probe (`task_wait` remains blocked with `wake_queue_len=0` and manual wait-kind intact after interrupt `44`, then recovers via explicit `scheduler_wake_task` against the freestanding PVH artifact)
 - optional bare-metal QEMU manual-wait interrupt wrapper validation (five isolated wrappers over the same lane, failing directly on the waiting baseline, blocked post-interrupt state, preserved interrupt telemetry, exact manual wake payload, and final ready-state/mailbox invariants)
 - optional bare-metal QEMU wake-queue selective probe (timer, interrupt, and manual wake generation plus `pop_reason`, `pop_vector`, `pop_reason_vector`, and `pop_before_tick` queue drains, with live vector/reason+vector/before-tick telemetry snapshot checks against the freestanding PVH artifact)
@@ -423,6 +425,8 @@ Recommended sequence:
 - bare-metal optional QEMU task-terminate interrupt-timeout no-stale-timeout probe in validate stage
 - bare-metal optional QEMU task-terminate interrupt-timeout mailbox-state probe in validate stage
 - bare-metal optional QEMU task-terminate mixed-state probe in validate stage
+- bare-metal optional QEMU interrupt-filter probe in validate stage
+- bare-metal optional QEMU interrupt-filter wrappers in validate stage
 - bare-metal optional QEMU manual-wait interrupt probe in validate stage
 - bare-metal optional QEMU manual-wait interrupt wrappers in validate stage
 - bare-metal optional QEMU descriptor bootdiag probe in validate stage

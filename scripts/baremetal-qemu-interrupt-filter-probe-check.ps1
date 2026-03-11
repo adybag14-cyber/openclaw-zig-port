@@ -8,6 +8,7 @@ $ErrorActionPreference = "Stop"
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $releaseDir = Join-Path $repo "release"
+$runStamp = [DateTime]::UtcNow.ToString("yyyyMMddHHmmssfff")
 
 $schedulerResetOpcode = 26
 $timerResetOpcode = 41
@@ -316,11 +317,11 @@ $bootObj = Join-Path $releaseDir "openclaw-zig-pvh-boot-interrupt-filter-probe.o
 $artifact = Join-Path $releaseDir "openclaw-zig-baremetal-pvh-interrupt-filter-probe.elf"
 $bootSource = Join-Path $repo "scripts\baremetal\pvh_boot.S"
 $linkerScript = Join-Path $repo "scripts\baremetal\pvh_lld.ld"
-$gdbScript = Join-Path $releaseDir "qemu-interrupt-filter-probe.gdb"
-$gdbStdout = Join-Path $releaseDir "qemu-interrupt-filter-probe.gdb.stdout.log"
-$gdbStderr = Join-Path $releaseDir "qemu-interrupt-filter-probe.gdb.stderr.log"
-$qemuStdout = Join-Path $releaseDir "qemu-interrupt-filter-probe.qemu.stdout.log"
-$qemuStderr = Join-Path $releaseDir "qemu-interrupt-filter-probe.qemu.stderr.log"
+$gdbScript = Join-Path $releaseDir "qemu-interrupt-filter-probe-$runStamp.gdb"
+$gdbStdout = Join-Path $releaseDir "qemu-interrupt-filter-probe-$runStamp.gdb.stdout.log"
+$gdbStderr = Join-Path $releaseDir "qemu-interrupt-filter-probe-$runStamp.gdb.stderr.log"
+$qemuStdout = Join-Path $releaseDir "qemu-interrupt-filter-probe-$runStamp.qemu.stdout.log"
+$qemuStderr = Join-Path $releaseDir "qemu-interrupt-filter-probe-$runStamp.qemu.stderr.log"
 
 if (-not $SkipBuild) {
     New-Item -ItemType Directory -Force -Path $zigGlobalCacheDir | Out-Null
@@ -387,13 +388,31 @@ set confirm off
 set `$stage = 0
 set `$task_any_id = 0
 set `$task_vec_id = 0
+set `$any_wait_count_before_wake = 0
+set `$any_wait_kind_before_wake = 0
+set `$any_wait_vector_before_wake = 0
+set `$any_wait_task_count_before_wake = 0
+set `$any_wait_task_state_before_wake = 0
 set `$any_wake_seq = 0
 set `$any_wake_tick = 0
+set `$any_wake_task_state = 0
+set `$any_wake_task_count = 0
+set `$any_wake_task_id = 0
+set `$any_wake_reason = 0
+set `$any_wake_vector = 0
 set `$vec_wait_count_before_match = 0
 set `$vec_wait_kind_before_match = 0
 set `$vec_wait_vector_before_match = 0
+set `$vec_wait_task_count_before_match = 0
+set `$vec_wait_task_state_before_match = 0
+set `$vec_wait_wake_queue_len_before_match = 0
 set `$vec_wake_seq = 0
 set `$vec_wake_tick = 0
+set `$vec_wake_task_state = 0
+set `$vec_wake_task_count = 0
+set `$vec_wake_task_id = 0
+set `$vec_wake_reason = 0
+set `$vec_wake_vector = 0
 file $artifactForGdb
 handle SIGQUIT nostop noprint pass
 target remote :$GdbPort
@@ -474,6 +493,11 @@ if `$stage == 6
 end
 if `$stage == 7
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 7 && *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset) == $taskStateWaiting && *(unsigned char*)(0x$schedulerWaitKindAddress) == $waitConditionInterruptAny && *(unsigned int*)(0x$wakeQueueCountAddress) == 0
+    set `$any_wait_count_before_wake = 1
+    set `$any_wait_kind_before_wake = *(unsigned char*)(0x$schedulerWaitKindAddress)
+    set `$any_wait_vector_before_wake = *(unsigned char*)(0x$schedulerWaitInterruptVectorAddress)
+    set `$any_wait_task_count_before_wake = *(unsigned char*)(0x$schedulerStateAddress+$schedulerTaskCountOffset)
+    set `$any_wait_task_state_before_wake = *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $triggerInterruptOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 8
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = $anyInterruptVector
@@ -486,6 +510,11 @@ if `$stage == 8
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 8 && *(unsigned int*)(0x$wakeQueueCountAddress) == 1 && *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset) == $taskStateReady && *(unsigned char*)(0x$schedulerWaitKindAddress) == $waitConditionNone
     set `$any_wake_seq = *(unsigned int*)(0x$wakeQueueAddress+$wakeEventSeqOffset)
     set `$any_wake_tick = *(unsigned long long*)(0x$wakeQueueAddress+$wakeEventTickOffset)
+    set `$any_wake_task_state = *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset)
+    set `$any_wake_task_count = *(unsigned char*)(0x$schedulerStateAddress+$schedulerTaskCountOffset)
+    set `$any_wake_task_id = *(unsigned int*)(0x$wakeQueueAddress+$wakeEventTaskIdOffset)
+    set `$any_wake_reason = *(unsigned char*)(0x$wakeQueueAddress+$wakeEventReasonOffset)
+    set `$any_wake_vector = *(unsigned char*)(0x$wakeQueueAddress+$wakeEventVectorOffset)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $wakeQueueClearOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 9
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = 0
@@ -530,6 +559,9 @@ if `$stage == 12
     set `$vec_wait_kind_before_match = *(unsigned char*)(0x$schedulerWaitKindAddress+$waitSlotStride)
     set `$vec_wait_vector_before_match = *(unsigned char*)(0x$schedulerWaitInterruptVectorAddress+$waitSlotStride)
     set `$vec_wait_count_before_match = 1
+    set `$vec_wait_task_count_before_match = *(unsigned char*)(0x$schedulerStateAddress+$schedulerTaskCountOffset)
+    set `$vec_wait_task_state_before_match = *(unsigned char*)(0x$schedulerTasksAddress+$taskStride+$taskStateOffset)
+    set `$vec_wait_wake_queue_len_before_match = *(unsigned int*)(0x$wakeQueueCountAddress)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $triggerInterruptOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 13
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = $specificInterruptVector
@@ -542,6 +574,11 @@ if `$stage == 13
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 13 && *(unsigned int*)(0x$wakeQueueCountAddress) == 1 && *(unsigned char*)(0x$schedulerTasksAddress+$taskStride+$taskStateOffset) == $taskStateReady && *(unsigned char*)(0x$schedulerWaitKindAddress+$waitSlotStride) == $waitConditionNone
     set `$vec_wake_seq = *(unsigned int*)(0x$wakeQueueAddress+$wakeEventSeqOffset)
     set `$vec_wake_tick = *(unsigned long long*)(0x$wakeQueueAddress+$wakeEventTickOffset)
+    set `$vec_wake_task_state = *(unsigned char*)(0x$schedulerTasksAddress+$taskStride+$taskStateOffset)
+    set `$vec_wake_task_count = *(unsigned char*)(0x$schedulerStateAddress+$schedulerTaskCountOffset)
+    set `$vec_wake_task_id = *(unsigned int*)(0x$wakeQueueAddress+$wakeEventTaskIdOffset)
+    set `$vec_wake_reason = *(unsigned char*)(0x$wakeQueueAddress+$wakeEventReasonOffset)
+    set `$vec_wake_vector = *(unsigned char*)(0x$wakeQueueAddress+$wakeEventVectorOffset)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $taskWaitInterruptOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 14
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = `$task_vec_id
@@ -585,13 +622,31 @@ printf "WAKE0_TIMER_ID=%u\n", *(unsigned int*)(0x$wakeQueueAddress+$wakeEventTim
 printf "WAKE0_REASON=%u\n", *(unsigned char*)(0x$wakeQueueAddress+$wakeEventReasonOffset)
 printf "WAKE0_VECTOR=%u\n", *(unsigned char*)(0x$wakeQueueAddress+$wakeEventVectorOffset)
 printf "WAKE0_TICK=%llu\n", *(unsigned long long*)(0x$wakeQueueAddress+$wakeEventTickOffset)
+printf "ANY_WAIT_COUNT_BEFORE_WAKE=%u\n", `$any_wait_count_before_wake
+printf "ANY_WAIT_KIND_BEFORE_WAKE=%u\n", `$any_wait_kind_before_wake
+printf "ANY_WAIT_VECTOR_BEFORE_WAKE=%u\n", `$any_wait_vector_before_wake
+printf "ANY_WAIT_TASK_COUNT_BEFORE_WAKE=%u\n", `$any_wait_task_count_before_wake
+printf "ANY_WAIT_TASK_STATE_BEFORE_WAKE=%u\n", `$any_wait_task_state_before_wake
 printf "ANY_WAKE_SEQ=%u\n", `$any_wake_seq
 printf "ANY_WAKE_TICK=%llu\n", `$any_wake_tick
+printf "ANY_WAKE_TASK_STATE=%u\n", `$any_wake_task_state
+printf "ANY_WAKE_TASK_COUNT=%u\n", `$any_wake_task_count
+printf "ANY_WAKE_TASK_ID=%u\n", `$any_wake_task_id
+printf "ANY_WAKE_REASON=%u\n", `$any_wake_reason
+printf "ANY_WAKE_VECTOR=%u\n", `$any_wake_vector
 printf "VEC_WAIT_COUNT_BEFORE_MATCH=%u\n", `$vec_wait_count_before_match
 printf "VEC_WAIT_KIND_BEFORE_MATCH=%u\n", `$vec_wait_kind_before_match
 printf "VEC_WAIT_VECTOR_BEFORE_MATCH=%u\n", `$vec_wait_vector_before_match
+printf "VEC_WAIT_TASK_COUNT_BEFORE_MATCH=%u\n", `$vec_wait_task_count_before_match
+printf "VEC_WAIT_TASK_STATE_BEFORE_MATCH=%u\n", `$vec_wait_task_state_before_match
+printf "VEC_WAIT_WAKE_QUEUE_LEN_BEFORE_MATCH=%u\n", `$vec_wait_wake_queue_len_before_match
 printf "VEC_WAKE_SEQ=%u\n", `$vec_wake_seq
 printf "VEC_WAKE_TICK=%llu\n", `$vec_wake_tick
+printf "VEC_WAKE_TASK_STATE=%u\n", `$vec_wake_task_state
+printf "VEC_WAKE_TASK_COUNT=%u\n", `$vec_wake_task_count
+printf "VEC_WAKE_TASK_ID=%u\n", `$vec_wake_task_id
+printf "VEC_WAKE_REASON=%u\n", `$vec_wake_reason
+printf "VEC_WAKE_VECTOR=%u\n", `$vec_wake_vector
 printf "INTERRUPT_COUNT=%llu\n", *(unsigned long long*)(0x$interruptStateAddress+$interruptStateInterruptCountOffset)
 printf "LAST_INTERRUPT_VECTOR=%u\n", *(unsigned short*)(0x$interruptStateAddress+$interruptStateLastInterruptVectorOffset)
 quit
@@ -688,13 +743,31 @@ $wake0TimerId = Extract-IntValue -Text $gdbOutput -Name "WAKE0_TIMER_ID"
 $wake0Reason = Extract-IntValue -Text $gdbOutput -Name "WAKE0_REASON"
 $wake0Vector = Extract-IntValue -Text $gdbOutput -Name "WAKE0_VECTOR"
 $wake0Tick = Extract-IntValue -Text $gdbOutput -Name "WAKE0_TICK"
+$anyWaitCountBeforeWake = Extract-IntValue -Text $gdbOutput -Name "ANY_WAIT_COUNT_BEFORE_WAKE"
+$anyWaitKindBeforeWake = Extract-IntValue -Text $gdbOutput -Name "ANY_WAIT_KIND_BEFORE_WAKE"
+$anyWaitVectorBeforeWake = Extract-IntValue -Text $gdbOutput -Name "ANY_WAIT_VECTOR_BEFORE_WAKE"
+$anyWaitTaskCountBeforeWake = Extract-IntValue -Text $gdbOutput -Name "ANY_WAIT_TASK_COUNT_BEFORE_WAKE"
+$anyWaitTaskStateBeforeWake = Extract-IntValue -Text $gdbOutput -Name "ANY_WAIT_TASK_STATE_BEFORE_WAKE"
 $anyWakeSeq = Extract-IntValue -Text $gdbOutput -Name "ANY_WAKE_SEQ"
 $anyWakeTick = Extract-IntValue -Text $gdbOutput -Name "ANY_WAKE_TICK"
+$anyWakeTaskState = Extract-IntValue -Text $gdbOutput -Name "ANY_WAKE_TASK_STATE"
+$anyWakeTaskCount = Extract-IntValue -Text $gdbOutput -Name "ANY_WAKE_TASK_COUNT"
+$anyWakeTaskId = Extract-IntValue -Text $gdbOutput -Name "ANY_WAKE_TASK_ID"
+$anyWakeReason = Extract-IntValue -Text $gdbOutput -Name "ANY_WAKE_REASON"
+$anyWakeVector = Extract-IntValue -Text $gdbOutput -Name "ANY_WAKE_VECTOR"
 $vecWaitCountBeforeMatch = Extract-IntValue -Text $gdbOutput -Name "VEC_WAIT_COUNT_BEFORE_MATCH"
 $vecWaitKindBeforeMatch = Extract-IntValue -Text $gdbOutput -Name "VEC_WAIT_KIND_BEFORE_MATCH"
 $vecWaitVectorBeforeMatch = Extract-IntValue -Text $gdbOutput -Name "VEC_WAIT_VECTOR_BEFORE_MATCH"
+$vecWaitTaskCountBeforeMatch = Extract-IntValue -Text $gdbOutput -Name "VEC_WAIT_TASK_COUNT_BEFORE_MATCH"
+$vecWaitTaskStateBeforeMatch = Extract-IntValue -Text $gdbOutput -Name "VEC_WAIT_TASK_STATE_BEFORE_MATCH"
+$vecWaitWakeQueueLenBeforeMatch = Extract-IntValue -Text $gdbOutput -Name "VEC_WAIT_WAKE_QUEUE_LEN_BEFORE_MATCH"
 $vecWakeSeq = Extract-IntValue -Text $gdbOutput -Name "VEC_WAKE_SEQ"
 $vecWakeTick = Extract-IntValue -Text $gdbOutput -Name "VEC_WAKE_TICK"
+$vecWakeTaskState = Extract-IntValue -Text $gdbOutput -Name "VEC_WAKE_TASK_STATE"
+$vecWakeTaskCount = Extract-IntValue -Text $gdbOutput -Name "VEC_WAKE_TASK_COUNT"
+$vecWakeTaskId = Extract-IntValue -Text $gdbOutput -Name "VEC_WAKE_TASK_ID"
+$vecWakeReason = Extract-IntValue -Text $gdbOutput -Name "VEC_WAKE_REASON"
+$vecWakeVector = Extract-IntValue -Text $gdbOutput -Name "VEC_WAKE_VECTOR"
 $interruptCount = Extract-IntValue -Text $gdbOutput -Name "INTERRUPT_COUNT"
 $lastInterruptVector = Extract-IntValue -Text $gdbOutput -Name "LAST_INTERRUPT_VECTOR"
 
@@ -724,12 +797,30 @@ if ($wake0TaskId -ne $task1Id) { throw "Expected WAKE0_TASK_ID=$task1Id, got $wa
 if ($wake0TimerId -ne 0) { throw "Expected WAKE0_TIMER_ID=0, got $wake0TimerId" }
 if ($wake0Reason -ne $wakeReasonInterrupt) { throw "Expected WAKE0_REASON=$wakeReasonInterrupt, got $wake0Reason" }
 if ($wake0Vector -ne $specificInterruptVector) { throw "Expected WAKE0_VECTOR=$specificInterruptVector, got $wake0Vector" }
+if ($anyWaitCountBeforeWake -ne 1) { throw "Expected ANY_WAIT_COUNT_BEFORE_WAKE=1, got $anyWaitCountBeforeWake" }
+if ($anyWaitKindBeforeWake -ne $waitConditionInterruptAny) { throw "Expected ANY_WAIT_KIND_BEFORE_WAKE=$waitConditionInterruptAny, got $anyWaitKindBeforeWake" }
+if ($anyWaitVectorBeforeWake -ne 0) { throw "Expected ANY_WAIT_VECTOR_BEFORE_WAKE=0, got $anyWaitVectorBeforeWake" }
+if ($anyWaitTaskCountBeforeWake -ne 0) { throw "Expected ANY_WAIT_TASK_COUNT_BEFORE_WAKE=0, got $anyWaitTaskCountBeforeWake" }
+if ($anyWaitTaskStateBeforeWake -ne $taskStateWaiting) { throw "Expected ANY_WAIT_TASK_STATE_BEFORE_WAKE=$taskStateWaiting, got $anyWaitTaskStateBeforeWake" }
 if ($anyWakeSeq -le 0) { throw "Expected ANY_WAKE_SEQ > 0, got $anyWakeSeq" }
+if ($anyWakeTaskState -ne $taskStateReady) { throw "Expected ANY_WAKE_TASK_STATE=$taskStateReady, got $anyWakeTaskState" }
+if ($anyWakeTaskCount -ne 1) { throw "Expected ANY_WAKE_TASK_COUNT=1, got $anyWakeTaskCount" }
+if ($anyWakeTaskId -ne $task0Id) { throw "Expected ANY_WAKE_TASK_ID=$task0Id, got $anyWakeTaskId" }
+if ($anyWakeReason -ne $wakeReasonInterrupt) { throw "Expected ANY_WAKE_REASON=$wakeReasonInterrupt, got $anyWakeReason" }
+if ($anyWakeVector -ne $anyInterruptVector) { throw "Expected ANY_WAKE_VECTOR=$anyInterruptVector, got $anyWakeVector" }
 if ($vecWaitCountBeforeMatch -ne 1) { throw "Expected VEC_WAIT_COUNT_BEFORE_MATCH=1, got $vecWaitCountBeforeMatch" }
 if ($vecWaitKindBeforeMatch -ne $waitConditionInterruptVector) { throw "Expected VEC_WAIT_KIND_BEFORE_MATCH=$waitConditionInterruptVector, got $vecWaitKindBeforeMatch" }
 if ($vecWaitVectorBeforeMatch -ne $specificInterruptVector) { throw "Expected VEC_WAIT_VECTOR_BEFORE_MATCH=$specificInterruptVector, got $vecWaitVectorBeforeMatch" }
+if ($vecWaitTaskCountBeforeMatch -ne 1) { throw "Expected VEC_WAIT_TASK_COUNT_BEFORE_MATCH=1, got $vecWaitTaskCountBeforeMatch" }
+if ($vecWaitTaskStateBeforeMatch -ne $taskStateWaiting) { throw "Expected VEC_WAIT_TASK_STATE_BEFORE_MATCH=$taskStateWaiting, got $vecWaitTaskStateBeforeMatch" }
+if ($vecWaitWakeQueueLenBeforeMatch -ne 0) { throw "Expected VEC_WAIT_WAKE_QUEUE_LEN_BEFORE_MATCH=0, got $vecWaitWakeQueueLenBeforeMatch" }
 if ($vecWakeSeq -le 0) { throw "Expected VEC_WAKE_SEQ > 0, got $vecWakeSeq" }
 if ($vecWakeTick -le $anyWakeTick) { throw "Expected VEC_WAKE_TICK > ANY_WAKE_TICK, got ANY_WAKE_TICK=$anyWakeTick VEC_WAKE_TICK=$vecWakeTick" }
+if ($vecWakeTaskState -ne $taskStateReady) { throw "Expected VEC_WAKE_TASK_STATE=$taskStateReady, got $vecWakeTaskState" }
+if ($vecWakeTaskCount -ne 2) { throw "Expected VEC_WAKE_TASK_COUNT=2, got $vecWakeTaskCount" }
+if ($vecWakeTaskId -ne $task1Id) { throw "Expected VEC_WAKE_TASK_ID=$task1Id, got $vecWakeTaskId" }
+if ($vecWakeReason -ne $wakeReasonInterrupt) { throw "Expected VEC_WAKE_REASON=$wakeReasonInterrupt, got $vecWakeReason" }
+if ($vecWakeVector -ne $specificInterruptVector) { throw "Expected VEC_WAKE_VECTOR=$specificInterruptVector, got $vecWakeVector" }
 if ($wake0Seq -ne $vecWakeSeq) { throw "Expected WAKE0_SEQ=$vecWakeSeq, got $wake0Seq" }
 if ($wake0Tick -ne $vecWakeTick) { throw "Expected WAKE0_TICK=$vecWakeTick, got $wake0Tick" }
 if ($interruptCount -lt 3) { throw "Expected INTERRUPT_COUNT >= 3, got $interruptCount" }
@@ -748,9 +839,38 @@ Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_TICKS=$ticks"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_TASK_COUNT=$taskCount"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_TASK0_ID=$task0Id"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_TASK1_ID=$task1Id"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_ANY_WAIT_COUNT_BEFORE_WAKE=$anyWaitCountBeforeWake"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_ANY_WAIT_KIND_BEFORE_WAKE=$anyWaitKindBeforeWake"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_ANY_WAIT_VECTOR_BEFORE_WAKE=$anyWaitVectorBeforeWake"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_ANY_WAIT_TASK_COUNT_BEFORE_WAKE=$anyWaitTaskCountBeforeWake"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_ANY_WAIT_TASK_STATE_BEFORE_WAKE=$anyWaitTaskStateBeforeWake"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_ANY_WAKE_SEQ=$anyWakeSeq"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_ANY_WAKE_TICK=$anyWakeTick"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_ANY_WAKE_TASK_STATE=$anyWakeTaskState"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_ANY_WAKE_TASK_COUNT=$anyWakeTaskCount"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_ANY_WAKE_TASK_ID=$anyWakeTaskId"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_ANY_WAKE_REASON=$anyWakeReason"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_ANY_WAKE_VECTOR=$anyWakeVector"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_VEC_WAIT_COUNT_BEFORE_MATCH=$vecWaitCountBeforeMatch"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_VEC_WAIT_KIND_BEFORE_MATCH=$vecWaitKindBeforeMatch"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_VEC_WAIT_VECTOR_BEFORE_MATCH=$vecWaitVectorBeforeMatch"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_VEC_WAIT_TASK_COUNT_BEFORE_MATCH=$vecWaitTaskCountBeforeMatch"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_VEC_WAIT_TASK_STATE_BEFORE_MATCH=$vecWaitTaskStateBeforeMatch"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_VEC_WAIT_WAKE_QUEUE_LEN_BEFORE_MATCH=$vecWaitWakeQueueLenBeforeMatch"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_VEC_WAKE_SEQ=$vecWakeSeq"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_VEC_WAKE_TICK=$vecWakeTick"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_VEC_WAKE_TASK_STATE=$vecWakeTaskState"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_VEC_WAKE_TASK_COUNT=$vecWakeTaskCount"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_VEC_WAKE_TASK_ID=$vecWakeTaskId"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_VEC_WAKE_REASON=$vecWakeReason"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_VEC_WAKE_VECTOR=$vecWakeVector"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_FINAL_TASK1_STATE=$task1State"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_FINAL_WAIT_KIND1=$waitKind1"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_FINAL_WAIT_VECTOR1=$waitVector1"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_FINAL_WAKE_QUEUE_COUNT=$wakeQueueCount"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_FINAL_WAKE0_TASK_ID=$wake0TaskId"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_FINAL_WAKE0_REASON=$wake0Reason"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_WAKE0_VECTOR=$wake0Vector"
+Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_FINAL_WAKE0_TICK=$wake0Tick"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_INTERRUPT_COUNT=$interruptCount"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_FILTER_LAST_INTERRUPT_VECTOR=$lastInterruptVector"
