@@ -1642,6 +1642,21 @@ jobs:
       - name: Bare-metal QEMU manual wait interrupt probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-manual-wait-interrupt-probe-check.ps1
+      - name: Bare-metal QEMU manual wait interrupt baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-manual-wait-interrupt-baseline-probe-check.ps1
+      - name: Bare-metal QEMU manual wait interrupt after-interrupt blocked probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-manual-wait-interrupt-after-interrupt-blocked-probe-check.ps1
+      - name: Bare-metal QEMU manual wait interrupt telemetry probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-manual-wait-interrupt-interrupt-telemetry-probe-check.ps1
+      - name: Bare-metal QEMU manual wait interrupt manual-wake payload probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-manual-wait-interrupt-manual-wake-payload-probe-check.ps1
+      - name: Bare-metal QEMU manual wait interrupt manual-wake ready-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-manual-wait-interrupt-manual-wake-ready-state-probe-check.ps1
 
       - name: Bare-metal QEMU interrupt mask exception probe (optional)
         shell: pwsh
