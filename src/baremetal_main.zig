@@ -5456,13 +5456,17 @@ test "baremetal scheduler wake clears timer-backed wait and prevents stale wake"
     try std.testing.expectEqual(@as(u32, 0), oc_timer_entry_count());
     try std.testing.expectEqual(@as(u8, abi.timer_entry_state_canceled), oc_timer_entry(0).state);
     try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 2), oc_timer_state_ptr().next_timer_id);
     const evt = oc_wake_queue_event(0);
     try std.testing.expectEqual(task_id, evt.task_id);
     try std.testing.expectEqual(@as(u8, abi.wake_reason_manual), evt.reason);
 
     oc_tick_n(20);
     try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 0), oc_timer_entry_count());
     try std.testing.expectEqual(@as(u64, 0), oc_timer_state_ptr().dispatch_count);
+    try std.testing.expectEqual(@as(u32, 2), oc_timer_state_ptr().next_timer_id);
+    try std.testing.expectEqual(@as(u32, 5), oc_timer_state_ptr().tick_quantum);
 
     _ = oc_submit_command(abi.command_task_wait_for, task_id, 3);
     oc_tick();
