@@ -1052,6 +1052,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-task-terminate-interrupt-timeout-probe-check.ps1
 
+      - name: Bare-metal QEMU task terminate interrupt-timeout baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-terminate-interrupt-timeout-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU task terminate interrupt-timeout target-clear probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-terminate-interrupt-timeout-target-clear-probe-check.ps1
+
+      - name: Bare-metal QEMU task terminate interrupt-timeout interrupt-telemetry probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-terminate-interrupt-timeout-interrupt-telemetry-probe-check.ps1
+
+      - name: Bare-metal QEMU task terminate interrupt-timeout no-stale-timeout probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-terminate-interrupt-timeout-no-stale-timeout-probe-check.ps1
+
+      - name: Bare-metal QEMU task terminate interrupt-timeout mailbox-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-task-terminate-interrupt-timeout-mailbox-state-probe-check.ps1
+
       - name: Bare-metal QEMU task terminate mixed-state probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-task-terminate-mixed-state-probe-check.ps1

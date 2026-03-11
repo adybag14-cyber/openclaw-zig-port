@@ -226,6 +226,7 @@ Recommended sequence:
 - optional bare-metal QEMU scheduler reset config-preservation probe (wrapper over the broad scheduler-reset mixed-state path that fails specifically when timer quantum or `next_timer_id` drift across `command_scheduler_reset`, or the first fresh re-arm stops reusing the preserved `next_timer_id`)
 - optional bare-metal QEMU interrupt filter probe (`task_wait_interrupt(any)` wakes on vector `200`, vector-scoped `task_wait_interrupt(13)` ignores non-matching `200`, then wakes on matching `13`, and invalid vector `65536` is rejected with `-22` against the freestanding PVH artifact)
 - optional bare-metal QEMU task-terminate interrupt-timeout probe (`command_task_terminate` on a `task_wait_interrupt_for` waiter clears the timeout arm and wait state, leaves no wake-queue residue, prevents later ghost interrupt/timeout wake delivery for the terminated task, and keeps `timer_dispatch_count=0` against the freestanding PVH artifact)
+- optional bare-metal QEMU task-terminate interrupt-timeout wrapper probes (wrapper over that broad terminate lane that fails specifically when the armed interrupt-timeout baseline drifts, terminate no longer collapses the target wait state immediately, the later interrupt stops being telemetry-only, slack ticks start leaking a stale timeout wake, or the final mailbox plus budget state for the terminated task stops matching the validated contract)
 - optional bare-metal QEMU task-terminate mixed-state probe (live mixed `command_task_wait_for`, `command_scheduler_wake_task`, survivor wake, and `command_task_terminate` proof, validating current timer-cancel-on-manual-wake semantics plus targeted wake-queue cleanup for the terminated task against the freestanding PVH artifact)
 - optional bare-metal QEMU interrupt-timeout arm-preservation probe (wrapper over the broad interrupt-timeout interrupt-wins path that fails specifically when the waiter stops preserving its armed timeout identity, interrupt wait-kind, and zero wake-queue state immediately before the interrupt lands)
 - optional bare-metal QEMU interrupt-timeout interrupt-wake-payload probe (wrapper over the broad interrupt-timeout interrupt-wins path that fails specifically when the first wake stops being the exact `interrupt@31` payload for the waiting task with `timer_id=0`)
@@ -415,6 +416,11 @@ Recommended sequence:
 - bare-metal optional QEMU interrupt-timeout telemetry-preserve probe in validate stage
 - bare-metal optional QEMU interrupt filter probe in validate stage
 - bare-metal optional QEMU task-terminate interrupt-timeout probe in validate stage
+- bare-metal optional QEMU task-terminate interrupt-timeout baseline probe in validate stage
+- bare-metal optional QEMU task-terminate interrupt-timeout target-clear probe in validate stage
+- bare-metal optional QEMU task-terminate interrupt-timeout interrupt-telemetry probe in validate stage
+- bare-metal optional QEMU task-terminate interrupt-timeout no-stale-timeout probe in validate stage
+- bare-metal optional QEMU task-terminate interrupt-timeout mailbox-state probe in validate stage
 - bare-metal optional QEMU task-terminate mixed-state probe in validate stage
 - bare-metal optional QEMU manual-wait interrupt probe in validate stage
 - bare-metal optional QEMU descriptor bootdiag probe in validate stage

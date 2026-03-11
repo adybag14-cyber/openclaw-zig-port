@@ -176,6 +176,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - optional QEMU periodic timer clamp probe validates the periodic helper saturation path end to end, proving a timer armed at `u64::max-1` first fires at `18446744073709551615`, re-arms to the same saturated deadline, and then remains stable after the runtime tick counter wraps to `0`
   - optional QEMU interrupt-filter probe validates `command_task_wait_interrupt` vector filtering end to end, proving interrupt-any waiters wake on `200`, vector-scoped waiters ignore non-matching `200`, then wake on matching `13`, and invalid vector `65536` is rejected with `LAST_RESULT=-22` against the freestanding PVH artifact
   - optional QEMU task-terminate interrupt-timeout probe validates `command_task_terminate` on a timeout-backed interrupt waiter end to end, proving the terminated task keeps `state=4`, queued wake count stays `0`, timer entry count stays `0`, timeout state is cleared back to `none`, and a later interrupt only advances telemetry without producing a stale wake against the freestanding PVH artifact
+  - task-terminate interrupt-timeout wrapper probes now enforce that lane directly too: preserved armed interrupt-timeout baseline before terminate, immediate target-clear collapse with `state=4`, preserved interrupt telemetry after the post-terminate interrupt injection, settled no-stale-timeout invariants after slack ticks, and final mailbox plus budget state on the terminated task
   - mixed task-recovery wrapper probes now enforce the narrow boundaries directly: `command_task_resume` on timeout-backed interrupt waits must clear wait state to `none` and queue exactly one manual wake, `command_scheduler_wake_task` on pure timer waits must cancel the armed timer while preserving clean re-arm, `command_timer_cancel_task` on timeout-backed interrupt waits must clear the timeout yet still allow the later real interrupt wake, and mixed terminate flow must preserve only the survivor wake after termination
   - task-resume interrupt-timeout wrapper probes now enforce that lane directly too: ready-task baseline after resume, cleared wait state, exactly one manual wake payload, no stale timeout wake after the slack window, and preserved final mailbox/interrupt telemetry
   - task-resume interrupt wrapper probes now enforce that pure-interrupt lane directly too: ready-task baseline after resume, cleared interrupt wait state, exact manual wake payload, preserved single-wake state after the later real interrupt, and final mailbox/interrupt telemetry
@@ -664,6 +665,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU interrupt timeout clamp probe
 - optional bare-metal QEMU interrupt filter probe
 - optional bare-metal QEMU task-terminate interrupt-timeout probe
+- optional bare-metal QEMU task-terminate interrupt-timeout wrapper probes
 - optional bare-metal QEMU timer-disable interrupt probe
 - optional bare-metal QEMU timer-disable reenable probe
 - optional bare-metal QEMU timer-disable paused-state probe

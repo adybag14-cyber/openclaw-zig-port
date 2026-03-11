@@ -401,6 +401,25 @@ set pagination off
 set confirm off
 set `$stage = 0
 set `$post_wake_tick = 0
+set `$pre_ticks = 0
+set `$pre_task_id = 0
+set `$pre_task_state = 0
+set `$pre_wait_kind0 = 0
+set `$pre_wait_vector0 = 0
+set `$pre_wait_timeout0 = 0
+set `$pre_timer_entry_count = 0
+set `$pre_timer_pending_wake_count = 0
+set `$pre_timer_next_timer_id = 0
+set `$pre_wake_queue_count = 0
+set `$post_ticks = 0
+set `$post_task_count = 0
+set `$post_task0_state = 0
+set `$post_wait_kind0 = 0
+set `$post_wait_timeout0 = 0
+set `$post_timer_entry_count = 0
+set `$post_timer_pending_wake_count = 0
+set `$post_timer_next_timer_id = 0
+set `$post_wake_queue_count = 0
 file $artifactForGdb
 handle SIGQUIT nostop noprint pass
 target remote :$GdbPort
@@ -470,6 +489,16 @@ if `$stage == 5
 end
 if `$stage == 6
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 6 && *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset) == $taskStateWaiting && *(unsigned char*)(0x$schedulerWaitKindAddress) == $waitConditionInterruptAny && *(unsigned long long*)(0x$schedulerWaitTimeoutTickAddress) > *(unsigned long long*)(0x$statusAddress+$statusTicksOffset) && *(unsigned int*)(0x$wakeQueueCountAddress) == 0
+    set `$pre_ticks = *(unsigned long long*)(0x$statusAddress+$statusTicksOffset)
+    set `$pre_task_id = *(unsigned int*)(0x$schedulerTasksAddress+$taskIdOffset)
+    set `$pre_task_state = *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset)
+    set `$pre_wait_kind0 = *(unsigned char*)(0x$schedulerWaitKindAddress)
+    set `$pre_wait_vector0 = *(unsigned char*)(0x$schedulerWaitInterruptVectorAddress)
+    set `$pre_wait_timeout0 = *(unsigned long long*)(0x$schedulerWaitTimeoutTickAddress)
+    set `$pre_timer_entry_count = *(unsigned char*)(0x$timerStateAddress+$timerEntryCountOffset)
+    set `$pre_timer_pending_wake_count = *(unsigned short*)(0x$timerStateAddress+$timerPendingWakeCountOffset)
+    set `$pre_timer_next_timer_id = *(unsigned int*)(0x$timerStateAddress+$timerNextTimerIdOffset)
+    set `$pre_wake_queue_count = *(unsigned int*)(0x$wakeQueueCountAddress)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $taskTerminateOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 7
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = 1
@@ -480,6 +509,15 @@ if `$stage == 6
 end
 if `$stage == 7
   if *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset) == 7 && *(unsigned char*)(0x$schedulerStateAddress+$schedulerTaskCountOffset) == 0 && *(unsigned int*)(0x$wakeQueueCountAddress) == 0 && *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset) == 4 && *(unsigned char*)(0x$schedulerWaitKindAddress) == $waitConditionNone && *(unsigned long long*)(0x$schedulerWaitTimeoutTickAddress) == 0 && *(unsigned char*)(0x$timerStateAddress+$timerEntryCountOffset) == 0 && *(unsigned short*)(0x$timerStateAddress+$timerPendingWakeCountOffset) == 0
+    set `$post_ticks = *(unsigned long long*)(0x$statusAddress+$statusTicksOffset)
+    set `$post_task_count = *(unsigned char*)(0x$schedulerStateAddress+$schedulerTaskCountOffset)
+    set `$post_task0_state = *(unsigned char*)(0x$schedulerTasksAddress+$taskStateOffset)
+    set `$post_wait_kind0 = *(unsigned char*)(0x$schedulerWaitKindAddress)
+    set `$post_wait_timeout0 = *(unsigned long long*)(0x$schedulerWaitTimeoutTickAddress)
+    set `$post_timer_entry_count = *(unsigned char*)(0x$timerStateAddress+$timerEntryCountOffset)
+    set `$post_timer_pending_wake_count = *(unsigned short*)(0x$timerStateAddress+$timerPendingWakeCountOffset)
+    set `$post_timer_next_timer_id = *(unsigned int*)(0x$timerStateAddress+$timerNextTimerIdOffset)
+    set `$post_wake_queue_count = *(unsigned int*)(0x$wakeQueueCountAddress)
     set *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset) = $triggerInterruptOpcode
     set *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset) = 8
     set *(unsigned long long*)(0x$commandMailboxAddress+$commandArg0Offset) = $interruptVector
@@ -506,6 +544,25 @@ printf "ACK=%u\n", *(unsigned int*)(0x$statusAddress+$statusCommandSeqAckOffset)
 printf "LAST_OPCODE=%u\n", *(unsigned short*)(0x$statusAddress+$statusLastCommandOpcodeOffset)
 printf "LAST_RESULT=%d\n", *(short*)(0x$statusAddress+$statusLastCommandResultOffset)
 printf "TICKS=%llu\n", *(unsigned long long*)(0x$statusAddress+$statusTicksOffset)
+printf "PRE_TICKS=%llu\n", `$pre_ticks
+printf "PRE_TASK0_ID=%u\n", `$pre_task_id
+printf "PRE_TASK0_STATE=%u\n", `$pre_task_state
+printf "PRE_WAIT_KIND0=%u\n", `$pre_wait_kind0
+printf "PRE_WAIT_VECTOR0=%u\n", `$pre_wait_vector0
+printf "PRE_WAIT_TIMEOUT0=%llu\n", `$pre_wait_timeout0
+printf "PRE_TIMER_ENTRY_COUNT=%u\n", `$pre_timer_entry_count
+printf "PRE_TIMER_PENDING_WAKE_COUNT=%u\n", `$pre_timer_pending_wake_count
+printf "PRE_TIMER_NEXT_TIMER_ID=%u\n", `$pre_timer_next_timer_id
+printf "PRE_WAKE_QUEUE_COUNT=%u\n", `$pre_wake_queue_count
+printf "POST_TICKS=%llu\n", `$post_ticks
+printf "POST_TASK_COUNT=%u\n", `$post_task_count
+printf "POST_TASK0_STATE=%u\n", `$post_task0_state
+printf "POST_WAIT_KIND0=%u\n", `$post_wait_kind0
+printf "POST_WAIT_TIMEOUT0=%llu\n", `$post_wait_timeout0
+printf "POST_TIMER_ENTRY_COUNT=%u\n", `$post_timer_entry_count
+printf "POST_TIMER_PENDING_WAKE_COUNT=%u\n", `$post_timer_pending_wake_count
+printf "POST_TIMER_NEXT_TIMER_ID=%u\n", `$post_timer_next_timer_id
+printf "POST_WAKE_QUEUE_COUNT=%u\n", `$post_wake_queue_count
 printf "MAILBOX_OPCODE=%u\n", *(unsigned short*)(0x$commandMailboxAddress+$commandOpcodeOffset)
 printf "MAILBOX_SEQ=%u\n", *(unsigned int*)(0x$commandMailboxAddress+$commandSeqOffset)
 printf "SCHED_TASK_COUNT=%u\n", *(unsigned char*)(0x$schedulerStateAddress+$schedulerTaskCountOffset)
@@ -574,6 +631,25 @@ $ack = $null
 $lastOpcode = $null
 $lastResult = $null
 $ticks = $null
+$preTicks = $null
+$preTask0Id = $null
+$preTask0State = $null
+$preWaitKind0 = $null
+$preWaitVector0 = $null
+$preWaitTimeout0 = $null
+$preTimerEntryCount = $null
+$preTimerPendingWakeCount = $null
+$preTimerNextTimerId = $null
+$preWakeQueueCount = $null
+$postTicks = $null
+$postTaskCount = $null
+$postTask0State = $null
+$postWaitKind0 = $null
+$postWaitTimeout0 = $null
+$postTimerEntryCount = $null
+$postTimerPendingWakeCount = $null
+$postTimerNextTimerId = $null
+$postWakeQueueCount = $null
 $mailboxOpcode = $null
 $mailboxSeq = $null
 $schedTaskCount = $null
@@ -605,6 +681,25 @@ if (Test-Path $gdbStdout) {
     $lastOpcode = Extract-IntValue -Text $gdbOutput -Name "LAST_OPCODE"
     $lastResult = Extract-IntValue -Text $gdbOutput -Name "LAST_RESULT"
     $ticks = Extract-IntValue -Text $gdbOutput -Name "TICKS"
+    $preTicks = Extract-IntValue -Text $gdbOutput -Name "PRE_TICKS"
+    $preTask0Id = Extract-IntValue -Text $gdbOutput -Name "PRE_TASK0_ID"
+    $preTask0State = Extract-IntValue -Text $gdbOutput -Name "PRE_TASK0_STATE"
+    $preWaitKind0 = Extract-IntValue -Text $gdbOutput -Name "PRE_WAIT_KIND0"
+    $preWaitVector0 = Extract-IntValue -Text $gdbOutput -Name "PRE_WAIT_VECTOR0"
+    $preWaitTimeout0 = Extract-IntValue -Text $gdbOutput -Name "PRE_WAIT_TIMEOUT0"
+    $preTimerEntryCount = Extract-IntValue -Text $gdbOutput -Name "PRE_TIMER_ENTRY_COUNT"
+    $preTimerPendingWakeCount = Extract-IntValue -Text $gdbOutput -Name "PRE_TIMER_PENDING_WAKE_COUNT"
+    $preTimerNextTimerId = Extract-IntValue -Text $gdbOutput -Name "PRE_TIMER_NEXT_TIMER_ID"
+    $preWakeQueueCount = Extract-IntValue -Text $gdbOutput -Name "PRE_WAKE_QUEUE_COUNT"
+    $postTicks = Extract-IntValue -Text $gdbOutput -Name "POST_TICKS"
+    $postTaskCount = Extract-IntValue -Text $gdbOutput -Name "POST_TASK_COUNT"
+    $postTask0State = Extract-IntValue -Text $gdbOutput -Name "POST_TASK0_STATE"
+    $postWaitKind0 = Extract-IntValue -Text $gdbOutput -Name "POST_WAIT_KIND0"
+    $postWaitTimeout0 = Extract-IntValue -Text $gdbOutput -Name "POST_WAIT_TIMEOUT0"
+    $postTimerEntryCount = Extract-IntValue -Text $gdbOutput -Name "POST_TIMER_ENTRY_COUNT"
+    $postTimerPendingWakeCount = Extract-IntValue -Text $gdbOutput -Name "POST_TIMER_PENDING_WAKE_COUNT"
+    $postTimerNextTimerId = Extract-IntValue -Text $gdbOutput -Name "POST_TIMER_NEXT_TIMER_ID"
+    $postWakeQueueCount = Extract-IntValue -Text $gdbOutput -Name "POST_WAKE_QUEUE_COUNT"
     $mailboxOpcode = Extract-IntValue -Text $gdbOutput -Name "MAILBOX_OPCODE"
     $mailboxSeq = Extract-IntValue -Text $gdbOutput -Name "MAILBOX_SEQ"
     $schedTaskCount = Extract-IntValue -Text $gdbOutput -Name "SCHED_TASK_COUNT"
@@ -657,6 +752,25 @@ Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_ACK=$ack"
 Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_LAST_OPCODE=$lastOpcode"
 Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_LAST_RESULT=$lastResult"
 Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_TICKS=$ticks"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_PRE_TICKS=$preTicks"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_PRE_TASK0_ID=$preTask0Id"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_PRE_TASK0_STATE=$preTask0State"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_PRE_WAIT_KIND0=$preWaitKind0"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_PRE_WAIT_VECTOR0=$preWaitVector0"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_PRE_WAIT_TIMEOUT0=$preWaitTimeout0"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_PRE_TIMER_ENTRY_COUNT=$preTimerEntryCount"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_PRE_TIMER_PENDING_WAKE_COUNT=$preTimerPendingWakeCount"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_PRE_TIMER_NEXT_TIMER_ID=$preTimerNextTimerId"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_PRE_WAKE_QUEUE_COUNT=$preWakeQueueCount"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_POST_TICKS=$postTicks"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_POST_TASK_COUNT=$postTaskCount"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_POST_TASK0_STATE=$postTask0State"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_POST_WAIT_KIND0=$postWaitKind0"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_POST_WAIT_TIMEOUT0=$postWaitTimeout0"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_POST_TIMER_ENTRY_COUNT=$postTimerEntryCount"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_POST_TIMER_PENDING_WAKE_COUNT=$postTimerPendingWakeCount"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_POST_TIMER_NEXT_TIMER_ID=$postTimerNextTimerId"
+Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_POST_WAKE_QUEUE_COUNT=$postWakeQueueCount"
 Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_MAILBOX_OPCODE=$mailboxOpcode"
 Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_MAILBOX_SEQ=$mailboxSeq"
 Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_SCHED_TASK_COUNT=$schedTaskCount"
@@ -688,21 +802,35 @@ Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE_TIMED_OUT=$t
 $probePassed = $hitStart -and
     $hitAfterTaskTerminateInterruptTimeout -and
     (-not $timedOut) -and
+    ($preTicks -ne $null) -and
+    ($preTask0Id -eq 1) -and
+    ($preTask0State -eq $taskStateWaiting) -and
+    ($preWaitKind0 -eq $waitConditionInterruptAny) -and
+    ($preWaitVector0 -eq 0) -and
+    ($preWaitTimeout0 -gt $preTicks) -and
+    ($preTimerEntryCount -eq 0) -and
+    ($preTimerPendingWakeCount -eq 0) -and
+    ($preTimerNextTimerId -eq 1) -and
+    ($preWakeQueueCount -eq 0) -and
     ($ack -eq 8) -and
     ($lastOpcode -eq $triggerInterruptOpcode) -and
     ($lastResult -eq 0) -and
     ($mailboxOpcode -eq $triggerInterruptOpcode) -and
     ($mailboxSeq -eq 8) -and
+    ($postTaskCount -eq 0) -and
+    ($postTask0State -eq 4) -and
+    ($postWaitKind0 -eq $waitConditionNone) -and
+    ($postWaitTimeout0 -eq 0) -and
+    ($postTimerEntryCount -eq 0) -and
+    ($postTimerPendingWakeCount -eq 0) -and
+    ($postTimerNextTimerId -eq 1) -and
+    ($postWakeQueueCount -eq 0) -and
     ($schedTaskCount -eq 0) -and
     ($task0Id -eq 1) -and
-    ($task0State -eq 4) -and
     ($task0Priority -eq $taskPriority) -and
     ($task0RunCount -eq 0) -and
     ($task0Budget -eq $taskBudget) -and
     ($task0BudgetRemaining -eq 0) -and
-    ($waitKind0 -eq $waitConditionNone) -and
-    ($waitVector0 -eq 0) -and
-    ($waitTimeout0 -eq 0) -and
     ($timerEnabled -eq $timerStateEnabled) -and
     ($timerEntryCount -eq 0) -and
     ($timerPendingWakeCount -eq 0) -and
@@ -712,7 +840,7 @@ $probePassed = $hitStart -and
     ($wakeQueueCount -eq 0) -and
     ($interruptCount -eq 1) -and
     ($lastInterruptVector -eq $interruptVector) -and
-    ($ticks -ge ($timerLastWakeTick + $postWakeSlackTicks))
+    ($ticks -ge ($postTicks + $postWakeSlackTicks))
 
 Write-Output "BAREMETAL_QEMU_TASK_TERMINATE_INTERRUPT_TIMEOUT_PROBE=$($(if ($probePassed) { 'pass' } else { 'fail' }))"
 

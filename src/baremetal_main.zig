@@ -7032,6 +7032,9 @@ test "baremetal task terminate clears interrupt-timeout wait and prevents stale 
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
     try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(0).state);
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_timeout_count());
+    try std.testing.expectEqual(@as(u32, 0), oc_timer_entry_count());
+    try std.testing.expectEqual(@as(u16, 0), oc_timer_state_ptr().pending_wake_count);
+    try std.testing.expectEqual(@as(u32, 1), oc_timer_state_ptr().next_timer_id);
     try std.testing.expect(scheduler_wait_timeout_tick[0] > status.ticks);
 
     _ = oc_submit_command(abi.command_task_terminate, task_id, 0);
@@ -7044,10 +7047,15 @@ test "baremetal task terminate clears interrupt-timeout wait and prevents stale 
     try std.testing.expectEqual(@as(u8, wait_condition_none), scheduler_wait_kind[0]);
     try std.testing.expectEqual(@as(u64, 0), scheduler_wait_timeout_tick[0]);
     try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 0), oc_timer_entry_count());
+    try std.testing.expectEqual(@as(u16, 0), oc_timer_state_ptr().pending_wake_count);
+    try std.testing.expectEqual(@as(u32, 1), oc_timer_state_ptr().next_timer_id);
 
     oc_tick_n(20);
     try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u32, 0), oc_timer_entry_count());
     try std.testing.expectEqual(@as(u64, 0), oc_timer_state_ptr().dispatch_count);
+    try std.testing.expectEqual(@as(u32, 1), oc_timer_state_ptr().next_timer_id);
 }
 
 test "baremetal panic flag freezes scheduler until mode recovery under active load" {
