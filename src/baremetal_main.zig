@@ -4449,6 +4449,7 @@ test "baremetal allocator saturation reset command clears full table and restart
     _ = oc_submit_command(abi.command_allocator_alloc, alloc_size, alloc_alignment);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_no_space), status.last_command_result);
+    try std.testing.expectEqual(abi.command_allocator_alloc, status.last_command_opcode);
     const overflow_state = oc_allocator_state_ptr().*;
     try std.testing.expectEqual(saturated_state.free_pages, overflow_state.free_pages);
     try std.testing.expectEqual(saturated_state.allocation_count, overflow_state.allocation_count);
@@ -4459,6 +4460,7 @@ test "baremetal allocator saturation reset command clears full table and restart
     _ = oc_submit_command(abi.command_allocator_reset, 0, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(abi.command_allocator_reset, status.last_command_opcode);
     const reset_state = oc_allocator_state_ptr().*;
     try std.testing.expectEqual(reset_state.total_pages, reset_state.free_pages);
     try std.testing.expectEqual(@as(u32, 0), reset_state.allocation_count);
@@ -4478,6 +4480,7 @@ test "baremetal allocator saturation reset command clears full table and restart
     _ = oc_submit_command(abi.command_allocator_alloc, fresh_alloc_size, alloc_alignment);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(abi.command_allocator_alloc, status.last_command_opcode);
     const fresh_state = oc_allocator_state_ptr().*;
     const fresh_record = oc_allocator_allocation(0);
     try std.testing.expectEqual(@as(u32, 1), fresh_state.allocation_count);

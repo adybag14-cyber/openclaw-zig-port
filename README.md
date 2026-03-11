@@ -814,6 +814,7 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU syscall saturation validation
 - optional bare-metal QEMU syscall saturation reset validation
 - optional bare-metal QEMU allocator saturation reset validation
+- optional bare-metal QEMU allocator saturation reset wrapper validation
 - optional bare-metal QEMU allocator saturation reuse validation
 - optional bare-metal QEMU allocator free failure validation
 - optional bare-metal QEMU allocator free failure wrapper validation
