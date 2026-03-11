@@ -338,6 +338,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-vector-history-overflow-probe-check.ps1
 
+      - name: Bare-metal QEMU vector history overflow baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-vector-history-overflow-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU vector history overflow interrupt-overflow probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-vector-history-overflow-interrupt-overflow-probe-check.ps1
+
+      - name: Bare-metal QEMU vector history overflow exception-overflow probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-vector-history-overflow-exception-overflow-probe-check.ps1
+
+      - name: Bare-metal QEMU vector history overflow vector-telemetry probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-vector-history-overflow-vector-telemetry-probe-check.ps1
+
+      - name: Bare-metal QEMU vector history overflow mailbox-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-vector-history-overflow-mailbox-state-probe-check.ps1
+
       - name: Bare-metal QEMU vector history clear probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-vector-history-clear-probe-check.ps1

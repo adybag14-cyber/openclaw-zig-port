@@ -2762,6 +2762,76 @@ test "baremetal reset vector counters command clears vector tables without distu
     try std.testing.expectEqual(@as(u32, 1), x86_bootstrap.oc_exception_history_len());
 }
 
+test "baremetal vector history overflow commands saturate histories and preserve per-vector telemetry" {
+    resetBaremetalRuntimeForTest();
+
+    x86_bootstrap.oc_interrupt_mask_clear_all();
+    x86_bootstrap.oc_interrupt_mask_reset_ignored_counts();
+    x86_bootstrap.oc_reset_interrupt_counters();
+    x86_bootstrap.oc_interrupt_history_clear();
+    x86_bootstrap.oc_reset_vector_counters();
+
+    var idx: u32 = 0;
+    while (idx < 35) : (idx += 1) {
+        _ = oc_submit_command(abi.command_trigger_interrupt, 200, 0);
+        oc_tick();
+    }
+
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_trigger_interrupt), status.last_command_opcode);
+    try std.testing.expectEqual(@as(u64, 35), x86_bootstrap.oc_interrupt_count());
+    try std.testing.expectEqual(@as(u64, 35), x86_bootstrap.oc_interrupt_vector_count(200));
+    try std.testing.expectEqual(@as(u32, 32), x86_bootstrap.oc_interrupt_history_len());
+    try std.testing.expectEqual(@as(u32, 3), x86_bootstrap.oc_interrupt_history_overflow_count());
+    try std.testing.expectEqual(@as(u8, 200), x86_bootstrap.oc_last_interrupt_vector());
+    const interrupt_first = x86_bootstrap.oc_interrupt_history_event(0);
+    try std.testing.expectEqual(@as(u32, 4), interrupt_first.seq);
+    try std.testing.expectEqual(@as(u8, 200), interrupt_first.vector);
+    try std.testing.expectEqual(@as(u8, 0), interrupt_first.is_exception);
+    const interrupt_last = x86_bootstrap.oc_interrupt_history_event(x86_bootstrap.oc_interrupt_history_len() - 1);
+    try std.testing.expectEqual(@as(u32, 35), interrupt_last.seq);
+    try std.testing.expectEqual(@as(u8, 200), interrupt_last.vector);
+
+    _ = oc_submit_command(abi.command_reset_exception_counters, 0, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_clear_exception_history, 0, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_reset_interrupt_counters, 0, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_clear_interrupt_history, 0, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_reset_vector_counters, 0, 0);
+    oc_tick();
+
+    idx = 0;
+    while (idx < 19) : (idx += 1) {
+        _ = oc_submit_command(abi.command_trigger_exception, 13, 100 + idx);
+        oc_tick();
+    }
+
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_trigger_exception), status.last_command_opcode);
+    try std.testing.expectEqual(@as(u64, 19), x86_bootstrap.oc_interrupt_count());
+    try std.testing.expectEqual(@as(u64, 19), x86_bootstrap.oc_exception_count());
+    try std.testing.expectEqual(@as(u64, 19), x86_bootstrap.oc_interrupt_vector_count(13));
+    try std.testing.expectEqual(@as(u64, 19), x86_bootstrap.oc_exception_vector_count(13));
+    try std.testing.expectEqual(@as(u32, 19), x86_bootstrap.oc_interrupt_history_len());
+    try std.testing.expectEqual(@as(u32, 0), x86_bootstrap.oc_interrupt_history_overflow_count());
+    try std.testing.expectEqual(@as(u32, 16), x86_bootstrap.oc_exception_history_len());
+    try std.testing.expectEqual(@as(u32, 3), x86_bootstrap.oc_exception_history_overflow_count());
+    try std.testing.expectEqual(@as(u8, 13), x86_bootstrap.oc_last_interrupt_vector());
+    try std.testing.expectEqual(@as(u8, 13), x86_bootstrap.oc_last_exception_vector());
+    try std.testing.expectEqual(@as(u64, 118), x86_bootstrap.oc_last_exception_code());
+    const exception_first = x86_bootstrap.oc_exception_history_event(0);
+    try std.testing.expectEqual(@as(u32, 4), exception_first.seq);
+    try std.testing.expectEqual(@as(u8, 13), exception_first.vector);
+    try std.testing.expectEqual(@as(u64, 103), exception_first.code);
+    const exception_last = x86_bootstrap.oc_exception_history_event(x86_bootstrap.oc_exception_history_len() - 1);
+    try std.testing.expectEqual(@as(u32, 19), exception_last.seq);
+    try std.testing.expectEqual(@as(u8, 13), exception_last.vector);
+    try std.testing.expectEqual(@as(u64, 118), exception_last.code);
+}
+
 test "baremetal scheduler default budget command rejects zero without clobbering state" {
     resetBaremetalRuntimeForTest();
 
