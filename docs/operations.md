@@ -3,7 +3,7 @@
 ## Current Snapshot
 
 - Latest published edge release: `v0.2.0-zig-edge.28`
-- Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `115/115` passing
+- Latest local test gate: `zig build test --summary all` -> main `203/203` + bare-metal host `116/116` passing
 - Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=172`, `ZIG_EVENTS_COUNT=19`
 - Current head: local source-of-truth on `main` (exact pushed head is tracked in issue `#1` and the latest GitHub Actions runs)
 - Toolchain lane: Codeberg `master` is canonical; `adybag14-cyber/zig` is the Windows release mirror with rolling `latest-master` plus immutable `upstream-<sha>` releases.
