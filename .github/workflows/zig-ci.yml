@@ -1833,6 +1833,21 @@ jobs:
       - name: Bare-metal QEMU allocator syscall probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-allocator-syscall-probe-check.ps1
+      - name: Bare-metal QEMU allocator syscall baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-allocator-syscall-baseline-probe-check.ps1
+      - name: Bare-metal QEMU allocator syscall alloc-stage probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-allocator-syscall-alloc-stage-probe-check.ps1
+      - name: Bare-metal QEMU allocator syscall invoke-stage probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-allocator-syscall-invoke-stage-probe-check.ps1
+      - name: Bare-metal QEMU allocator syscall guard-stage probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-allocator-syscall-guard-stage-probe-check.ps1
+      - name: Bare-metal QEMU allocator syscall final-reset-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-allocator-syscall-final-reset-state-probe-check.ps1
 
       - name: Bare-metal QEMU allocator syscall reset probe (optional)
         shell: pwsh

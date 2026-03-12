@@ -4055,7 +4055,11 @@ test "baremetal allocator command flow allocates and frees mapped pages" {
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
     const state_after_alloc = oc_allocator_state_ptr().*;
     try std.testing.expectEqual(@as(u32, 1), state_after_alloc.allocation_count);
+    try std.testing.expectEqual(@as(u32, 1), state_after_alloc.alloc_ops);
+    try std.testing.expectEqual(@as(u32, 0), state_after_alloc.free_ops);
     try std.testing.expectEqual(initial_free - 2, state_after_alloc.free_pages);
+    try std.testing.expectEqual(@as(u64, 8192), state_after_alloc.bytes_in_use);
+    try std.testing.expectEqual(@as(u64, 8192), state_after_alloc.peak_bytes_in_use);
     try std.testing.expect(state_after_alloc.last_alloc_ptr != 0);
     try std.testing.expectEqual(@as(u64, 8192), state_after_alloc.last_alloc_size);
     const alloc0 = oc_allocator_allocation(0);
@@ -4072,8 +4076,14 @@ test "baremetal allocator command flow allocates and frees mapped pages" {
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
     const state_after_free = oc_allocator_state_ptr().*;
     try std.testing.expectEqual(@as(u32, 0), state_after_free.allocation_count);
+    try std.testing.expectEqual(@as(u32, 1), state_after_free.alloc_ops);
+    try std.testing.expectEqual(@as(u32, 1), state_after_free.free_ops);
     try std.testing.expectEqual(initial_free, state_after_free.free_pages);
+    try std.testing.expectEqual(@as(u64, 0), state_after_free.bytes_in_use);
+    try std.testing.expectEqual(@as(u64, 8192), state_after_free.peak_bytes_in_use);
     try std.testing.expectEqual(alloc0.ptr, state_after_free.last_free_ptr);
+    try std.testing.expectEqual(@as(u64, 8192), state_after_free.last_free_size);
+    try std.testing.expectEqual(@as(u8, abi.allocation_state_unused), oc_allocator_allocation(0).state);
 
     _ = oc_submit_command(abi.command_allocator_alloc, state_after_free.heap_size + 4096, 4096);
     oc_tick();
@@ -4107,6 +4117,8 @@ test "baremetal syscall command flow registers invokes and unregisters entries" 
     const entry0 = oc_syscall_entry(0);
     try std.testing.expectEqual(@as(u32, 7), entry0.syscall_id);
     try std.testing.expectEqual(@as(u8, abi.syscall_entry_state_registered), entry0.state);
+    try std.testing.expectEqual(@as(u8, 0), entry0.flags);
+    try std.testing.expectEqual(@as(u64, 0xAA55), entry0.handler_token);
 
     _ = oc_submit_command(abi.command_syscall_invoke, 7, 0x1234);
     oc_tick();
@@ -4115,11 +4127,16 @@ test "baremetal syscall command flow registers invokes and unregisters entries" 
     try std.testing.expectEqual(@as(u32, 7), syscall_state_after_invoke.last_syscall_id);
     try std.testing.expect(syscall_state_after_invoke.dispatch_count > 0);
     try std.testing.expect(syscall_state_after_invoke.last_invoke_tick > 0);
+    try std.testing.expectEqual(@as(i64, 0xB866), syscall_state_after_invoke.last_result);
+    try std.testing.expectEqual(@as(u64, 1), oc_syscall_entry(0).invoke_count);
+    try std.testing.expectEqual(@as(u64, 0x1234), oc_syscall_entry(0).last_arg);
+    try std.testing.expectEqual(@as(i64, 0xB866), oc_syscall_entry(0).last_result);
 
     _ = oc_submit_command(abi.command_syscall_unregister, 7, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
     try std.testing.expectEqual(@as(u32, 0), oc_syscall_entry_count());
+    try std.testing.expectEqual(@as(u8, abi.syscall_entry_state_unused), oc_syscall_entry(0).state);
 
     _ = oc_submit_command(abi.command_syscall_invoke, 7, 0x9999);
     oc_tick();

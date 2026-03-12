@@ -93,6 +93,11 @@ Recommended sequence:
 ./scripts/baremetal-qemu-wake-queue-reason-overflow-probe-check.ps1
 ./scripts/baremetal-qemu-wake-queue-fifo-probe-check.ps1
 ./scripts/baremetal-qemu-allocator-syscall-probe-check.ps1
+./scripts/baremetal-qemu-allocator-syscall-baseline-probe-check.ps1
+./scripts/baremetal-qemu-allocator-syscall-alloc-stage-probe-check.ps1
+./scripts/baremetal-qemu-allocator-syscall-invoke-stage-probe-check.ps1
+./scripts/baremetal-qemu-allocator-syscall-guard-stage-probe-check.ps1
+./scripts/baremetal-qemu-allocator-syscall-final-reset-state-probe-check.ps1
 ./scripts/baremetal-qemu-syscall-saturation-probe-check.ps1
 ./scripts/baremetal-qemu-syscall-control-probe-check.ps1
 ./scripts/baremetal-qemu-syscall-reregister-preserve-count-probe-check.ps1
@@ -306,6 +311,7 @@ Recommended sequence:
 - optional bare-metal QEMU wake-queue reason-vector-pop wrapper probes (`baremetal-qemu-wake-queue-reason-vector-pop-baseline-probe-check.ps1`, `baremetal-qemu-wake-queue-reason-vector-pop-first-match-probe-check.ps1`, `baremetal-qemu-wake-queue-reason-vector-pop-survivor-order-probe-check.ps1`, `baremetal-qemu-wake-queue-reason-vector-pop-invalid-pair-probe-check.ps1`, and `baremetal-qemu-wake-queue-reason-vector-pop-invalid-preserve-state-probe-check.ps1`) reuse the broad exact-pair lane and fail directly on baseline composition, first exact-pair removal, final survivor ordering, invalid-pair rejection, and invalid-pair nonmutation
 - optional bare-metal QEMU wake-queue vector-pop probe (dedicated `command_wake_queue_pop_vector` proof over a four-entry mixed queue, proving only vector `13` wakes are removed in FIFO order and the final vector `255` drain returns `result_not_found` against the freestanding PVH artifact)
 - optional bare-metal QEMU allocator syscall probe (alloc/free plus syscall register/invoke/block/disable/re-enable/clear-flags/unregister, then live `command_allocator_reset` + `command_syscall_reset` recovery proof against the freestanding PVH artifact)
+- optional bare-metal QEMU allocator syscall wrapper probes (`baremetal-qemu-allocator-syscall-baseline-probe-check.ps1`, `baremetal-qemu-allocator-syscall-alloc-stage-probe-check.ps1`, `baremetal-qemu-allocator-syscall-invoke-stage-probe-check.ps1`, `baremetal-qemu-allocator-syscall-guard-stage-probe-check.ps1`, and `baremetal-qemu-allocator-syscall-final-reset-state-probe-check.ps1`) reuse the broad allocator/syscall lane and fail directly on final mailbox baseline, allocation-stage page/bitmap state, invoke-stage dispatch/result state, blocked/disabled/re-enabled guard semantics, and final post-reset allocator/syscall baseline
 - optional bare-metal QEMU allocator syscall reset probe (dirty allocator alloc plus syscall register/invoke state, then dedicated `command_allocator_reset` + `command_syscall_reset` recovery proof showing both subsystems collapse independently back to steady baseline against the freestanding PVH artifact)
 - optional bare-metal QEMU syscall saturation probe (fill the 64-entry syscall table, reject the 65th `register`, reclaim one slot with `unregister`, reuse it with a fresh syscall ID/token, and prove the reused slot invokes cleanly against the freestanding PVH artifact)
 - optional bare-metal QEMU syscall saturation reset probe (fill the 64-entry syscall table, dirty dispatch telemetry with a real invoke, run `command_syscall_reset`, prove the fully saturated table returns to steady state, and then prove a fresh syscall restarts cleanly from slot `0` against the freestanding PVH artifact)
