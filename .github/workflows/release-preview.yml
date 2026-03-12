@@ -1356,6 +1356,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-timeout-clamp-probe-check.ps1
 
+      - name: Bare-metal QEMU interrupt-timeout clamp baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-timeout-clamp-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt-timeout clamp arm-preservation probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-timeout-clamp-arm-preservation-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt-timeout clamp saturated-boundary probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-timeout-clamp-saturated-boundary-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt-timeout clamp wake-payload probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-timeout-clamp-wake-payload-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt-timeout clamp final-telemetry probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-timeout-clamp-final-telemetry-probe-check.ps1
+
       - name: Bare-metal QEMU interrupt filter probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-filter-probe-check.ps1

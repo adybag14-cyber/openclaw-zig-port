@@ -704,6 +704,12 @@ Run local preview packaging with CI-aligned validate gates:
 - optional bare-metal QEMU masked interrupt timeout probe
 - optional bare-metal QEMU masked interrupt timeout wrapper probes
 - optional bare-metal QEMU interrupt timeout clamp probe
+- optional bare-metal QEMU interrupt-timeout clamp wrappers:
+  - baseline
+  - arm-preservation
+  - saturated-boundary
+  - wake-payload
+  - final-telemetry
 - optional bare-metal QEMU interrupt filter probe
 - optional bare-metal QEMU task-terminate interrupt-timeout probe
 - optional bare-metal QEMU task-terminate interrupt-timeout wrapper probes

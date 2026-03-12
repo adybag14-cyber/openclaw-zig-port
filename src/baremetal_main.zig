@@ -8880,9 +8880,17 @@ test "baremetal interrupt wait timeout clamps near max tick without wraparound" 
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_timeout_count());
     try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
+    try std.testing.expectEqual(@as(u8, wait_condition_interrupt_any), scheduler_wait_kind[0]);
+    try std.testing.expectEqual(@as(u8, 0), scheduler_wait_interrupt_vector[0]);
+    try std.testing.expectEqual(std.math.maxInt(u64), scheduler_wait_timeout_tick[0]);
 
     oc_tick();
     try std.testing.expectEqual(@as(u32, 1), oc_wake_queue_len());
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_timeout_count());
+    try std.testing.expectEqual(@as(u8, wait_condition_none), scheduler_wait_kind[0]);
+    try std.testing.expectEqual(@as(u8, 0), scheduler_wait_interrupt_vector[0]);
+    try std.testing.expectEqual(@as(u64, 0), scheduler_wait_timeout_tick[0]);
+    try std.testing.expectEqual(@as(u8, abi.task_state_ready), oc_scheduler_task(0).state);
     try std.testing.expectEqual(@as(u8, abi.wake_reason_timer), oc_wake_queue_event(0).reason);
+    try std.testing.expectEqual(std.math.maxInt(u64), oc_wake_queue_event(0).tick);
 }
