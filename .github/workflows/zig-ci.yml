@@ -799,6 +799,21 @@ jobs:
       - name: Bare-metal QEMU scheduler reset mixed-state probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-reset-mixed-state-probe-check.ps1
+      - name: Bare-metal QEMU scheduler reset mixed-state baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-reset-mixed-state-baseline-probe-check.ps1
+      - name: Bare-metal QEMU scheduler reset mixed-state post-reset collapse probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-reset-mixed-state-post-reset-collapse-probe-check.ps1
+      - name: Bare-metal QEMU scheduler reset mixed-state preserved-config probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-reset-mixed-state-preserved-config-probe-check.ps1
+      - name: Bare-metal QEMU scheduler reset mixed-state idle-stability probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-reset-mixed-state-idle-stability-probe-check.ps1
+      - name: Bare-metal QEMU scheduler reset mixed-state rearm-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-reset-mixed-state-rearm-state-probe-check.ps1
 
       - name: Bare-metal QEMU scheduler reset wake-clear probe (optional)
         shell: pwsh

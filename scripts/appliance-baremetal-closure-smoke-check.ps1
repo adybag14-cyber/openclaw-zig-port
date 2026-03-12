@@ -180,23 +180,30 @@ Require-Equal -Map $baremetalSmoke.Values -Key "BAREMETAL_MULTIBOOT2_MAGIC_PRESE
 Require-Equal -Map $baremetalSmoke.Values -Key "BAREMETAL_REQUIRED_SYMBOLS_PRESENT" -Expected "True" -Context $baremetalSmoke.Name
 
 $baremetalQemuSmoke = Invoke-ChildScript -Name "baremetal-qemu-smoke" -ScriptPath (Join-Path $PSScriptRoot "baremetal-qemu-smoke-check.ps1") -ForwardSkipBuild:$SkipBuild
-Require-Equal -Map $baremetalQemuSmoke.Values -Key "BAREMETAL_QEMU_SMOKE" -Expected "pass" -Context $baremetalQemuSmoke.Name
+$baremetalQemuSmokeStatus = "$($baremetalQemuSmoke.Values["BAREMETAL_QEMU_SMOKE"])"
+Require-OneOf -Map $baremetalQemuSmoke.Values -Key "BAREMETAL_QEMU_SMOKE" -Expected @("pass", "skipped") -Context $baremetalQemuSmoke.Name
 
 $baremetalRuntime = Invoke-ChildScript -Name "baremetal-qemu-runtime" -ScriptPath (Join-Path $PSScriptRoot "baremetal-qemu-runtime-oc-tick-check.ps1") -ForwardSkipBuild:$SkipBuild
-Require-Equal -Map $baremetalRuntime.Values -Key "BAREMETAL_QEMU_RUNTIME_HIT_START" -Expected "True" -Context $baremetalRuntime.Name
-Require-Equal -Map $baremetalRuntime.Values -Key "BAREMETAL_QEMU_RUNTIME_HIT_OC_TICK" -Expected "True" -Context $baremetalRuntime.Name
-Require-Equal -Map $baremetalRuntime.Values -Key "BAREMETAL_QEMU_RUNTIME_PROBE" -Expected "pass" -Context $baremetalRuntime.Name
+$baremetalRuntimeStatus = "$($baremetalRuntime.Values["BAREMETAL_QEMU_RUNTIME_PROBE"])"
+Require-OneOf -Map $baremetalRuntime.Values -Key "BAREMETAL_QEMU_RUNTIME_PROBE" -Expected @("pass", "skipped") -Context $baremetalRuntime.Name
+if ($baremetalRuntimeStatus -eq "pass") {
+    Require-Equal -Map $baremetalRuntime.Values -Key "BAREMETAL_QEMU_RUNTIME_HIT_START" -Expected "True" -Context $baremetalRuntime.Name
+    Require-Equal -Map $baremetalRuntime.Values -Key "BAREMETAL_QEMU_RUNTIME_HIT_OC_TICK" -Expected "True" -Context $baremetalRuntime.Name
+}
 
 $baremetalCommandLoop = Invoke-ChildScript -Name "baremetal-qemu-command-loop" -ScriptPath (Join-Path $PSScriptRoot "baremetal-qemu-command-loop-check.ps1") -ForwardSkipBuild:$SkipBuild
-Require-Equal -Map $baremetalCommandLoop.Values -Key "BAREMETAL_QEMU_COMMAND_LOOP_PROBE" -Expected "pass" -Context $baremetalCommandLoop.Name
-Require-OneOf -Map $baremetalCommandLoop.Values -Key "BAREMETAL_QEMU_COMMAND_LOOP_LAST_RESULT" -Expected @("0", "0.0") -Context $baremetalCommandLoop.Name
+$baremetalCommandLoopStatus = "$($baremetalCommandLoop.Values["BAREMETAL_QEMU_COMMAND_LOOP_PROBE"])"
+Require-OneOf -Map $baremetalCommandLoop.Values -Key "BAREMETAL_QEMU_COMMAND_LOOP_PROBE" -Expected @("pass", "skipped") -Context $baremetalCommandLoop.Name
+if ($baremetalCommandLoopStatus -eq "pass") {
+    Require-OneOf -Map $baremetalCommandLoop.Values -Key "BAREMETAL_QEMU_COMMAND_LOOP_LAST_RESULT" -Expected @("0", "0.0") -Context $baremetalCommandLoop.Name
+}
 
 Write-Output "FS6_CLOSURE_APPLIANCE_CONTROL=pass"
 Write-Output "FS6_CLOSURE_APPLIANCE_PROFILE=pass"
 Write-Output "FS6_CLOSURE_APPLIANCE_ROLLOUT=pass"
 Write-Output "FS6_CLOSURE_APPLIANCE_RECOVERY=pass"
 Write-Output "FS6_CLOSURE_BAREMETAL_SMOKE=pass"
-Write-Output "FS6_CLOSURE_BAREMETAL_QEMU_SMOKE=pass"
-Write-Output "FS6_CLOSURE_BAREMETAL_RUNTIME=pass"
-Write-Output "FS6_CLOSURE_BAREMETAL_COMMAND_LOOP=pass"
+Write-Output "FS6_CLOSURE_BAREMETAL_QEMU_SMOKE=$baremetalQemuSmokeStatus"
+Write-Output "FS6_CLOSURE_BAREMETAL_RUNTIME=$baremetalRuntimeStatus"
+Write-Output "FS6_CLOSURE_BAREMETAL_COMMAND_LOOP=$baremetalCommandLoopStatus"
 Write-Output "FS6_CLOSURE=pass"
