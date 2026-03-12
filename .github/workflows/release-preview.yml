@@ -215,6 +215,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-mailbox-seq-wraparound-recovery-probe-check.ps1
 
+      - name: Bare-metal QEMU mailbox seq-wraparound baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mailbox-seq-wraparound-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU mailbox seq-wraparound pre-wrap state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mailbox-seq-wraparound-pre-wrap-state-probe-check.ps1
+
+      - name: Bare-metal QEMU mailbox seq-wraparound pre-wrap mailbox sequence probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mailbox-seq-wraparound-pre-wrap-mailbox-sequence-probe-check.ps1
+
+      - name: Bare-metal QEMU mailbox seq-wraparound post-wrap state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mailbox-seq-wraparound-post-wrap-state-probe-check.ps1
+
+      - name: Bare-metal QEMU mailbox seq-wraparound post-wrap mailbox state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mailbox-seq-wraparound-post-wrap-mailbox-state-probe-check.ps1
+
       - name: Bare-metal QEMU feature flags tick batch probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-feature-flags-tick-batch-probe-check.ps1
