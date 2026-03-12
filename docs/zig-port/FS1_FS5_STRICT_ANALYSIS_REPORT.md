@@ -185,6 +185,7 @@ FS1 is not complete until all of the following are true:
 - existing smoke references in checklist:
   - `scripts/web-login-smoke-check.ps1`
   - `scripts/browser-request-success-smoke-check.ps1`
+  - `scripts/browser-request-direct-provider-success-smoke-check.ps1`
   - `scripts/telegram-reply-loop-smoke-check.ps1`
 
 #### Confirmed work still needed for strict completion
@@ -193,11 +194,10 @@ FS1 is not complete until all of the following are true:
    - `docs/zig-port/FS2_PROVIDER_CHANNEL_MATRIX.md`
 2. The repo still does not have a complete phase-close evidence set for:
    - browser session auth success
-   - direct-provider completion success
-   - Telegram command loop success
-   - Telegram non-command reply success
-   - typing/chunking success
-   - failure telemetry correctness
+   - OpenRouter direct-provider completion success
+   - OpenCode direct-provider completion success
+   - Telegram webhook ingress success
+   - Telegram bot-send delivery success
 3. FS2 depends on FS1 and FS4 for trustworthy auth, secret resolution, and runtime state handling. That dependency is now satisfied locally.
 
 #### Strict FS2 success gates
@@ -222,9 +222,9 @@ FS2 is not complete until all of the following are true:
 Current strict status after this slice:
 
 - the hard matrix now exists in docs
-- `web-login-smoke-check.ps1`, `browser-request-success-smoke-check.ps1`, and `telegram-reply-loop-smoke-check.ps1` are now part of the strict CI lane
-- browser-session auth, browser completion success, and Telegram command/reply proofs are green locally
-- FS2 remains open because direct-provider success and dedicated Telegram webhook/bot-send success proofs are still missing
+- `web-login-smoke-check.ps1`, `browser-request-success-smoke-check.ps1`, `browser-request-direct-provider-success-smoke-check.ps1`, and `telegram-reply-loop-smoke-check.ps1` are now part of the strict CI lane
+- browser-session auth, browser completion success, direct-provider completion success, and Telegram command/reply proofs are green locally
+- FS2 remains open because OpenRouter/OpenCode direct-provider success and dedicated Telegram webhook/bot-send success proofs are still missing
 
 ### FS3 - Memory/knowledge depth
 
@@ -451,6 +451,7 @@ Additional FS2/FS5 smoke gates are required when those phases are active:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\web-login-smoke-check.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\browser-request-success-smoke-check.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\browser-request-direct-provider-success-smoke-check.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\telegram-reply-loop-smoke-check.ps1
 ```
 

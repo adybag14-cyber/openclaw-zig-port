@@ -19,6 +19,7 @@ pub fn executeCompletion(
     api_key_raw: []const u8,
     request_timeout_ms: u32,
     stream_requested: bool,
+    endpoint_override_raw: []const u8,
 ) !lightpanda.BridgeCompletionExecution {
     const normalized_provider = lightpanda.normalizeProvider(provider_raw) catch "";
     if (!isSupportedDirectProvider(normalized_provider)) {
@@ -40,12 +41,23 @@ pub fn executeCompletion(
     const api_key = std.mem.trim(u8, api_key_raw, " \t\r\n");
     if (api_key.len == 0) {
         const model = normalizedModel(normalized_provider, model_raw);
+        const direct_endpoint = try resolveDirectEndpointAlloc(
+            allocator,
+            normalized_provider,
+            endpoint_override_raw,
+            directEndpointForProvider(normalized_provider),
+            directRequestUrlForProvider(normalized_provider),
+        );
+        errdefer {
+            allocator.free(direct_endpoint.endpoint);
+            allocator.free(direct_endpoint.request_url);
+        }
         return .{
             .requested = true,
             .ok = false,
             .provider = try allocator.dupe(u8, normalized_provider),
-            .endpoint = try allocator.dupe(u8, ""),
-            .requestUrl = try allocator.dupe(u8, directRequestUrlForProvider(normalized_provider)),
+            .endpoint = direct_endpoint.endpoint,
+            .requestUrl = direct_endpoint.request_url,
             .requestTimeoutMs = request_timeout_ms,
             .statusCode = 0,
             .model = try allocator.dupe(u8, model),
@@ -66,6 +78,7 @@ pub fn executeCompletion(
             api_key,
             request_timeout_ms,
             stream_requested,
+            endpoint_override_raw,
         );
     }
     if (std.ascii.eqlIgnoreCase(normalized_provider, "gemini")) {
@@ -79,6 +92,7 @@ pub fn executeCompletion(
             api_key,
             request_timeout_ms,
             stream_requested,
+            endpoint_override_raw,
         );
     }
     if (std.ascii.eqlIgnoreCase(normalized_provider, "openrouter")) {
@@ -92,6 +106,7 @@ pub fn executeCompletion(
             api_key,
             request_timeout_ms,
             stream_requested,
+            endpoint_override_raw,
         );
     }
     if (std.ascii.eqlIgnoreCase(normalized_provider, "opencode")) {
@@ -105,6 +120,7 @@ pub fn executeCompletion(
             api_key,
             request_timeout_ms,
             stream_requested,
+            endpoint_override_raw,
         );
     }
     return executeOpenAICompletion(
@@ -117,6 +133,7 @@ pub fn executeCompletion(
         api_key,
         request_timeout_ms,
         stream_requested,
+        endpoint_override_raw,
     );
 }
 
@@ -137,6 +154,66 @@ fn directRequestUrlForProvider(provider: []const u8) []const u8 {
     return direct_openai_url;
 }
 
+fn directEndpointForProvider(provider: []const u8) []const u8 {
+    if (std.ascii.eqlIgnoreCase(provider, "claude")) return "https://api.anthropic.com";
+    if (std.ascii.eqlIgnoreCase(provider, "gemini")) return "https://generativelanguage.googleapis.com";
+    if (std.ascii.eqlIgnoreCase(provider, "openrouter")) return "https://openrouter.ai";
+    if (std.ascii.eqlIgnoreCase(provider, "opencode")) return "https://api.opencode.ai";
+    return "https://api.openai.com";
+}
+
+fn directRequestPathForProvider(provider: []const u8) []const u8 {
+    if (std.ascii.eqlIgnoreCase(provider, "claude")) return "/v1/messages";
+    if (std.ascii.eqlIgnoreCase(provider, "gemini")) return "/v1beta/openai/chat/completions";
+    return "/v1/chat/completions";
+}
+
+const DirectEndpoint = struct {
+    endpoint: []u8,
+    request_url: []u8,
+};
+
+fn resolveDirectEndpointAlloc(
+    allocator: std.mem.Allocator,
+    provider: []const u8,
+    endpoint_override_raw: []const u8,
+    default_endpoint_url: []const u8,
+    default_request_url_value: []const u8,
+) !DirectEndpoint {
+    const trimmed_override = std.mem.trim(u8, endpoint_override_raw, " \t\r\n");
+    if (trimmed_override.len == 0) {
+        return .{
+            .endpoint = try allocator.dupe(u8, default_endpoint_url),
+            .request_url = try allocator.dupe(u8, default_request_url_value),
+        };
+    }
+
+    var trimmed_override_no_slash = trimmed_override;
+    while (trimmed_override_no_slash.len > 0 and trimmed_override_no_slash[trimmed_override_no_slash.len - 1] == '/') {
+        trimmed_override_no_slash = trimmed_override_no_slash[0 .. trimmed_override_no_slash.len - 1];
+    }
+    const request_path = directRequestPathForProvider(provider);
+    if (std.mem.endsWith(u8, trimmed_override_no_slash, request_path)) {
+        const base = trimmed_override_no_slash[0 .. trimmed_override_no_slash.len - request_path.len];
+        const endpoint = if (base.len > 0)
+            try allocator.dupe(u8, base)
+        else
+            try allocator.dupe(u8, trimmed_override_no_slash);
+        errdefer allocator.free(endpoint);
+        return .{
+            .endpoint = endpoint,
+            .request_url = try allocator.dupe(u8, trimmed_override_no_slash),
+        };
+    }
+
+    const endpoint = try allocator.dupe(u8, trimmed_override_no_slash);
+    errdefer allocator.free(endpoint);
+    return .{
+        .endpoint = endpoint,
+        .request_url = try std.fmt.allocPrint(allocator, "{s}{s}", .{ trimmed_override_no_slash, request_path }),
+    };
+}
+
 fn executeOpenAICompletion(
     allocator: std.mem.Allocator,
     provider: []const u8,
@@ -147,6 +224,7 @@ fn executeOpenAICompletion(
     api_key: []const u8,
     request_timeout_ms: u32,
     stream_requested: bool,
+    endpoint_override_raw: []const u8,
 ) !lightpanda.BridgeCompletionExecution {
     return executeOpenAICompatibleCompletion(
         allocator,
@@ -160,6 +238,7 @@ fn executeOpenAICompletion(
         stream_requested,
         "https://api.openai.com",
         direct_openai_url,
+        endpoint_override_raw,
     );
 }
 
@@ -173,6 +252,7 @@ fn executeOpenRouterCompletion(
     api_key: []const u8,
     request_timeout_ms: u32,
     stream_requested: bool,
+    endpoint_override_raw: []const u8,
 ) !lightpanda.BridgeCompletionExecution {
     return executeOpenAICompatibleCompletion(
         allocator,
@@ -186,6 +266,7 @@ fn executeOpenRouterCompletion(
         stream_requested,
         "https://openrouter.ai",
         direct_openrouter_url,
+        endpoint_override_raw,
     );
 }
 
@@ -199,6 +280,7 @@ fn executeGeminiCompletion(
     api_key: []const u8,
     request_timeout_ms: u32,
     stream_requested: bool,
+    endpoint_override_raw: []const u8,
 ) !lightpanda.BridgeCompletionExecution {
     return executeOpenAICompatibleCompletion(
         allocator,
@@ -212,6 +294,7 @@ fn executeGeminiCompletion(
         stream_requested,
         "https://generativelanguage.googleapis.com",
         direct_gemini_url,
+        endpoint_override_raw,
     );
 }
 
@@ -225,6 +308,7 @@ fn executeOpenCodeCompletion(
     api_key: []const u8,
     request_timeout_ms: u32,
     stream_requested: bool,
+    endpoint_override_raw: []const u8,
 ) !lightpanda.BridgeCompletionExecution {
     return executeOpenAICompatibleCompletion(
         allocator,
@@ -238,6 +322,7 @@ fn executeOpenCodeCompletion(
         stream_requested,
         "https://api.opencode.ai",
         direct_opencode_url,
+        endpoint_override_raw,
     );
 }
 
@@ -253,12 +338,22 @@ fn executeOpenAICompatibleCompletion(
     stream_requested: bool,
     endpoint_url: []const u8,
     request_url_value: []const u8,
+    endpoint_override_raw: []const u8,
 ) !lightpanda.BridgeCompletionExecution {
     const model = normalizedModel(provider, model_raw);
-    const endpoint = try allocator.dupe(u8, endpoint_url);
-    errdefer allocator.free(endpoint);
-    const request_url = try allocator.dupe(u8, request_url_value);
-    errdefer allocator.free(request_url);
+    const direct_endpoint = try resolveDirectEndpointAlloc(
+        allocator,
+        provider,
+        endpoint_override_raw,
+        endpoint_url,
+        request_url_value,
+    );
+    errdefer {
+        allocator.free(direct_endpoint.endpoint);
+        allocator.free(direct_endpoint.request_url);
+    }
+    const endpoint = direct_endpoint.endpoint;
+    const request_url = direct_endpoint.request_url;
 
     const Payload = struct {
         model: []const u8,
@@ -383,12 +478,22 @@ fn executeAnthropicCompletion(
     api_key: []const u8,
     request_timeout_ms: u32,
     stream_requested: bool,
+    endpoint_override_raw: []const u8,
 ) !lightpanda.BridgeCompletionExecution {
     const model = normalizedModel(provider, model_raw);
-    const endpoint = try allocator.dupe(u8, "https://api.anthropic.com");
-    errdefer allocator.free(endpoint);
-    const request_url = try allocator.dupe(u8, direct_anthropic_url);
-    errdefer allocator.free(request_url);
+    const direct_endpoint = try resolveDirectEndpointAlloc(
+        allocator,
+        provider,
+        endpoint_override_raw,
+        "https://api.anthropic.com",
+        direct_anthropic_url,
+    );
+    errdefer {
+        allocator.free(direct_endpoint.endpoint);
+        allocator.free(direct_endpoint.request_url);
+    }
+    const endpoint = direct_endpoint.endpoint;
+    const request_url = direct_endpoint.request_url;
 
     const Payload = struct {
         model: []const u8,
@@ -650,7 +755,7 @@ test "direct provider completion rejects unsupported providers deterministically
     const messages = [_]lightpanda.CompletionMessage{
         .{ .role = "user", .content = "hello" },
     };
-    var execution = try executeCompletion(allocator, "qwen", "", messages[0..], null, null, "test-key", 1500, false);
+    var execution = try executeCompletion(allocator, "qwen", "", messages[0..], null, null, "test-key", 1500, false, "");
     defer execution.deinit(allocator);
     try std.testing.expect(execution.requested);
     try std.testing.expect(!execution.ok);
@@ -662,7 +767,7 @@ test "direct provider completion requires api key" {
     const messages = [_]lightpanda.CompletionMessage{
         .{ .role = "user", .content = "hello" },
     };
-    var execution = try executeCompletion(allocator, "chatgpt", "gpt-5.2", messages[0..], null, null, "", 1500, false);
+    var execution = try executeCompletion(allocator, "chatgpt", "gpt-5.2", messages[0..], null, null, "", 1500, false, "");
     defer execution.deinit(allocator);
     try std.testing.expect(execution.requested);
     try std.testing.expect(!execution.ok);
@@ -674,7 +779,7 @@ test "direct provider openrouter requires api key and reports openrouter endpoin
     const messages = [_]lightpanda.CompletionMessage{
         .{ .role = "user", .content = "hello" },
     };
-    var execution = try executeCompletion(allocator, "openrouter", "", messages[0..], null, null, "", 1500, false);
+    var execution = try executeCompletion(allocator, "openrouter", "", messages[0..], null, null, "", 1500, false, "");
     defer execution.deinit(allocator);
     try std.testing.expect(execution.requested);
     try std.testing.expect(!execution.ok);
@@ -688,7 +793,7 @@ test "direct provider gemini requires api key and reports gemini endpoint" {
     const messages = [_]lightpanda.CompletionMessage{
         .{ .role = "user", .content = "hello" },
     };
-    var execution = try executeCompletion(allocator, "gemini", "", messages[0..], null, null, "", 1500, false);
+    var execution = try executeCompletion(allocator, "gemini", "", messages[0..], null, null, "", 1500, false, "");
     defer execution.deinit(allocator);
     try std.testing.expect(execution.requested);
     try std.testing.expect(!execution.ok);
@@ -703,12 +808,37 @@ test "direct provider opencode requires api key and reports opencode endpoint" {
     const messages = [_]lightpanda.CompletionMessage{
         .{ .role = "user", .content = "hello" },
     };
-    var execution = try executeCompletion(allocator, "opencode", "", messages[0..], null, null, "", 1500, false);
+    var execution = try executeCompletion(allocator, "opencode", "", messages[0..], null, null, "", 1500, false, "");
     defer execution.deinit(allocator);
     try std.testing.expect(execution.requested);
     try std.testing.expect(!execution.ok);
     try std.testing.expect(std.mem.eql(u8, execution.provider, "opencode"));
     try std.testing.expect(std.mem.indexOf(u8, execution.requestUrl, "api.opencode.ai/v1/chat/completions") != null);
+    try std.testing.expect(std.mem.indexOf(u8, execution.errorText, "missing API key") != null);
+}
+
+test "direct provider missing key honors explicit endpoint override" {
+    const allocator = std.testing.allocator;
+    const messages = [_]lightpanda.CompletionMessage{
+        .{ .role = "user", .content = "hello" },
+    };
+    var execution = try executeCompletion(
+        allocator,
+        "chatgpt",
+        "gpt-5.2",
+        messages[0..],
+        null,
+        null,
+        "",
+        1500,
+        false,
+        "http://127.0.0.1:4010",
+    );
+    defer execution.deinit(allocator);
+    try std.testing.expect(execution.requested);
+    try std.testing.expect(!execution.ok);
+    try std.testing.expect(std.mem.eql(u8, execution.endpoint, "http://127.0.0.1:4010"));
+    try std.testing.expect(std.mem.eql(u8, execution.requestUrl, "http://127.0.0.1:4010/v1/chat/completions"));
     try std.testing.expect(std.mem.indexOf(u8, execution.errorText, "missing API key") != null);
 }
 

@@ -8954,6 +8954,7 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                         resolved_api_key,
                         browser_params.request_timeout_ms,
                         browser_params.completion_stream,
+                        if (browser_params.endpoint_explicit) browser_params.endpoint else "",
                     );
                 }
                 break :blk try lightpanda.executeCompletion(
@@ -9128,6 +9129,7 @@ const BrowserRequestParams = struct {
     auth_mode: []u8,
     session_id: []u8,
     endpoint: []u8,
+    endpoint_explicit: bool,
     request_timeout_ms: u32,
     direct_provider: bool,
     completion_stream: bool,
@@ -13123,6 +13125,7 @@ fn parseBrowserRequestFromFrame(
     var auth_mode: []const u8 = "";
     var session_id: []const u8 = "";
     var endpoint: []const u8 = default_endpoint;
+    var endpoint_explicit = false;
     var request_timeout_ms: u32 = default_timeout_ms;
     var direct_provider = false;
     var completion_stream = false;
@@ -13171,19 +13174,28 @@ fn parseBrowserRequestFromFrame(
                 if (params_value.object.get("endpoint")) |value| {
                     if (value == .string) {
                         const candidate = std.mem.trim(u8, value.string, " \t\r\n");
-                        if (candidate.len > 0) endpoint = candidate;
+                        if (candidate.len > 0) {
+                            endpoint = candidate;
+                            endpoint_explicit = true;
+                        }
                     }
                 }
                 if (params_value.object.get("bridgeEndpoint")) |value| {
                     if (value == .string) {
                         const candidate = std.mem.trim(u8, value.string, " \t\r\n");
-                        if (candidate.len > 0) endpoint = candidate;
+                        if (candidate.len > 0) {
+                            endpoint = candidate;
+                            endpoint_explicit = true;
+                        }
                     }
                 }
                 if (params_value.object.get("lightpandaEndpoint")) |value| {
                     if (value == .string) {
                         const candidate = std.mem.trim(u8, value.string, " \t\r\n");
-                        if (candidate.len > 0) endpoint = candidate;
+                        if (candidate.len > 0) {
+                            endpoint = candidate;
+                            endpoint_explicit = true;
+                        }
                     }
                 }
                 if (params_value.object.get("model")) |value| {
@@ -13345,6 +13357,7 @@ fn parseBrowserRequestFromFrame(
         .auth_mode = try allocator.dupe(u8, std.mem.trim(u8, auth_mode, " \t\r\n")),
         .session_id = try allocator.dupe(u8, session_id),
         .endpoint = try allocator.dupe(u8, std.mem.trim(u8, endpoint, " \t\r\n")),
+        .endpoint_explicit = endpoint_explicit,
         .request_timeout_ms = request_timeout_ms,
         .direct_provider = direct_provider,
         .completion_stream = completion_stream,
@@ -13718,6 +13731,22 @@ test "dispatch browser.request direct provider gemini missing key uses api-key a
     try std.testing.expect(std.mem.indexOf(u8, out, "\"auth\":{\"loginSessionId\":null,\"apiKeyUsed\":false,\"apiKeySource\":\"none\"}") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"bridgeCompletion\":{\"requested\":true") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "\"requestUrl\":\"https://generativelanguage.googleapis.com/v1beta/openai/chat/completions\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "missing API key for direct provider request") != null);
+}
+
+test "dispatch browser.request direct provider missing key honors explicit endpoint override" {
+    const allocator = std.testing.allocator;
+    const out = try dispatch(
+        allocator,
+        "{\"id\":\"3i\",\"method\":\"browser.request\",\"params\":{\"provider\":\"chatgpt\",\"directProvider\":true,\"endpoint\":\"http://127.0.0.1:4010\",\"prompt\":\"hello from zig\",\"sessionId\":\"br-direct-chatgpt-override\"}}",
+    );
+    defer allocator.free(out);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"executionPath\":\"direct-provider\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"directProvider\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"authMode\":\"api_key\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"auth\":{\"loginSessionId\":null,\"apiKeyUsed\":false,\"apiKeySource\":\"none\"}") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"endpoint\":\"http://127.0.0.1:4010\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "\"requestUrl\":\"http://127.0.0.1:4010/v1/chat/completions\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "missing API key for direct provider request") != null);
 }
 

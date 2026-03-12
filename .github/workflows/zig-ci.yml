@@ -656,6 +656,10 @@ jobs:
         shell: pwsh
         run: ./scripts/browser-request-success-smoke-check.ps1 -SkipBuild
 
+      - name: Direct-provider browser completion success smoke check (strict FS2 direct-provider lane)
+        shell: pwsh
+        run: ./scripts/browser-request-direct-provider-success-smoke-check.ps1 -SkipBuild
+
       - name: Telegram reply-loop smoke check (strict FS2 command/reply lane)
         shell: pwsh
         run: ./scripts/telegram-reply-loop-smoke-check.ps1 -SkipBuild

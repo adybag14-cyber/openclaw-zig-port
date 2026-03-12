@@ -34,7 +34,7 @@ FS2 proofs must use the stabilized FS1 and FS4 surfaces for:
 | --- | --- | --- | --- | --- | --- |
 | ChatGPT browser-session auth | `web.login.start`, `web.login.wait`, `web.login.complete`, `web.login.status` | `web-login-smoke-check.ps1` returns HTTP `200` for all four RPCs, exposes non-empty `loginSessionId` + `code`, and ends in authorized/completed state | `scripts/web-login-smoke-check.ps1`; `src/bridge/web_login.zig` lifecycle tests; registry + RPC docs | `PASS` | none for the auth-only lane |
 | Browser completion execution | `browser.request` completion mode | at least one end-to-end completion path returns assistant text through the supported browser bridge path, with deterministic failure telemetry also covered | `scripts/browser-request-success-smoke-check.ps1`; dispatcher tests cover failure telemetry, context injection, request normalization, and bridge failure envelope | `PASS` | none for the browser bridge lane |
-| Direct provider OpenAI-compatible path | `browser.request` with `directProvider=true` for `chatgpt|codex|claude` | deterministic auth semantics, deterministic missing-key telemetry, and at least one successful completion proof | dispatcher tests cover auth semantics and missing-key behavior; provider transport exists | `PARTIAL` | no recorded success-path proof yet |
+| Direct provider OpenAI-compatible path | `browser.request` with `directProvider=true` for `chatgpt|codex|claude` | deterministic auth semantics, deterministic missing-key telemetry, and at least one successful completion proof | dispatcher tests cover auth semantics and missing-key behavior; provider transport honors explicit endpoint override; `scripts/browser-request-direct-provider-success-smoke-check.ps1` proves HTTP `200` completion with assistant text through the direct-provider path | `PASS` | none for the OpenAI-compatible direct-provider lane |
 | OpenRouter direct provider path | `browser.request` with `directProvider=true` for `openrouter` | deterministic auth semantics and endpoint telemetry, plus at least one successful completion proof | dispatcher tests; `src/bridge/provider_http.zig` tests; provider endpoint contract implemented | `PARTIAL` | no recorded success-path proof yet |
 | OpenCode direct provider path | `browser.request` with `directProvider=true` for `opencode` | deterministic auth semantics and endpoint telemetry, plus at least one successful completion proof | dispatcher tests; `src/bridge/provider_http.zig` tests; provider endpoint contract implemented | `PARTIAL` | no recorded success-path proof yet |
 | Telegram webhook receive | `channels.telegram.webhook.receive` | documented request/response shape, routed runtime handling, and strict proof of update ingress | dispatcher tests prove routed dry-run handling | `PARTIAL` | no dedicated ingress smoke yet |
@@ -55,15 +55,16 @@ What is now closed:
 
 What still blocks FS2 closure:
 
-1. direct-provider success proof
-2. Telegram webhook ingress smoke proof
-3. Telegram bot-send delivery smoke proof
-4. explicit end-to-end typing/chunking success proof recorded as a strict gate
+1. OpenRouter direct-provider success proof
+2. OpenCode direct-provider success proof
+3. Telegram webhook ingress smoke proof
+4. Telegram bot-send delivery smoke proof
 
 ## Enforced Local Smoke Commands
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\web-login-smoke-check.ps1 -SkipBuild
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\browser-request-success-smoke-check.ps1 -SkipBuild
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\browser-request-direct-provider-success-smoke-check.ps1 -SkipBuild
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\telegram-reply-loop-smoke-check.ps1 -SkipBuild
 ```

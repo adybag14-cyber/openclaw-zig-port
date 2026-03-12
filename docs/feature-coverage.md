@@ -70,7 +70,8 @@ This page summarizes functional coverage across all major OpenClaw Zig runtime d
   - completion payload aliases supported: `max_tokens|maxTokens`, `loginSessionId|login_session_id`, `apiKey|api_key`
   - response includes structured `bridgeCompletion` telemetry (`requested`, `ok`, `requestUrl`, `statusCode`, `assistantText`, `latencyMs`, `error`)
   - top-level `ok/status` follows completion execution outcome (`completed` or `failed`)
-  - strict smoke proof exists via `scripts/browser-request-success-smoke-check.ps1`
+  - strict bridge smoke proof exists via `scripts/browser-request-success-smoke-check.ps1`
+  - strict direct-provider smoke proof exists via `scripts/browser-request-direct-provider-success-smoke-check.ps1`
 - provider breadth includes chatgpt/codex/claude/gemini/openrouter/opencode and guest-capable qwen/zai/inception flows
 - strict FS2 gate source:
   - [`docs/zig-port/FS2_PROVIDER_CHANNEL_MATRIX.md`](zig-port/FS2_PROVIDER_CHANNEL_MATRIX.md)
