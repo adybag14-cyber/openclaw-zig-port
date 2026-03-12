@@ -3159,6 +3159,8 @@ test "baremetal health history overflow clear resets ring and restarts from seq 
     const clear_health = oc_health_history_event(0);
     try std.testing.expectEqual(@as(u32, 1), clear_health.seq);
     try std.testing.expectEqual(@as(u16, 200), clear_health.health_code);
+    try std.testing.expectEqual(@as(u8, abi.mode_running), clear_health.mode);
+    try std.testing.expectEqual(status.command_seq_ack, clear_health.command_seq_ack);
     try std.testing.expectEqual(pre_command_len, oc_command_history_len());
     try std.testing.expectEqual(pre_command_overflow + 1, oc_command_history_overflow_count());
 
@@ -3169,6 +3171,8 @@ test "baremetal health history overflow clear resets ring and restarts from seq 
     const restarted_health = oc_health_history_event(1);
     try std.testing.expectEqual(@as(u32, 2), restarted_health.seq);
     try std.testing.expectEqual(@as(u16, 777), restarted_health.health_code);
+    try std.testing.expectEqual(@as(u8, abi.mode_running), restarted_health.mode);
+    try std.testing.expectEqual(status.command_seq_ack - 1, restarted_health.command_seq_ack);
 }
 
 test "baremetal repeated health-code commands saturate command and health histories together" {
