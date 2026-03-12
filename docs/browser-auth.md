@@ -95,6 +95,7 @@ Supported input aliases include:
 
 ```powershell
 ./scripts/web-login-smoke-check.ps1
+./scripts/browser-request-success-smoke-check.ps1
 ```
 
 Strict FS2 gate source:

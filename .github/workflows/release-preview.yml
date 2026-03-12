@@ -678,6 +678,10 @@ jobs:
         shell: pwsh
         run: ./scripts/web-login-smoke-check.ps1 -SkipBuild
 
+      - name: Browser completion success smoke check (strict FS2 bridge completion lane)
+        shell: pwsh
+        run: ./scripts/browser-request-success-smoke-check.ps1 -SkipBuild
+
       - name: Telegram reply-loop smoke check (strict FS2 command/reply lane)
         shell: pwsh
         run: ./scripts/telegram-reply-loop-smoke-check.ps1 -SkipBuild

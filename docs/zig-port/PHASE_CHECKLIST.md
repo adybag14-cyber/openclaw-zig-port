@@ -94,12 +94,17 @@ Registry status:
     - [x] Define the hard provider/channel matrix in `docs/zig-port/FS2_PROVIDER_CHANNEL_MATRIX.md`
     - [x] Enforce `scripts/web-login-smoke-check.ps1` in `zig-ci` and `release-preview`
     - [x] Enforce `scripts/telegram-reply-loop-smoke-check.ps1` in `zig-ci` and `release-preview`
-    - [ ] Record at least one successful browser completion proof
+    - [x] Record at least one successful browser completion proof
     - [ ] Record at least one successful direct-provider completion proof
     - [ ] Record dedicated Telegram webhook receive and bot-send success proofs
   - Latest delivered slice:
     - Strict FS2 provider/channel closure is now defined in `docs/zig-port/FS2_PROVIDER_CHANNEL_MATRIX.md` instead of being implied across scattered docs and tests.
-    - `scripts/web-login-smoke-check.ps1` and `scripts/telegram-reply-loop-smoke-check.ps1` now support explicit `-SkipBuild` CI usage and are enforced in both `zig-ci` and `release-preview`.
+    - `scripts/web-login-smoke-check.ps1`, `scripts/browser-request-success-smoke-check.ps1`, and `scripts/telegram-reply-loop-smoke-check.ps1` now support explicit `-SkipBuild` CI usage and are enforced in both `zig-ci` and `release-preview`.
+    - `scripts/browser-request-success-smoke-check.ps1` now records a deterministic Lightpanda-compatible bridge success path with:
+      - `GET /json/version` probe success
+      - `POST /v1/chat/completions` completion success
+      - `executionPath="lightpanda-bridge"`
+      - non-empty `bridgeCompletion.assistantText`
     - Browser/auth and Telegram docs now link to the strict FS2 matrix directly, so pass/fail status and remaining gaps are visible from the public documentation surface.
     - Telegram auth fallback metadata now matches Go more closely on the remaining `/auth url`, `/auth complete`, and `auth.invalid` fallback paths:
       - no-session `/auth url` metadata no longer emits Zig-only `provider` or `account`.

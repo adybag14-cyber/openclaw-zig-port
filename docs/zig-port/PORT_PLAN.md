@@ -87,9 +87,9 @@ Full-stack replacement execution reference:
   - FS2 hard-gate slice now shipped:
     - strict matrix defined in `docs/zig-port/FS2_PROVIDER_CHANNEL_MATRIX.md`
     - `scripts/web-login-smoke-check.ps1` and `scripts/telegram-reply-loop-smoke-check.ps1` now accept explicit `-SkipBuild`
-    - both FS2 smokes are now enforced in `zig-ci` and `release-preview`
-    - browser-session auth and Telegram command/reply proofs are green locally
-    - remaining FS2 blockers are now explicit: browser completion success, direct-provider success, and dedicated Telegram webhook/bot-send success proofs
+    - all current FS2 smokes are now enforced in `zig-ci` and `release-preview`
+    - browser-session auth, browser completion success, and Telegram command/reply proofs are green locally
+    - remaining FS2 blockers are now explicit: direct-provider success and dedicated Telegram webhook/bot-send success proofs
   - Release/package lane status (2026-03-06):
   - GitHub prerelease `v0.2.0-zig-edge.28` is live with desktop/android/bare-metal artifacts, parity reports, manifest, SBOM, provenance, npm tarball, wheel, and sdist.
   - release evidence now also includes `release-status.json` + `release-status.md` so every edge cut carries a frozen workflow-status + registry-status snapshot in addition to package preflight evidence.

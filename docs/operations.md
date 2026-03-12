@@ -127,6 +127,7 @@ Recommended sequence:
 ./scripts/gateway-auth-smoke-check.ps1
 ./scripts/websocket-smoke-check.ps1
 ./scripts/web-login-smoke-check.ps1
+./scripts/browser-request-success-smoke-check.ps1
 ./scripts/telegram-reply-loop-smoke-check.ps1
 ./scripts/npm-pack-check.ps1
 ./scripts/python-pack-check.ps1
