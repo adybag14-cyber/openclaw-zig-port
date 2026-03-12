@@ -1507,6 +1507,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-mask-clear-all-recovery-probe-check.ps1
 
+      - name: Bare-metal QEMU interrupt mask clear-all recovery baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-clear-all-recovery-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt mask clear-all recovery clear-collapse probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-clear-all-recovery-clear-collapse-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt mask clear-all recovery wake-delivery probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-clear-all-recovery-wake-delivery-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt mask clear-all recovery history-payload probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-clear-all-recovery-history-payload-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt mask clear-all recovery mailbox-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-clear-all-recovery-mailbox-state-probe-check.ps1
+
       - name: Bare-metal QEMU interrupt mask custom-profile preserve probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-mask-custom-profile-preserve-probe-check.ps1

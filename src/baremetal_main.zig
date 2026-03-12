@@ -8273,18 +8273,23 @@ test "baremetal interrupt mask clear all restores wake delivery for an active wa
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
     try std.testing.expect(x86_bootstrap.oc_interrupt_mask_is_set(200));
+    try std.testing.expectEqual(@as(u32, 224), x86_bootstrap.oc_interrupt_masked_count());
 
     _ = oc_submit_command(abi.command_trigger_interrupt, 200, 0);
     oc_tick();
     try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
     try std.testing.expectEqual(@as(u64, 1), x86_bootstrap.oc_interrupt_mask_ignored_count());
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_interrupt_count());
+    try std.testing.expectEqual(@as(u8, 200), x86_bootstrap.oc_interrupt_last_masked_vector());
 
     _ = oc_submit_command(abi.command_interrupt_mask_clear_all, 0, 0);
     oc_tick();
     try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
     try std.testing.expect(!x86_bootstrap.oc_interrupt_mask_is_set(200));
     try std.testing.expectEqual(abi.interrupt_mask_profile_none, x86_bootstrap.oc_interrupt_mask_profile());
+    try std.testing.expectEqual(@as(u32, 0), x86_bootstrap.oc_interrupt_masked_count());
+    try std.testing.expectEqual(@as(u64, 1), x86_bootstrap.oc_interrupt_mask_ignored_count());
+    try std.testing.expectEqual(@as(u8, 200), x86_bootstrap.oc_interrupt_last_masked_vector());
 
     _ = oc_submit_command(abi.command_trigger_interrupt, 200, 0);
     oc_tick();
@@ -8294,6 +8299,7 @@ test "baremetal interrupt mask clear all restores wake delivery for an active wa
     try std.testing.expectEqual(@as(u8, abi.wake_reason_interrupt), evt.reason);
     try std.testing.expectEqual(@as(u8, 200), evt.vector);
     try std.testing.expectEqual(@as(u64, 1), x86_bootstrap.oc_interrupt_mask_ignored_count());
+    try std.testing.expectEqual(@as(u32, 1), x86_bootstrap.oc_interrupt_count());
 }
 
 test "baremetal interrupt wait with timeout wakes on timer when no interrupt arrives" {
