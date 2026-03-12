@@ -103,6 +103,12 @@ Recommended sequence:
 ./scripts/baremetal-qemu-syscall-saturation-reset-restart-probe-check.ps1
 ./scripts/baremetal-qemu-allocator-syscall-failure-probe-check.ps1
 ./scripts/baremetal-qemu-reset-counters-probe-check.ps1
+./scripts/baremetal-qemu-interrupt-mask-profile-probe-check.ps1
+./scripts/baremetal-qemu-interrupt-mask-profile-external-all-probe-check.ps1
+./scripts/baremetal-qemu-interrupt-mask-profile-unmask-recovery-probe-check.ps1
+./scripts/baremetal-qemu-interrupt-mask-profile-custom-profile-probe-check.ps1
+./scripts/baremetal-qemu-interrupt-mask-profile-reset-ignored-counts-probe-check.ps1
+./scripts/baremetal-qemu-interrupt-mask-profile-none-clear-all-probe-check.ps1
 ./scripts/baremetal-qemu-interrupt-mask-clear-all-recovery-probe-check.ps1
 ./scripts/appliance-control-plane-smoke-check.ps1
 ./scripts/appliance-restart-recovery-smoke-check.ps1

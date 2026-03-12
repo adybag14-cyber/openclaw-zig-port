@@ -1303,6 +1303,22 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-mask-profile-probe-check.ps1
 
+      - name: Bare-metal QEMU interrupt mask profile external-all probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-profile-external-all-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt mask profile unmask-recovery probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-profile-unmask-recovery-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt mask profile custom-profile probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-profile-custom-profile-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt mask profile reset-ignored-counts probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-profile-reset-ignored-counts-probe-check.ps1
+
       - name: Bare-metal QEMU interrupt mask control probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-mask-control-probe-check.ps1
@@ -1326,6 +1342,10 @@ jobs:
       - name: Bare-metal QEMU interrupt mask profile boundary probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-interrupt-mask-profile-boundary-probe-check.ps1
+
+      - name: Bare-metal QEMU interrupt mask profile none-clear-all probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-interrupt-mask-profile-none-clear-all-probe-check.ps1
 
       - name: Bare-metal QEMU task terminate interrupt-timeout probe (optional)
         shell: pwsh
