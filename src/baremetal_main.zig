@@ -3416,6 +3416,83 @@ test "baremetal boot phase history captures command runtime and panic transition
     try std.testing.expectEqual(@as(u8, abi.boot_phase_change_reason_command), p_after_clear.reason);
 }
 
+test "baremetal mode and boot phase history clear preserve sibling ring and restart both histories" {
+    resetBaremetalRuntimeForTest();
+
+    _ = oc_submit_command(abi.command_set_boot_phase, abi.boot_phase_init, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_set_mode, abi.mode_booting, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_trigger_panic_flag, 0, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u32, 3), oc_mode_history_len());
+    try std.testing.expectEqual(@as(u32, 3), oc_boot_phase_history_len());
+
+    _ = oc_submit_command(abi.command_clear_mode_history, 0, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u32, 0), oc_mode_history_len());
+    try std.testing.expectEqual(@as(u32, 0), oc_mode_history_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_mode_history_overflow_count());
+    try std.testing.expectEqual(@as(u32, 0), mode_history_seq);
+    try std.testing.expectEqual(@as(u32, 3), oc_boot_phase_history_len());
+    try std.testing.expectEqual(@as(u32, 3), boot_phase_history_seq);
+    const preserved_boot = oc_boot_phase_history_event(2);
+    try std.testing.expectEqual(@as(u32, 3), preserved_boot.seq);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_runtime), preserved_boot.previous_phase);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_panicked), preserved_boot.new_phase);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_change_reason_panic), preserved_boot.reason);
+
+    _ = oc_submit_command(abi.command_clear_boot_phase_history, 0, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u32, 0), oc_boot_phase_history_len());
+    try std.testing.expectEqual(@as(u32, 0), oc_boot_phase_history_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_boot_phase_history_overflow_count());
+    try std.testing.expectEqual(@as(u32, 0), boot_phase_history_seq);
+
+    status.mode = abi.mode_running;
+    status.panic_count = 0;
+    boot_diagnostics.phase = abi.boot_phase_runtime;
+    boot_diagnostics.phase_changes = 0;
+
+    _ = oc_submit_command(abi.command_set_boot_phase, abi.boot_phase_init, 0);
+    oc_tick();
+    _ = oc_submit_command(abi.command_set_mode, abi.mode_booting, 0);
+    oc_tick();
+
+    try std.testing.expectEqual(@as(u32, 2), oc_mode_history_len());
+    try std.testing.expectEqual(@as(u32, 2), oc_mode_history_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_mode_history_overflow_count());
+    try std.testing.expectEqual(@as(u32, 2), mode_history_seq);
+    const reset_mode0 = oc_mode_history_event(0);
+    try std.testing.expectEqual(@as(u32, 1), reset_mode0.seq);
+    try std.testing.expectEqual(@as(u8, abi.mode_running), reset_mode0.previous_mode);
+    try std.testing.expectEqual(@as(u8, abi.mode_booting), reset_mode0.new_mode);
+    try std.testing.expectEqual(@as(u8, abi.mode_change_reason_command), reset_mode0.reason);
+    const reset_mode1 = oc_mode_history_event(1);
+    try std.testing.expectEqual(@as(u32, 2), reset_mode1.seq);
+    try std.testing.expectEqual(@as(u8, abi.mode_booting), reset_mode1.previous_mode);
+    try std.testing.expectEqual(@as(u8, abi.mode_running), reset_mode1.new_mode);
+    try std.testing.expectEqual(@as(u8, abi.mode_change_reason_runtime_tick), reset_mode1.reason);
+
+    try std.testing.expectEqual(@as(u32, 2), oc_boot_phase_history_len());
+    try std.testing.expectEqual(@as(u32, 2), oc_boot_phase_history_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_boot_phase_history_overflow_count());
+    try std.testing.expectEqual(@as(u32, 2), boot_phase_history_seq);
+    const reset_boot0 = oc_boot_phase_history_event(0);
+    try std.testing.expectEqual(@as(u32, 1), reset_boot0.seq);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_runtime), reset_boot0.previous_phase);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), reset_boot0.new_phase);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_change_reason_command), reset_boot0.reason);
+    const reset_boot1 = oc_boot_phase_history_event(1);
+    try std.testing.expectEqual(@as(u32, 2), reset_boot1.seq);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_init), reset_boot1.previous_phase);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_runtime), reset_boot1.new_phase);
+    try std.testing.expectEqual(@as(u8, abi.boot_phase_change_reason_runtime_tick), reset_boot1.reason);
+}
+
 test "baremetal boot phase history overflow clear resets ring and restarts from seq one" {
     resetBaremetalRuntimeForTest();
 

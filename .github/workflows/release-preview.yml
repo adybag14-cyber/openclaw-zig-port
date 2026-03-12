@@ -586,6 +586,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-mode-boot-phase-history-clear-probe-check.ps1
 
+      - name: Bare-metal QEMU mode/boot-phase history clear baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mode-boot-phase-history-clear-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU mode/boot-phase history clear pre-semantics probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mode-boot-phase-history-clear-pre-semantics-probe-check.ps1
+
+      - name: Bare-metal QEMU mode/boot-phase history clear mode-collapse preserve-boot probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mode-boot-phase-history-clear-mode-collapse-preserve-boot-probe-check.ps1
+
+      - name: Bare-metal QEMU mode/boot-phase history clear boot-collapse probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mode-boot-phase-history-clear-boot-collapse-probe-check.ps1
+
+      - name: Bare-metal QEMU mode/boot-phase history clear restart-semantics probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mode-boot-phase-history-clear-restart-semantics-probe-check.ps1
+
       - name: Bare-metal QEMU mode-history overflow clear probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-mode-history-overflow-clear-probe-check.ps1
