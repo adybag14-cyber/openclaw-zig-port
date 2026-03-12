@@ -53,7 +53,7 @@ jobs:
 
       - name: Method parity gate snapshot (for docs status checks)
         shell: pwsh
-        run: ./scripts/check-go-method-parity.ps1 -GitHubToken "${{ github.token }}" -GoTag v2.14.0-go -OriginalRef v2026.3.8 -OriginalBetaRef v2026.3.8-beta.1 -OutputJsonPath parity-go-zig.json
+        run: ./scripts/check-go-method-parity.ps1 -GitHubToken "${{ github.token }}" -GoTag v2.14.0-go -OriginalRef v2026.3.11 -OriginalBetaRef v2026.3.11-beta.1 -OutputJsonPath parity-go-zig.json
 
       - name: Docs status drift gate
         shell: pwsh

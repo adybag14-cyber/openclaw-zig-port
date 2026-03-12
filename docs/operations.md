@@ -395,6 +395,11 @@ Recommended sequence:
 - bare-metal optional QEMU scheduler timeslice update-2 probe in validate stage
 - bare-metal optional QEMU scheduler timeslice invalid-zero preserve probe in validate stage
 - bare-metal optional QEMU scheduler timeslice final task-state probe in validate stage
+- bare-metal optional QEMU scheduler baseline probe in validate stage
+- bare-metal optional QEMU scheduler config-state probe in validate stage
+- bare-metal optional QEMU scheduler task-shape probe in validate stage
+- bare-metal optional QEMU scheduler progress-telemetry probe in validate stage
+- bare-metal optional QEMU scheduler mailbox-state probe in validate stage
 - bare-metal optional QEMU scheduler disable-enable probe in validate stage
 - bare-metal optional QEMU scheduler disable-enable baseline probe in validate stage
 - bare-metal optional QEMU scheduler disable-enable disabled-freeze probe in validate stage

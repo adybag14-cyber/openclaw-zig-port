@@ -247,6 +247,30 @@ function Extract-IntValue {
     return [int64]::Parse($match.Groups[1].Value)
 }
 
+function Remove-FileWithRetry {
+    param(
+        [string] $Path,
+        [int] $Attempts = 20,
+        [int] $DelayMs = 100
+    )
+
+    if (-not (Test-Path $Path)) {
+        return
+    }
+
+    for ($attempt = 1; $attempt -le $Attempts; $attempt += 1) {
+        try {
+            Remove-Item -Force $Path -ErrorAction Stop
+            return
+        } catch {
+            if ($attempt -eq $Attempts) {
+                throw
+            }
+            Start-Sleep -Milliseconds $DelayMs
+        }
+    }
+}
+
 Set-Location $repo
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 
@@ -351,10 +375,10 @@ $schedulerTasksAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Patte
 $schedulerPolicyAddress = Resolve-SymbolAddress -SymbolLines $symbolOutput -Pattern '\s[dDbB]\sbaremetal_main\.scheduler_policy$' -SymbolName "baremetal_main.scheduler_policy"
 $artifactForGdb = $artifact.Replace('\', '/')
 
-if (Test-Path $gdbStdout) { Remove-Item -Force $gdbStdout }
-if (Test-Path $gdbStderr) { Remove-Item -Force $gdbStderr }
-if (Test-Path $qemuStdout) { Remove-Item -Force $qemuStdout }
-if (Test-Path $qemuStderr) { Remove-Item -Force $qemuStderr }
+Remove-FileWithRetry -Path $gdbStdout
+Remove-FileWithRetry -Path $gdbStderr
+Remove-FileWithRetry -Path $qemuStdout
+Remove-FileWithRetry -Path $qemuStderr
 
 @" 
 set pagination off

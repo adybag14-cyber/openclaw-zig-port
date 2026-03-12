@@ -88,7 +88,7 @@ jobs:
 
       - name: Method parity gate (Go latest release + original latest release + original latest beta)
         shell: pwsh
-        run: ./scripts/check-go-method-parity.ps1 -GitHubToken "${{ github.token }}" -GoTag v2.14.0-go -OriginalRef v2026.3.8 -OriginalBetaRef v2026.3.8-beta.1 -OutputJsonPath parity-go-zig.json -OutputMarkdownPath parity-go-zig.md
+        run: ./scripts/check-go-method-parity.ps1 -GitHubToken "${{ github.token }}" -GoTag v2.14.0-go -OriginalRef v2026.3.11 -OriginalBetaRef v2026.3.11-beta.1 -OutputJsonPath parity-go-zig.json -OutputMarkdownPath parity-go-zig.md
 
       - name: Docs status drift gate
         shell: pwsh
@@ -753,6 +753,26 @@ jobs:
       - name: Bare-metal QEMU scheduler probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler config-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-config-state-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler task-shape probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-task-shape-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler progress telemetry probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-progress-telemetry-probe-check.ps1
+
+      - name: Bare-metal QEMU scheduler mailbox-state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-scheduler-mailbox-state-probe-check.ps1
 
       - name: Bare-metal QEMU scheduler priority budget probe (optional)
         shell: pwsh

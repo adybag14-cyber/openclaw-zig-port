@@ -4041,9 +4041,15 @@ test "baremetal scheduler command flow creates dispatches and completes tasks" {
     _ = oc_submit_command(abi.command_scheduler_enable, 0, 0);
     oc_tick();
     try std.testing.expect(oc_scheduler_enabled());
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_scheduler_enable), status.last_command_opcode);
+    try std.testing.expectEqual(@as(u32, 1), status.command_seq_ack);
 
     _ = oc_submit_command(abi.command_task_create, 3, 2);
     oc_tick();
+    try std.testing.expectEqual(@as(i16, abi.result_ok), status.last_command_result);
+    try std.testing.expectEqual(@as(u16, abi.command_task_create), status.last_command_opcode);
+    try std.testing.expectEqual(@as(u32, 2), status.command_seq_ack);
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_task_count());
     var task = oc_scheduler_task(0);
     try std.testing.expect(task.task_id != 0);
