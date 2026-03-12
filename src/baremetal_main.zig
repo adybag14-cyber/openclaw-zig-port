@@ -3295,6 +3295,11 @@ test "baremetal mode history overflow clear resets ring and restarts from seq on
     try std.testing.expectEqual(@as(u32, 3), oc_mode_history_event(0).seq);
     try std.testing.expectEqual(@as(u8, abi.mode_running), oc_mode_history_event(0).previous_mode);
     try std.testing.expectEqual(@as(u8, abi.mode_booting), oc_mode_history_event(0).new_mode);
+    const latest_overflow_mode = oc_mode_history_event(cap - 1);
+    try std.testing.expectEqual(@as(u32, 66), latest_overflow_mode.seq);
+    try std.testing.expectEqual(@as(u8, abi.mode_booting), latest_overflow_mode.previous_mode);
+    try std.testing.expectEqual(@as(u8, abi.mode_running), latest_overflow_mode.new_mode);
+    try std.testing.expectEqual(@as(u8, abi.mode_change_reason_runtime_tick), latest_overflow_mode.reason);
 
     _ = oc_submit_command(abi.command_clear_mode_history, 0, 0);
     oc_tick();
@@ -3311,11 +3316,18 @@ test "baremetal mode history overflow clear resets ring and restarts from seq on
 
     try std.testing.expectEqual(@as(u32, 2), oc_mode_history_len());
     try std.testing.expectEqual(@as(u32, 2), oc_mode_history_head_index());
+    try std.testing.expectEqual(@as(u32, 0), oc_mode_history_overflow_count());
+    try std.testing.expectEqual(@as(u32, 2), mode_history_seq);
     const restarted_mode = oc_mode_history_event(0);
     try std.testing.expectEqual(@as(u32, 1), restarted_mode.seq);
     try std.testing.expectEqual(@as(u8, abi.mode_running), restarted_mode.previous_mode);
     try std.testing.expectEqual(@as(u8, abi.mode_booting), restarted_mode.new_mode);
     try std.testing.expectEqual(@as(u8, abi.mode_change_reason_command), restarted_mode.reason);
+    const restarted_runtime_mode = oc_mode_history_event(1);
+    try std.testing.expectEqual(@as(u32, 2), restarted_runtime_mode.seq);
+    try std.testing.expectEqual(@as(u8, abi.mode_booting), restarted_runtime_mode.previous_mode);
+    try std.testing.expectEqual(@as(u8, abi.mode_running), restarted_runtime_mode.new_mode);
+    try std.testing.expectEqual(@as(u8, abi.mode_change_reason_runtime_tick), restarted_runtime_mode.reason);
 }
 
 test "baremetal boot phase history captures command runtime and panic transitions" {

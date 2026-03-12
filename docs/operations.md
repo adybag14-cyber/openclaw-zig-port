@@ -171,6 +171,7 @@ Recommended sequence:
 - optional bare-metal QEMU allocator/syscall failure wrapper probes (five isolated checks for final mailbox baseline, invalid-alignment allocator-state preservation, no-space allocator-state preservation, blocked-syscall state preservation, and final disabled-syscall/result-counter invariants against the freestanding PVH artifact)
 - optional bare-metal QEMU mode/boot-phase history clear probe (dedicated mailbox clear-path proof for `command_clear_mode_history` and `command_clear_boot_phase_history`, validating clear-state reset of len/head/overflow/seq and `seq=1` restart semantics against the freestanding PVH artifact)
 - optional bare-metal QEMU mode-history overflow clear probe (combined overflow + clear + restart proof for the mode-history ring, validating retained `seq 3 -> 66`, dedicated clear collapse, and `seq=1` restart semantics while the boot-phase ring stays intact until its own clear)
+- optional bare-metal QEMU mode-history overflow clear wrapper probes (`baremetal-qemu-mode-history-overflow-clear-baseline-probe-check.ps1`, `baremetal-qemu-mode-history-overflow-clear-overflow-window-probe-check.ps1`, `baremetal-qemu-mode-history-overflow-clear-overflow-payloads-probe-check.ps1`, `baremetal-qemu-mode-history-overflow-clear-clear-collapse-probe-check.ps1`, and `baremetal-qemu-mode-history-overflow-clear-restart-event-probe-check.ps1`) reuse the broad overflow-clear lane and fail directly on the final mailbox baseline, wrapped overflow-window shape, retained oldest/newest mode payloads, dedicated clear collapse with preserved boot-history length, and post-clear restart-event ordering
 - optional bare-metal QEMU boot-phase-history overflow clear probe (combined overflow + clear + restart proof for the boot-phase-history ring, validating retained `seq 3 -> 66`, dedicated clear collapse, and `seq=1` restart semantics while the mode ring stays intact until its own clear)
 - optional bare-metal QEMU scheduler priority budget probe (live `command_scheduler_set_default_budget` plus `command_task_set_priority` proof, including zero-budget task inheritance and dispatch-order flip under the priority scheduler against the freestanding PVH artifact)
 - optional bare-metal QEMU scheduler priority budget wrapper probes (five isolated checks over the same broad lane: baseline scheduler/task bootstrap, zero-budget default-budget inheritance, initial high-priority dominance, low-task takeover after reprioritize, and invalid-input preservation against the freestanding PVH artifact)
@@ -478,6 +479,7 @@ Recommended sequence:
 - bare-metal optional QEMU mode/boot-phase history wrapper probes in validate stage
 - bare-metal optional QEMU mode/boot-phase history clear probe in validate stage
 - bare-metal optional QEMU mode-history overflow clear probe in validate stage
+- bare-metal optional QEMU mode-history overflow clear wrapper probes in validate stage
 - bare-metal optional QEMU boot-phase-history overflow clear probe in validate stage
 - bare-metal optional QEMU scheduler priority budget probe in validate stage
 - bare-metal optional QEMU scheduler priority budget wrapper probes in validate stage

@@ -504,6 +504,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-mode-history-overflow-clear-probe-check.ps1
 
+      - name: Bare-metal QEMU mode-history overflow clear baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mode-history-overflow-clear-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU mode-history overflow clear overflow-window probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mode-history-overflow-clear-overflow-window-probe-check.ps1
+
+      - name: Bare-metal QEMU mode-history overflow clear overflow-payloads probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mode-history-overflow-clear-overflow-payloads-probe-check.ps1
+
+      - name: Bare-metal QEMU mode-history overflow clear collapse probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mode-history-overflow-clear-clear-collapse-probe-check.ps1
+
+      - name: Bare-metal QEMU mode-history overflow clear restart-event probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-mode-history-overflow-clear-restart-event-probe-check.ps1
+
       - name: Bare-metal QEMU boot-phase-history overflow clear probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-boot-phase-history-overflow-clear-probe-check.ps1
