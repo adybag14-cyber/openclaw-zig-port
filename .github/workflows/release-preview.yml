@@ -865,6 +865,26 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-timer-reset-recovery-probe-check.ps1
 
+      - name: Bare-metal QEMU timer reset recovery baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-reset-recovery-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU timer reset recovery post-reset collapse probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-reset-recovery-post-reset-collapse-probe-check.ps1
+
+      - name: Bare-metal QEMU timer reset recovery wait-isolation probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-reset-recovery-wait-isolation-probe-check.ps1
+
+      - name: Bare-metal QEMU timer reset recovery manual-wake payload probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-reset-recovery-manual-wake-payload-probe-check.ps1
+
+      - name: Bare-metal QEMU timer reset recovery interrupt-rearm probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-timer-reset-recovery-interrupt-rearm-probe-check.ps1
+
       - name: Bare-metal QEMU task resume timer-clear probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-task-resume-timer-clear-probe-check.ps1

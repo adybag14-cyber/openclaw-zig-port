@@ -5952,12 +5952,24 @@ test "baremetal timer reset clears timer entries and timer-backed waits" {
     try std.testing.expectEqual(@as(u32, 2), oc_scheduler_waiting_count());
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_interrupt_count());
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_timeout_count());
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(0).state);
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(1).state);
+    try std.testing.expectEqual(@as(u8, wait_condition_manual), scheduler_wait_kind[0]);
+    try std.testing.expectEqual(@as(u8, wait_condition_interrupt_any), scheduler_wait_kind[1]);
+    try std.testing.expectEqual(@as(u64, 0), scheduler_wait_timeout_tick[0]);
+    try std.testing.expectEqual(@as(u64, 0), scheduler_wait_timeout_tick[1]);
 
     oc_tick_n(25);
     try std.testing.expectEqual(@as(u32, 0), oc_wake_queue_len());
     try std.testing.expectEqual(@as(u32, 2), oc_scheduler_waiting_count());
     try std.testing.expectEqual(@as(u32, 1), oc_scheduler_wait_interrupt_count());
     try std.testing.expectEqual(@as(u32, 0), oc_scheduler_wait_timeout_count());
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(0).state);
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(1).state);
+    try std.testing.expectEqual(@as(u8, wait_condition_manual), scheduler_wait_kind[0]);
+    try std.testing.expectEqual(@as(u8, wait_condition_interrupt_any), scheduler_wait_kind[1]);
+    try std.testing.expectEqual(@as(u64, 0), scheduler_wait_timeout_tick[0]);
+    try std.testing.expectEqual(@as(u64, 0), scheduler_wait_timeout_tick[1]);
 
     _ = oc_submit_command(abi.command_scheduler_wake_task, timer_task_id, 0);
     oc_tick();
@@ -5966,6 +5978,9 @@ test "baremetal timer reset clears timer entries and timer-backed waits" {
     const manual_evt = oc_wake_queue_event(0);
     try std.testing.expectEqual(timer_task_id, manual_evt.task_id);
     try std.testing.expectEqual(@as(u8, abi.wake_reason_manual), manual_evt.reason);
+    try std.testing.expectEqual(@as(u8, abi.task_state_ready), oc_scheduler_task(0).state);
+    try std.testing.expectEqual(@as(u8, wait_condition_none), scheduler_wait_kind[0]);
+    try std.testing.expectEqual(@as(u64, 0), scheduler_wait_timeout_tick[0]);
 
     _ = oc_submit_command(abi.command_trigger_interrupt, 31, 0);
     oc_tick();
@@ -5975,6 +5990,9 @@ test "baremetal timer reset clears timer entries and timer-backed waits" {
     try std.testing.expectEqual(interrupt_task_id, interrupt_evt.task_id);
     try std.testing.expectEqual(@as(u8, abi.wake_reason_interrupt), interrupt_evt.reason);
     try std.testing.expectEqual(@as(u8, 31), interrupt_evt.vector);
+    try std.testing.expectEqual(@as(u8, abi.task_state_ready), oc_scheduler_task(1).state);
+    try std.testing.expectEqual(@as(u8, wait_condition_none), scheduler_wait_kind[1]);
+    try std.testing.expectEqual(@as(u64, 0), scheduler_wait_timeout_tick[1]);
 
     _ = oc_submit_command(abi.command_task_wait_for, timer_task_id, 3);
     oc_tick();
@@ -5982,6 +6000,10 @@ test "baremetal timer reset clears timer entries and timer-backed waits" {
     try std.testing.expectEqual(@as(u32, 1), oc_timer_entry_count());
     try std.testing.expectEqual(@as(u32, 1), oc_timer_entry(0).timer_id);
     try std.testing.expectEqual(@as(u32, 2), oc_timer_state_ptr().next_timer_id);
+    try std.testing.expectEqual(@as(u8, abi.task_state_waiting), oc_scheduler_task(0).state);
+    try std.testing.expectEqual(@as(u8, wait_condition_timer), scheduler_wait_kind[0]);
+    try std.testing.expectEqual(@as(u64, 0), scheduler_wait_timeout_tick[0]);
+    try std.testing.expect(oc_timer_entry(0).next_fire_tick > status.ticks);
 }
 
 test "baremetal task wait for command arms deadline and wakes on timer fire" {
