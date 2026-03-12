@@ -61,6 +61,12 @@ Full-stack replacement execution reference:
   - `docs/zig-port/FS1_FS5_STRICT_ANALYSIS_REPORT.md`
   - this freezes the no-guesswork dependency order: `FS1 -> FS4 -> FS2 -> FS3 -> FS5`
   - additional FS6 work is not allowed to substitute for unresolved FS1-FS5 hard gaps
+ - FS5 hard matrix + first proof lane are now in place:
+ - `docs/zig-port/FS5_EDGE_WASM_FINETUNE_MATRIX.md`
+ - `scripts/edge-wasm-lifecycle-smoke-check.ps1`
+  - `scripts/edge-finetune-lifecycle-smoke-check.ps1`
+  - both hosted validation workflows now run the strict WASM + finetune lifecycle smokes
+  - FS5 strict closure is now reached locally: advertised edge/WASM/marketplace methods are documented, WASM lifecycle is proven end to end, and finetune lifecycle is proven end to end
 - FS1 strict closure is now reached locally:
   - `node.pending.enqueue`
   - `node.pending.drain`

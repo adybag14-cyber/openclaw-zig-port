@@ -455,7 +455,24 @@ Registry status:
       - partial remediation
       - manual blocker reporting
     - strict hosted-phase execution now advances from FS4 to FS2.
-- [ ] FS5 - Edge/WASM/marketplace depth
+- [x] FS5 - Edge/WASM/marketplace depth
+  - strict FS5 matrix now exists at `docs/zig-port/FS5_EDGE_WASM_FINETUNE_MATRIX.md`
+  - `scripts/edge-wasm-lifecycle-smoke-check.ps1` now proves the strict WASM lifecycle end to end:
+    - marketplace list baseline
+    - trusted install with deterministic SHA256 + HMAC verification
+    - post-install marketplace trust metadata
+    - execute allow for permitted hooks
+    - deterministic execute deny for disallowed hooks
+    - bad-signature install failure
+    - remove + execute-after-remove failure
+  - `scripts/edge-finetune-lifecycle-smoke-check.ps1` now proves the strict finetune lifecycle end to end:
+    - run
+    - status
+    - job.get
+    - cancel
+    - cancel/job-get consistency
+  - both strict FS5 smokes are now part of `.github/workflows/zig-ci.yml` and `.github/workflows/release-preview.yml`
+  - FS5 strict closure is now reached locally
 - [ ] FS6 - Appliance/bare-metal maturity track
   - mirror-aware toolchain bootstrap/reproducibility is now required operator evidence for Windows-hosted FS6 work.
   - CI now explicitly splits toolchains by lane: hosted validation stays on Zig `master`, while the freestanding bare-metal smoke/probe and bare-metal asset lanes are pinned to the known-good Linux build `0.16.0-dev.2736+3b515fbed` until the upstream Linux `master` compiler crash on `zig build baremetal -Doptimize=ReleaseFast` is resolved.

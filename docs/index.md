@@ -7,9 +7,9 @@ Full documentation for the OpenClaw Zig runtime port.
 - RPC surface in Zig: `174` methods
 - Pinned tri-baseline parity gate:
   - Go baseline (`v2.14.0-go`): `134/134`
-  - Original OpenClaw baseline (`v2026.3.8`): `97/97`
-  - Original OpenClaw beta baseline (`v2026.3.8-beta.1`): `97/97`
-  - Union baseline: `138/138` (`MISSING_IN_ZIG=0`)
+  - Original OpenClaw baseline (`v2026.3.11`): `99/99`
+  - Original OpenClaw beta baseline (`v2026.3.11-beta.1`): `99/99`
+  - Union baseline: `140/140` (`MISSING_IN_ZIG=0`)
   - Gateway events union baseline: `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
 - Latest local validation: `223/223` main tests + `116/116` bare-metal host tests passing
 - Latest published edge release tag: `v0.2.0-zig-edge.28`
@@ -28,6 +28,7 @@ Full documentation for the OpenClaw Zig runtime port.
 - Full feature coverage by domain
 - Strict FS2 provider/channel matrix
 - Strict FS3 memory/knowledge matrix
+- Strict FS5 edge/wasm/finetune matrix
 - RPC method family reference
 - Security, diagnostics, and remediation model
 - Browser/auth integration model (Lightpanda-only)
@@ -43,5 +44,6 @@ Full documentation for the OpenClaw Zig runtime port.
 - Package publishing guide: [package-publishing.md](package-publishing.md)
 - Strict FS2 matrix: [zig-port/FS2_PROVIDER_CHANNEL_MATRIX.md](zig-port/FS2_PROVIDER_CHANNEL_MATRIX.md)
 - Strict FS3 matrix: [zig-port/FS3_MEMORY_KNOWLEDGE_MATRIX.md](zig-port/FS3_MEMORY_KNOWLEDGE_MATRIX.md)
+- Strict FS5 matrix: [zig-port/FS5_EDGE_WASM_FINETUNE_MATRIX.md](zig-port/FS5_EDGE_WASM_FINETUNE_MATRIX.md)
 - Method registry source: [`src/gateway/registry.zig`](https://github.com/adybag14-cyber/openclaw-zig-port/blob/main/src/gateway/registry.zig)
 

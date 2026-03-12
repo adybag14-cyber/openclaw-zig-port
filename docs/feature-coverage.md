@@ -113,6 +113,8 @@ This page summarizes functional coverage across all major OpenClaw Zig runtime d
 
 - wasm lifecycle:
   - marketplace list/install/execute/remove
+  - strict FS5 WASM proof: `scripts/edge-wasm-lifecycle-smoke-check.ps1`
+  - strict FS5 matrix source: [`docs/zig-port/FS5_EDGE_WASM_FINETUNE_MATRIX.md`](zig-port/FS5_EDGE_WASM_FINETUNE_MATRIX.md)
 - planning and acceleration:
   - router, acceleration, swarm, collaboration
 - multimodal and voice:
@@ -121,6 +123,7 @@ This page summarizes functional coverage across all major OpenClaw Zig runtime d
   - enclave status/prove, mesh status, homomorphic compute
 - finetune:
   - run/status/job get/cancel/cluster plan
+  - strict finetune proof: `scripts/edge-finetune-lifecycle-smoke-check.ps1`
 - additional edge contracts:
   - identity trust, personality, handoff, revenue preview, alignment, quantum
 

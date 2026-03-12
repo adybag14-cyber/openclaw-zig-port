@@ -7,9 +7,9 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 - RPC method surface in Zig: `174`
 - Pinned parity gate (tri-baseline, CI/docs):
   - Go baseline (`v2.14.0-go`): `134/134` covered
-  - Original OpenClaw baseline (`v2026.3.8`): `97/97` covered
-  - Original OpenClaw beta baseline (`v2026.3.8-beta.1`): `97/97` covered
-  - Union baseline: `138/138` covered (`MISSING_IN_ZIG=0`)
+- Original OpenClaw baseline (`v2026.3.11`): `99/99` covered
+- Original OpenClaw beta baseline (`v2026.3.11-beta.1`): `99/99` covered
+- Union baseline: `140/140` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
 - Latest local validation: `zig build test --summary all` -> main `223/223` + bare-metal host `116/116` passing
 - Latest published edge release tag: `v0.2.0-zig-edge.28`
@@ -28,7 +28,8 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - `FS2` provider/channel completion is locally closed against the hard matrix at [`docs/zig-port/FS2_PROVIDER_CHANNEL_MATRIX.md`](docs/zig-port/FS2_PROVIDER_CHANNEL_MATRIX.md)
   - `FS3` memory/knowledge depth is now locally closed against the hard matrix at [`docs/zig-port/FS3_MEMORY_KNOWLEDGE_MATRIX.md`](docs/zig-port/FS3_MEMORY_KNOWLEDGE_MATRIX.md)
   - `browser-request-memory-context-smoke-check.ps1` and `telegram-reply-memory-context-smoke-check.ps1` are now part of the strict FS3 CI lane
-  - the next strict hosted-phase hard gate is `FS5`
+  - `FS5` is now locally strict-closed through the hard matrix at [`docs/zig-port/FS5_EDGE_WASM_FINETUNE_MATRIX.md`](docs/zig-port/FS5_EDGE_WASM_FINETUNE_MATRIX.md)
+  - `edge-wasm-lifecycle-smoke-check.ps1` and `edge-finetune-lifecycle-smoke-check.ps1` are now part of the strict FS5 CI lane
 - Recent FS6 progress (2026-03-06):
   - `update.*` now has a real `canary` rollout lane instead of collapsing `canary` into `edge`
   - appliance rollout boundary is now enforced by live smoke validation (`canary` selection, secure-boot block, canary apply, stable promotion)

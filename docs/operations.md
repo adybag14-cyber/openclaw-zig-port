@@ -13,7 +13,8 @@
 - FS4 security/trust closure is also reached locally.
 - FS2 provider/channel closure is also reached locally.
 - FS3 memory/knowledge closure is also reached locally through the hard matrix at `docs/zig-port/FS3_MEMORY_KNOWLEDGE_MATRIX.md`.
-- The next hosted-phase hard gate is FS5 edge/WASM/marketplace depth.
+- FS5 edge/wasm/finetune closure is now reached locally through the hard matrix at `docs/zig-port/FS5_EDGE_WASM_FINETUNE_MATRIX.md`.
+- `scripts/edge-wasm-lifecycle-smoke-check.ps1` and `scripts/edge-finetune-lifecycle-smoke-check.ps1` are now part of the strict hosted CI/release lane.
 - `scripts/package-registry-status.ps1` now performs default npmjs/PyPI visibility checks even when invoked with only `-ReleaseTag`, so local package diagnostics no longer silently skip unresolved public-registry state.
 - Latest CI:
   - latest pushed `main` head is tracked in issue `#1`

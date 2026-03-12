@@ -346,7 +346,7 @@ FS4 is not complete until all of the following are true:
    - manual blocker reporting
 5. `zig-ci` and `docs-pages` are green on the pushed head.
 
-Current local source-of-truth status: FS1, FS4, FS2, and FS3 gates are satisfied locally; the next strict hosted phase is FS5.
+Current local source-of-truth status: FS1, FS4, FS2, FS3, and FS5 gates are satisfied locally.
 
 ### FS5 - Edge/WASM/marketplace depth
 
@@ -373,15 +373,7 @@ Current local source-of-truth status: FS1, FS4, FS2, and FS3 gates are satisfied
 
 #### Confirmed work still needed for strict completion
 
-1. FS5 has large handler coverage, but phase-complete end-to-end gates are not defined.
-2. Strict closure still requires explicit proof of:
-   - trusted install lifecycle
-   - execution denial on disallowed host hooks
-   - successful execution on allowed hooks
-   - finetune job lifecycle
-   - cancel/job-get consistency
-   - marketplace/trust metadata invariants
-3. Any edge test that requires network download, filesystem persistence, or exec/trainer launch must first satisfy the relevant FS1 and FS4 prerequisites.
+No remaining hosted strict-completion blockers are open inside FS5 on the local source of truth.
 
 #### Strict FS5 success gates
 
@@ -402,6 +394,32 @@ FS5 is not complete until all of the following are true:
 4. Trust metadata and failure modes are deterministic and tested.
 5. Any network/filesystem/exec dependencies used by these proofs are already passing their prerequisite FS gates.
 6. `zig-ci` and `docs-pages` are green on the pushed head.
+
+#### Current strict status
+
+Strict FS5 closure is now reached locally.
+
+Reasons:
+
+1. The hard matrix now exists at `docs/zig-port/FS5_EDGE_WASM_FINETUNE_MATRIX.md`.
+2. `scripts/edge-wasm-lifecycle-smoke-check.ps1` now proves the full WASM lifecycle end to end:
+   - clean marketplace list baseline
+   - trusted install with exact SHA256 + HMAC verification
+   - post-install trust metadata in marketplace output
+   - allow execution for permitted host hooks
+   - deterministic deny for disallowed host hooks
+   - deterministic bad-signature failure
+   - remove + execute-after-remove failure
+3. `scripts/edge-finetune-lifecycle-smoke-check.ps1` now proves the full finetune lifecycle end to end:
+   - run
+   - status
+   - job.get
+   - cancel
+   - cancel/job-get consistency
+   - deterministic Zig-native builtin trainer execution path via `builtin:mock-finetune` for strict proof on workstations without external trainer tooling
+4. Both strict FS5 smokes are now part of both hosted validation workflows:
+   - `.github/workflows/zig-ci.yml`
+   - `.github/workflows/release-preview.yml`
 
 ## Execution Order
 
@@ -470,4 +488,4 @@ gh run list -L 6 --json databaseId,headSha,status,conclusion,name,workflowName,d
 
 ## Decision
 
-FS1, FS4, FS2, and FS3 are now the hosted phases with local strict closure. The next strict execution target is FS5, and additional FS6 work is no longer the priority path until FS5 evidence is defined and burned down.
+FS1, FS4, FS2, FS3, and FS5 are now the hosted phases with local strict closure. Additional FS6 work remains valuable, but it is no longer a substitute for any hosted-phase gap because the hosted strict stack is now closed locally.

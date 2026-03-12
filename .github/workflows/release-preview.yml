@@ -714,6 +714,14 @@ jobs:
         shell: pwsh
         run: ./scripts/telegram-bot-send-delivery-smoke-check.ps1 -SkipBuild
 
+      - name: Edge WASM lifecycle smoke check (strict FS5 wasm lane)
+        shell: pwsh
+        run: ./scripts/edge-wasm-lifecycle-smoke-check.ps1 -SkipBuild
+
+      - name: Edge finetune lifecycle smoke check (strict FS5 finetune lane)
+        shell: pwsh
+        run: ./scripts/edge-finetune-lifecycle-smoke-check.ps1 -SkipBuild
+
       - name: Update lifecycle smoke check (plan/run/status)
         shell: pwsh
         run: ./scripts/update-lifecycle-smoke-check.ps1 -SkipBuild

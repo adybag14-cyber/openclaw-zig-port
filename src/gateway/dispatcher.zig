@@ -8284,48 +8284,58 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         defer if (stderr_preview) |text| allocator.free(text);
 
         if (!dry_run) run_trainer: {
-            const timeout: std.Io.Timeout = switch (builtin.os.tag) {
-                .windows => .none,
-                else => .{
-                    .duration = std.Io.Clock.Duration{
-                        .clock = .awake,
-                        .raw = std.Io.Duration.fromMilliseconds(timeout_ms),
-                    },
-                },
-            };
-            var argv = try allocator.alloc([]const u8, command_args.len + 1);
-            defer allocator.free(argv);
-            argv[0] = trainer_binary;
-            @memcpy(argv[1..], command_args);
+            if (std.mem.eql(u8, trainer_binary, "builtin:mock-finetune")) {
+                stdout_preview = try runBuiltinMockFinetuneTrainer(
+                    allocator,
+                    output_path,
+                    dataset_path,
+                    base_provider,
+                    base_model,
+                    adapter_name,
+                    @as(u32, @intCast(rank)),
+                    @as(u32, @intCast(epochs)),
+                    learning_rate,
+                    @as(u32, @intCast(max_samples)),
+                );
+                execution_exit_code = 0;
+                execution_success = true;
+                execution_status = "completed";
+            } else {
+                const process_allocator = std.heap.page_allocator;
+                var argv = try process_allocator.alloc([]const u8, command_args.len + 1);
+                defer process_allocator.free(argv);
+                argv[0] = trainer_binary;
+                @memcpy(argv[1..], command_args);
 
-            const run_result = std.process.run(allocator, std.Io.Threaded.global_single_threaded.io(), .{
-                .argv = argv,
-                .timeout = timeout,
-                .stdout_limit = .limited(1024 * 1024),
-                .stderr_limit = .limited(1024 * 1024),
-            }) catch |err| {
-                execution_status = "failed";
-                execution_success = false;
-                execution_error = @errorName(err);
-                execution_exit_code = null;
-                break :run_trainer;
-            };
-            defer allocator.free(run_result.stdout);
-            defer allocator.free(run_result.stderr);
+                const run_result = runProcessCapture(
+                    process_allocator,
+                    argv,
+                    1024 * 1024,
+                    1024 * 1024,
+                    timeout_ms,
+                ) catch |err| {
+                    execution_status = "failed";
+                    execution_success = false;
+                    execution_error = @errorName(err);
+                    execution_exit_code = null;
+                    break :run_trainer;
+                };
+                defer run_result.deinit(allocator);
 
-            execution_exit_code = switch (run_result.term) {
-                .exited => |code| code,
-                .signal => |sig| -@as(i32, @intCast(@intFromEnum(sig))),
-                .stopped, .unknown => -1,
-            };
-            execution_success = execution_exit_code.? == 0;
-            stdout_preview = try previewTailAlloc(allocator, run_result.stdout, 960);
-            stderr_preview = try previewTailAlloc(allocator, run_result.stderr, 960);
-            if (!execution_success) {
-                execution_timed_out = run_result.term == .signal;
-                execution_status = if (execution_timed_out) "timeout" else "failed";
-                if (stderr_preview) |preview| {
-                    if (preview.len > 0) execution_error = preview;
+                execution_exit_code = switch (run_result.term) {
+                    .exited => |code| code,
+                    .signal => |sig| -@as(i32, @intCast(@intFromEnum(sig))),
+                    .stopped, .unknown => -1,
+                };
+                execution_success = execution_exit_code.? == 0;
+                stdout_preview = try previewTailAlloc(allocator, run_result.stdout, 960);
+                stderr_preview = try previewTailAlloc(allocator, run_result.stderr, 960);
+                if (!execution_success) {
+                    execution_timed_out = run_result.term == .signal;
+                    execution_status = if (execution_timed_out) "timeout" else "failed";
+                    if (stderr_preview) |preview| {
+                        if (preview.len > 0) execution_error = preview;
+                    }
                 }
             }
         }
@@ -12661,6 +12671,115 @@ fn runProcessCaptureWithStdin(
         .stdout = stdout,
         .stderr = stderr,
     };
+}
+
+fn runProcessCapture(
+    allocator: std.mem.Allocator,
+    argv: []const []const u8,
+    stdout_limit: usize,
+    stderr_limit: usize,
+    timeout_ms: u32,
+) !ProcessCaptureResult {
+    const io = std.Io.Threaded.global_single_threaded.io();
+    var child = try std.process.spawn(io, .{
+        .argv = argv,
+        .stdin = .ignore,
+        .stdout = .pipe,
+        .stderr = .pipe,
+        .create_no_window = true,
+    });
+    defer child.kill(io);
+
+    var multi_reader_buffer: std.Io.File.MultiReader.Buffer(2) = undefined;
+    var multi_reader: std.Io.File.MultiReader = undefined;
+    multi_reader.init(allocator, io, multi_reader_buffer.toStreams(), &.{ child.stdout.?, child.stderr.? });
+    defer multi_reader.deinit();
+
+    const stdout_reader = multi_reader.reader(0);
+    const stderr_reader = multi_reader.reader(1);
+    const timeout: std.Io.Timeout = switch (builtin.os.tag) {
+        .windows => .none,
+        else => .{
+            .duration = .{
+                .clock = .awake,
+                .raw = std.Io.Duration.fromMilliseconds(timeout_ms),
+            },
+        },
+    };
+
+    while (multi_reader.fill(64, timeout)) |_| {
+        if (stdout_reader.buffered().len > stdout_limit) return error.StreamTooLong;
+        if (stderr_reader.buffered().len > stderr_limit) return error.StreamTooLong;
+    } else |err| switch (err) {
+        error.EndOfStream => {},
+        else => |e| return e,
+    }
+
+    try multi_reader.checkAnyError();
+    const term = try child.wait(io);
+
+    const stdout = try multi_reader.toOwnedSlice(0);
+    errdefer allocator.free(stdout);
+    const stderr = try multi_reader.toOwnedSlice(1);
+
+    return .{
+        .term = term,
+        .stdout = stdout,
+        .stderr = stderr,
+    };
+}
+
+fn runBuiltinMockFinetuneTrainer(
+    allocator: std.mem.Allocator,
+    output_path: []const u8,
+    dataset_path: []const u8,
+    provider: []const u8,
+    model: []const u8,
+    adapter_name: []const u8,
+    rank: u32,
+    epochs: u32,
+    learning_rate: f64,
+    max_samples: u32,
+) ![]u8 {
+    const io = std.Io.Threaded.global_single_threaded.io();
+    try std.Io.Dir.cwd().createDirPath(io, output_path);
+
+    const report_path = try std.fs.path.join(allocator, &.{ output_path, "trainer-report.json" });
+    defer allocator.free(report_path);
+    const adapter_path = try std.fs.path.join(allocator, &.{ output_path, "adapter.bin" });
+    defer allocator.free(adapter_path);
+
+    var report_writer: std.Io.Writer.Allocating = .init(allocator);
+    defer report_writer.deinit();
+    try std.json.Stringify.value(.{
+        .model = model,
+        .provider = provider,
+        .adapter = adapter_name,
+        .rank = rank,
+        .epochs = epochs,
+        .learningRate = learning_rate,
+        .maxSamples = max_samples,
+        .dataset = dataset_path,
+        .outputPath = output_path,
+        .mode = "builtin:mock-finetune",
+    }, .{}, &report_writer.writer);
+    const report_payload = try report_writer.toOwnedSlice();
+    defer allocator.free(report_payload);
+
+    try std.Io.Dir.cwd().writeFile(io, .{
+        .sub_path = report_path,
+        .data = report_payload,
+    });
+    try std.Io.Dir.cwd().writeFile(io, .{
+        .sub_path = adapter_path,
+        .data = "mock-adapter",
+    });
+
+    return std.fmt.allocPrint(
+        allocator,
+        "mock finetune trainer completed\nprovider={s}\nmodel={s}\ndataset={s}\nmode=builtin:mock-finetune",
+        .{ provider, model, dataset_path },
+    );
 }
 
 fn trySynthesizeKittentts(
