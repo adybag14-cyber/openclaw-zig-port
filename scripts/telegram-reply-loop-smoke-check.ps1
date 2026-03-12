@@ -43,7 +43,18 @@ $env:OPENCLAW_ZIG_HTTP_PORT = "$port"
 $stdoutLog = Join-Path $repo "tmp_smoke_telegram_stdout.log"
 $stderrLog = Join-Path $repo "tmp_smoke_telegram_stderr.log"
 Remove-Item $stdoutLog,$stderrLog -ErrorAction SilentlyContinue
-$proc = Start-Process -FilePath $exe -ArgumentList @("--serve") -WorkingDirectory $repo -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
+$startProcessParams = @{
+  FilePath = $exe
+  ArgumentList = @("--serve")
+  WorkingDirectory = $repo
+  PassThru = $true
+  RedirectStandardOutput = $stdoutLog
+  RedirectStandardError = $stderrLog
+}
+if ($isWindowsHost) {
+  $startProcessParams.WindowStyle = "Hidden"
+}
+$proc = Start-Process @startProcessParams
 
 $ready = $false
 for ($i = 0; $i -lt 60; $i++) {
