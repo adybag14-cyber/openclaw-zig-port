@@ -40,6 +40,10 @@ This page summarizes functional coverage across all major OpenClaw Zig runtime d
   - `security.audit`
   - `doctor`
   - `doctor.memory.status`
+- secret-store surfaces:
+  - `secrets.store.status`
+  - `secrets.store.set|get|delete|list`
+  - explicit backend support classification for `env`, `encrypted-file`, native fallback requests, and unsupported backend requests
 - remediation:
   - audit `--fix` path
 

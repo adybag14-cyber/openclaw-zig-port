@@ -61,10 +61,26 @@ Full-stack replacement execution reference:
   - `docs/zig-port/FS1_FS5_STRICT_ANALYSIS_REPORT.md`
   - this freezes the no-guesswork dependency order: `FS1 -> FS4 -> FS2 -> FS3 -> FS5`
   - additional FS6 work is not allowed to substitute for unresolved FS1-FS5 hard gaps
-- Current hard hosted/runtime parity gap burn-down is explicitly locked to the first FS1 slice:
+- FS1 strict closure is now reached locally:
   - `node.pending.enqueue`
   - `node.pending.drain`
-  - registry coverage, dispatcher handlers, compat-state semantics, tests, and RPC reference are now implemented locally
+  - registry coverage, dispatcher handlers, compat-state semantics, tests, and RPC reference are implemented
+  - parity gate is at zero missing methods against Go + stable + beta
+  - strict phase order now advances to FS4
+- Active FS4 hardening slice:
+  - `secrets.store.status` now reports backend truth explicitly instead of implying native-provider support
+  - explicit support levels are now emitted for:
+    - `env` -> `implemented`
+    - `file|encrypted-file` -> `implemented`
+    - `dpapi|keychain|keystore` -> `fallback-only`
+    - `auto` -> `fallback-only`
+    - unknown backend -> `unsupported`
+  - runtime contract now exposes:
+    - `requestedRecognized`
+    - `requestedSupport`
+    - `fallbackApplied`
+    - `fallbackReason`
+  - direct secret-store tests and dispatcher coverage now lock those semantics
   - Release/package lane status (2026-03-06):
   - GitHub prerelease `v0.2.0-zig-edge.28` is live with desktop/android/bare-metal artifacts, parity reports, manifest, SBOM, provenance, npm tarball, wheel, and sdist.
   - release evidence now also includes `release-status.json` + `release-status.md` so every edge cut carries a frozen workflow-status + registry-status snapshot in addition to package preflight evidence.

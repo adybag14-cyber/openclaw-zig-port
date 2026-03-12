@@ -15,7 +15,15 @@ Registry status:
 
 ## Full-Stack Replacement Track (FS0..FS7)
 - [x] FS0 - Scope lock + baseline freeze (`docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md`, issue `#2`)
-- [ ] FS1 - Runtime/core consolidation
+- [x] FS1 - Runtime/core consolidation
+  - Strict FS1 closure reached on 2026-03-12:
+    - `node.pending.enqueue` and `node.pending.drain` are implemented in the registry + dispatcher using the locked upstream contract.
+    - `docs/rpc-reference.md` includes both methods.
+    - parity gate reports zero missing methods against Go, stable, and beta baselines.
+    - local validation is green:
+      - `zig build test --summary all` -> `205/205`
+      - bare-metal host -> `116/116`
+    - the strict execution order now advances from FS1 to FS4.
   - Latest delivered slice:
     - `status` now includes the Go-visible summary keys Zig can expose without widening the handler surface:
       - `status`
@@ -393,6 +401,25 @@ Registry status:
     - regression coverage added for invalid params, provider alias normalization (`copaw -> qwen`), and JSON-parsed browser-context assertions to avoid brittle exact-count failures in stateful suites.
 - [ ] FS3 - Memory/knowledge depth
 - [ ] FS4 - Security + trust hardening
+  - Latest delivered slice:
+    - `secrets.store.status` now reports secret-backend truth explicitly instead of leaving native-vs-fallback behavior implicit.
+    - added machine-readable backend posture fields:
+      - `requestedRecognized`
+      - `requestedSupport`
+      - `fallbackApplied`
+      - `fallbackReason`
+    - backend posture is now locked for:
+      - `env` -> `implemented`
+      - `file|encrypted-file` -> `implemented`
+      - `dpapi|keychain|keystore` -> `fallback-only`
+      - `auto` -> `fallback-only`
+      - unknown backend -> `unsupported`
+    - regression coverage added:
+      - `secret store status reports implemented env backend`
+      - `secret store status reports encrypted file backend as implemented`
+      - `secret store status reports native backend requests as fallback only`
+      - `secret store status reports unknown backend as unsupported fallback`
+      - dispatcher compat regression now asserts the new `secrets.store.status` posture fields
 - [ ] FS5 - Edge/WASM/marketplace depth
 - [ ] FS6 - Appliance/bare-metal maturity track
   - mirror-aware toolchain bootstrap/reproducibility is now required operator evidence for Windows-hosted FS6 work.

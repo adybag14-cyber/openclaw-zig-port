@@ -20,6 +20,10 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - `doctor.memory.status` now includes Go-visible health envelope fields
   - `agent.identity.get` now reports stable `startedAt` + gateway `authMode`
   - `status` now includes Go-visible summary keys alongside Zig runtime/security telemetry
+  - strict FS1 runtime/core closure is now reached locally: `node.pending.enqueue` + `node.pending.drain` are implemented and the parity gate is at zero missing methods against Go + stable + beta
+- Recent FS4 progress (2026-03-12):
+  - `secrets.store.status` now reports backend truth explicitly instead of implying native-provider support
+  - support levels are now explicit for `env`, `encrypted-file`, native fallback requests, and unsupported backend requests
 - Recent FS6 progress (2026-03-06):
   - `update.*` now has a real `canary` rollout lane instead of collapsing `canary` into `edge`
   - appliance rollout boundary is now enforced by live smoke validation (`canary` selection, secure-boot block, canary apply, stable promotion)

@@ -5,7 +5,7 @@ Date: 2026-03-12
 ## Baseline
 
 - Local source of truth repo: `C:\Users\Ady\Documents\openclaw-zig-port`
-- Local head at analysis start: `c50ba7e` `feat(zig-port): add interrupt-timeout clamp wrapper probes`
+- Local head at initial analysis start: `c50ba7e` `feat(zig-port): add interrupt-timeout clamp wrapper probes`
 - Working tree at analysis start: clean
 - Latest verified CI baseline at analysis start:
   - `zig-ci` `22996158098` -> success
@@ -15,10 +15,22 @@ Date: 2026-03-12
   - beta: `v2026.3.11-beta.1`
   - Go baseline: `v2.14.0-go`
 - Current parity fact from `scripts/check-go-method-parity.ps1`:
-  - missing in Zig vs union baseline: `2`
-  - exact missing methods:
-    - `node.pending.drain`
-    - `node.pending.enqueue`
+  - missing in Zig vs union baseline: `0`
+  - initial hard method gap (`node.pending.drain`, `node.pending.enqueue`) is now closed locally
+
+## Strict Refresh
+
+This report has been refreshed after the first strict FS1 slice landed.
+
+- `node.pending.enqueue` and `node.pending.drain` are now implemented in the local source of truth.
+- current local validation is green:
+  - `zig build test --summary all` -> hosted `205/205`
+  - bare-metal host tests -> `116/116`
+- current local parity gate is green:
+  - Go baseline `v2.14.0-go`
+  - stable baseline `v2026.3.11`
+  - beta baseline `v2026.3.11-beta.1`
+- the strict execution order now advances from FS1 to FS4.
 
 This report is based on the current local repo and directly inspected upstream contracts. Stale streamed summaries, guessed percentages, and unverified reviewer claims are not accepted as evidence.
 
@@ -66,19 +78,17 @@ FS6 bare metal remains active, but FS1-FS5 completion must no longer be deferred
 - leased-job replay and runtime recovery visibility
 - status and identity diagnostics parity slices
 
-#### Confirmed hard gaps
+#### Confirmed current status
 
-1. The current upstream stable/beta parity gap is concrete and limited:
+1. The initial strict FS1 hard gap is closed:
    - `node.pending.enqueue`
    - `node.pending.drain`
-2. Current Zig registry exposes only:
+2. Current Zig registry now exposes:
    - `node.pending.pull`
    - `node.pending.ack`
-3. Current Zig compat state has only a legacy pending-action queue keyed by:
-   - `action_id`
-   - `command`
-   - `params_json`
-4. The current code does not expose the upstream pending-work contract:
+   - `node.pending.enqueue`
+   - `node.pending.drain`
+3. Current Zig compat state now exposes the upstream-style pending-work contract:
    - item `type`
    - item `priority`
    - item `createdAtMs`
@@ -86,7 +96,8 @@ FS6 bare metal remains active, but FS1-FS5 completion must no longer be deferred
    - `revision`
    - `hasMore`
    - baseline synthetic status item
-5. Current docs are stale for this area because `docs/rpc-reference.md` lists only `node.pending.pull` and `node.pending.ack`.
+4. `docs/rpc-reference.md` is updated for this area.
+5. The remaining FS1 question is no longer missing runtime behavior; it is whether the latest pushed head carrying the strict slice is green and tracked. Once that is true, FS1 is closed and the active strict phase is FS4.
 
 #### Upstream contract locked for implementation
 
@@ -262,6 +273,22 @@ FS3 is not complete until all of the following are true:
 - secure secret storage abstraction in `src/security/secret_store.zig`
 - `secrets.store.*` and `secrets.resolve`
 
+#### Latest delivered slice
+
+- `secrets.store.status` now reports backend truth explicitly instead of leaving native-provider posture implicit.
+- backend support is now machine-readable:
+  - `requestedRecognized`
+  - `requestedSupport`
+  - `fallbackApplied`
+  - `fallbackReason`
+- current runtime classification:
+  - `env` -> `implemented`
+  - `file|encrypted-file` -> `implemented`
+  - `dpapi|keychain|keystore` -> `fallback-only`
+  - `auto` -> `fallback-only`
+  - unknown backend -> `unsupported`
+- direct secret-store tests and dispatcher coverage now lock those semantics.
+
 #### Confirmed work still needed for strict completion
 
 1. The local code clearly implements encrypted-file-backed secret storage, but native OS secret backend completion is not established by the current audited evidence.
@@ -364,12 +391,12 @@ Rationale:
 
 ## Immediate FS1 Slice
 
-This report freezes the first implementation target:
+This report originally froze the first implementation target:
 
 - add `node.pending.enqueue`
 - add `node.pending.drain`
 
-Immediate acceptance criteria for this slice:
+That slice's acceptance criteria are now satisfied locally:
 
 1. `src/gateway/registry.zig` includes both methods.
 2. `src/gateway/dispatcher.zig` implements both methods using the upstream contract locked above.

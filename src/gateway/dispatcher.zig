@@ -6011,6 +6011,10 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                 .activeBackend = status.activeBackend,
                 .providerImplemented = status.providerImplemented,
                 .encryptedFallback = status.encryptedFallback,
+                .requestedRecognized = status.requestedRecognized,
+                .requestedSupport = status.requestedSupport,
+                .fallbackApplied = status.fallbackApplied,
+                .fallbackReason = status.fallbackReason,
                 .persistent = status.persistent,
                 .path = status.path,
                 .keySource = status.keySource,
@@ -6030,6 +6034,10 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
                 .activeBackend = status.activeBackend,
                 .providerImplemented = status.providerImplemented,
                 .encryptedFallback = status.encryptedFallback,
+                .requestedRecognized = status.requestedRecognized,
+                .requestedSupport = status.requestedSupport,
+                .fallbackApplied = status.fallbackApplied,
+                .fallbackReason = status.fallbackReason,
                 .persistent = status.persistent,
                 .path = status.path,
                 .keySource = status.keySource,
@@ -15606,6 +15614,9 @@ test "dispatch compat config wizard and sessions patch resolve methods return co
     const secret_store_status = try dispatch(allocator, "{\"id\":\"compat-secrets-store-status\",\"method\":\"secrets.store.status\",\"params\":{}}");
     defer allocator.free(secret_store_status);
     try std.testing.expect(std.mem.indexOf(u8, secret_store_status, "\"activeBackend\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, secret_store_status, "\"requestedSupport\":\"implemented\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, secret_store_status, "\"requestedRecognized\":true") != null);
+    try std.testing.expect(std.mem.indexOf(u8, secret_store_status, "\"fallbackApplied\":false") != null);
 
     const secret_store_get = try dispatch(allocator, "{\"id\":\"compat-secrets-store-get\",\"method\":\"secrets.store.get\",\"params\":{\"targetId\":\"tools.web.search.apiKey\",\"includeValue\":true}}");
     defer allocator.free(secret_store_get);

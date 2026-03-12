@@ -14,6 +14,10 @@ pub const Status = struct {
     activeBackend: []const u8,
     providerImplemented: bool,
     encryptedFallback: bool,
+    requestedRecognized: bool,
+    requestedSupport: []const u8,
+    fallbackApplied: bool,
+    fallbackReason: ?[]const u8,
     persistent: bool,
     path: []const u8,
     keySource: []const u8,
@@ -53,6 +57,10 @@ pub const SecretStore = struct {
     active_backend: []u8,
     provider_implemented: bool,
     encrypted_fallback: bool,
+    requested_recognized: bool,
+    requested_support: []u8,
+    fallback_applied: bool,
+    fallback_reason: ?[]u8,
     persistent: bool,
     state_path: []u8,
     key_source: []u8,
@@ -82,6 +90,10 @@ pub const SecretStore = struct {
             .active_backend = try allocator.dupe(u8, "env"),
             .provider_implemented = false,
             .encrypted_fallback = false,
+            .requested_recognized = true,
+            .requested_support = try allocator.dupe(u8, "implemented"),
+            .fallback_applied = false,
+            .fallback_reason = null,
             .persistent = false,
             .state_path = try allocator.dupe(u8, "memory://secret-store"),
             .key_source = try allocator.dupe(u8, "none"),
@@ -100,6 +112,8 @@ pub const SecretStore = struct {
     pub fn deinit(self: *SecretStore) void {
         self.allocator.free(self.requested_backend);
         self.allocator.free(self.active_backend);
+        self.allocator.free(self.requested_support);
+        if (self.fallback_reason) |reason| self.allocator.free(reason);
         self.allocator.free(self.state_path);
         self.allocator.free(self.key_source);
         var it = self.entries.iterator();
@@ -116,6 +130,10 @@ pub const SecretStore = struct {
             .activeBackend = self.active_backend,
             .providerImplemented = self.provider_implemented,
             .encryptedFallback = self.encrypted_fallback,
+            .requestedRecognized = self.requested_recognized,
+            .requestedSupport = self.requested_support,
+            .fallbackApplied = self.fallback_applied,
+            .fallbackReason = self.fallback_reason,
             .persistent = self.persistent,
             .path = self.state_path,
             .keySource = self.key_source,
@@ -338,22 +356,20 @@ pub const SecretStore = struct {
         self.allocator.free(self.requested_backend);
         self.requested_backend = try self.allocator.dupe(u8, requested);
 
-        const active: []const u8, const implemented: bool, const fallback: bool = blk: {
-            if (std.ascii.eqlIgnoreCase(requested, "env")) break :blk .{ "env", true, false };
-            if (std.ascii.eqlIgnoreCase(requested, "file") or std.ascii.eqlIgnoreCase(requested, "encrypted-file")) break :blk .{ "encrypted-file", true, false };
-            if (std.ascii.eqlIgnoreCase(requested, "dpapi")) break :blk .{ "encrypted-file", false, true };
-            if (std.ascii.eqlIgnoreCase(requested, "keychain")) break :blk .{ "encrypted-file", false, true };
-            if (std.ascii.eqlIgnoreCase(requested, "keystore")) break :blk .{ "encrypted-file", false, true };
-            if (std.ascii.eqlIgnoreCase(requested, "auto")) break :blk .{ "encrypted-file", false, true };
-            break :blk .{ "env", true, false };
-        };
+        const selection = classifyRequestedBackend(requested);
 
         self.allocator.free(self.active_backend);
-        self.active_backend = try self.allocator.dupe(u8, active);
-        self.provider_implemented = implemented;
-        self.encrypted_fallback = fallback;
+        self.active_backend = try self.allocator.dupe(u8, selection.active_backend);
+        self.provider_implemented = selection.provider_implemented;
+        self.encrypted_fallback = selection.encrypted_fallback;
+        self.requested_recognized = selection.requested_recognized;
+        self.allocator.free(self.requested_support);
+        self.requested_support = try self.allocator.dupe(u8, selection.requested_support);
+        self.fallback_applied = selection.fallback_applied;
+        if (self.fallback_reason) |reason| self.allocator.free(reason);
+        self.fallback_reason = if (selection.fallback_reason) |reason| try self.allocator.dupe(u8, reason) else null;
 
-        if (std.ascii.eqlIgnoreCase(active, "env")) {
+        if (std.ascii.eqlIgnoreCase(selection.active_backend, "env")) {
             self.persistent = false;
             self.allocator.free(self.state_path);
             self.state_path = try self.allocator.dupe(u8, "memory://secret-store");
@@ -376,6 +392,72 @@ pub const SecretStore = struct {
         self.key = key_material.key;
     }
 };
+
+const BackendSelection = struct {
+    active_backend: []const u8,
+    provider_implemented: bool,
+    encrypted_fallback: bool,
+    requested_recognized: bool,
+    requested_support: []const u8,
+    fallback_applied: bool,
+    fallback_reason: ?[]const u8,
+};
+
+fn classifyRequestedBackend(requested: []const u8) BackendSelection {
+    if (std.ascii.eqlIgnoreCase(requested, "env")) {
+        return .{
+            .active_backend = "env",
+            .provider_implemented = true,
+            .encrypted_fallback = false,
+            .requested_recognized = true,
+            .requested_support = "implemented",
+            .fallback_applied = false,
+            .fallback_reason = null,
+        };
+    }
+    if (std.ascii.eqlIgnoreCase(requested, "file") or std.ascii.eqlIgnoreCase(requested, "encrypted-file")) {
+        return .{
+            .active_backend = "encrypted-file",
+            .provider_implemented = true,
+            .encrypted_fallback = false,
+            .requested_recognized = true,
+            .requested_support = "implemented",
+            .fallback_applied = false,
+            .fallback_reason = null,
+        };
+    }
+    if (std.ascii.eqlIgnoreCase(requested, "dpapi") or std.ascii.eqlIgnoreCase(requested, "keychain") or std.ascii.eqlIgnoreCase(requested, "keystore")) {
+        return .{
+            .active_backend = "encrypted-file",
+            .provider_implemented = false,
+            .encrypted_fallback = true,
+            .requested_recognized = true,
+            .requested_support = "fallback-only",
+            .fallback_applied = true,
+            .fallback_reason = "native backend not implemented; using encrypted-file fallback",
+        };
+    }
+    if (std.ascii.eqlIgnoreCase(requested, "auto")) {
+        return .{
+            .active_backend = "encrypted-file",
+            .provider_implemented = false,
+            .encrypted_fallback = true,
+            .requested_recognized = true,
+            .requested_support = "fallback-only",
+            .fallback_applied = true,
+            .fallback_reason = "auto resolved to encrypted-file fallback because no native backend is implemented",
+        };
+    }
+    return .{
+        .active_backend = "env",
+        .provider_implemented = false,
+        .encrypted_fallback = false,
+        .requested_recognized = false,
+        .requested_support = "unsupported",
+        .fallback_applied = true,
+        .fallback_reason = "unsupported requested backend; falling back to env",
+    };
+}
 
 const KeyMaterial = struct {
     source: []u8,
@@ -590,4 +672,93 @@ test "secret store wildcard lookup resolves provider pattern keys" {
     defer if (resolved) |value| allocator.free(value);
     try std.testing.expect(resolved != null);
     try std.testing.expect(std.mem.eql(u8, resolved.?, "or-secret"));
+}
+
+test "secret store status reports implemented env backend" {
+    const allocator = std.testing.allocator;
+    var store = try SecretStore.initWithOptions(allocator, "memory://secret-test", std.process.Environ.empty, .{
+        .requested_backend = "env",
+    });
+    defer store.deinit();
+
+    const status = store.status();
+    try std.testing.expectEqualStrings("env", status.requestedBackend);
+    try std.testing.expectEqualStrings("env", status.activeBackend);
+    try std.testing.expect(status.requestedRecognized);
+    try std.testing.expectEqualStrings("implemented", status.requestedSupport);
+    try std.testing.expect(!status.fallbackApplied);
+    try std.testing.expect(status.fallbackReason == null);
+    try std.testing.expect(status.providerImplemented);
+    try std.testing.expect(!status.encryptedFallback);
+}
+
+test "secret store status reports encrypted file backend as implemented" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const io = std.Io.Threaded.global_single_threaded.io();
+    const root = try tmp.dir.realPathFileAlloc(io, ".", allocator);
+    defer allocator.free(root);
+
+    var store = try SecretStore.initWithOptions(allocator, root, std.process.Environ.empty, .{
+        .requested_backend = "encrypted-file",
+        .key_override = "test-secret-key",
+    });
+    defer store.deinit();
+
+    const status = store.status();
+    try std.testing.expectEqualStrings("encrypted-file", status.requestedBackend);
+    try std.testing.expectEqualStrings("encrypted-file", status.activeBackend);
+    try std.testing.expect(status.requestedRecognized);
+    try std.testing.expectEqualStrings("implemented", status.requestedSupport);
+    try std.testing.expect(!status.fallbackApplied);
+    try std.testing.expect(status.fallbackReason == null);
+    try std.testing.expect(status.providerImplemented);
+    try std.testing.expect(!status.encryptedFallback);
+    try std.testing.expect(status.persistent);
+}
+
+test "secret store status reports native backend requests as fallback only" {
+    const allocator = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const io = std.Io.Threaded.global_single_threaded.io();
+    const root = try tmp.dir.realPathFileAlloc(io, ".", allocator);
+    defer allocator.free(root);
+
+    var store = try SecretStore.initWithOptions(allocator, root, std.process.Environ.empty, .{
+        .requested_backend = "dpapi",
+        .key_override = "test-secret-key",
+    });
+    defer store.deinit();
+
+    const status = store.status();
+    try std.testing.expectEqualStrings("dpapi", status.requestedBackend);
+    try std.testing.expectEqualStrings("encrypted-file", status.activeBackend);
+    try std.testing.expect(status.requestedRecognized);
+    try std.testing.expectEqualStrings("fallback-only", status.requestedSupport);
+    try std.testing.expect(status.fallbackApplied);
+    try std.testing.expect(status.fallbackReason != null);
+    try std.testing.expect(std.mem.indexOf(u8, status.fallbackReason.?, "native backend not implemented") != null);
+    try std.testing.expect(!status.providerImplemented);
+    try std.testing.expect(status.encryptedFallback);
+}
+
+test "secret store status reports unknown backend as unsupported fallback" {
+    const allocator = std.testing.allocator;
+    var store = try SecretStore.initWithOptions(allocator, "memory://secret-test", std.process.Environ.empty, .{
+        .requested_backend = "unknown-backend",
+    });
+    defer store.deinit();
+
+    const status = store.status();
+    try std.testing.expectEqualStrings("unknown-backend", status.requestedBackend);
+    try std.testing.expectEqualStrings("env", status.activeBackend);
+    try std.testing.expect(!status.requestedRecognized);
+    try std.testing.expectEqualStrings("unsupported", status.requestedSupport);
+    try std.testing.expect(status.fallbackApplied);
+    try std.testing.expect(status.fallbackReason != null);
+    try std.testing.expect(std.mem.indexOf(u8, status.fallbackReason.?, "unsupported requested backend") != null);
+    try std.testing.expect(!status.providerImplemented);
+    try std.testing.expect(!status.encryptedFallback);
 }
