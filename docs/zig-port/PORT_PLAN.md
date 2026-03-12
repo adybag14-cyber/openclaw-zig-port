@@ -1000,6 +1000,10 @@ Full-stack replacement execution reference:
     - `doctor` now reports `appliance.profile`, and maintenance planning surfaces `appliance.profile.minimal` when the contract is not satisfied.
     - added `scripts/appliance-minimal-profile-smoke-check.ps1` and made it a required gate in both `zig-ci` and `release-preview` validate jobs.
     - the readiness gate proves a live `not_ready -> ready` transition over HTTP RPC after setting boot policy and verifying the current measurement.
+  - appliance/bare-metal closure depth shipped:
+    - added `scripts/appliance-baremetal-closure-smoke-check.ps1` as a single FS6 acceptance gate over the existing validated appliance and bare-metal scripts.
+    - the closure gate proves appliance control-plane, minimal profile, rollout boundary, restart recovery, bare-metal smoke, bare-metal QEMU smoke, runtime progression, and command-loop behavior from one required receipt.
+    - local Windows QEMU PVH smoke exit-code handling is now normalized in the underlying smoke scripts, so the closure gate validates cleanly on the workstation as well as in CI.
   - added bare-metal runtime profile (`src/baremetal_main.zig`) and build target (`zig build baremetal`) plus smoke gate (`scripts/baremetal-smoke-check.ps1`) in both `zig-ci` and `release-preview` validate jobs.
   - release-preview packaging now ships the freestanding image artifact (`openclaw-zig-<version>-x86_64-freestanding-none.elf`) alongside desktop/android zips + checksums.
   - bare-metal runtime now embeds Multiboot2 header and smoke gate checks ELF magic + Multiboot2 magic bytes to reduce boot-regression risk.

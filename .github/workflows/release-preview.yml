@@ -690,6 +690,10 @@ jobs:
         shell: pwsh
         run: ./scripts/appliance-minimal-profile-smoke-check.ps1 -SkipBuild
 
+      - name: FS6 appliance-baremetal closure gate
+        shell: pwsh
+        run: ./scripts/appliance-baremetal-closure-smoke-check.ps1 -SkipBuild
+
       - name: Bare-metal QEMU scheduler probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-scheduler-probe-check.ps1

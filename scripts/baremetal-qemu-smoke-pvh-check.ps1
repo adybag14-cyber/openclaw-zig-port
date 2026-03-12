@@ -225,19 +225,36 @@ $qemuArgs = @(
     "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"
 )
 
-$proc = Start-Process -FilePath $qemu -ArgumentList $qemuArgs -PassThru -NoNewWindow -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+$psi = New-Object System.Diagnostics.ProcessStartInfo
+$psi.FileName = $qemu
+$psi.UseShellExecute = $false
+$psi.RedirectStandardOutput = $true
+$psi.RedirectStandardError = $true
+$psi.Arguments = (($qemuArgs | ForEach-Object {
+    if ("$_" -match '[\s"]') {
+        '"{0}"' -f (($_ -replace '"', '\"'))
+    } else {
+        "$_"
+    }
+}) -join ' ')
 
-try {
-    $null = Wait-Process -Id $proc.Id -Timeout $TimeoutSeconds -ErrorAction Stop
-}
-catch {
-    try {
-        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-    } catch {}
+$proc = New-Object System.Diagnostics.Process
+$proc.StartInfo = $psi
+[void]$proc.Start()
+$stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+$stderrTask = $proc.StandardError.ReadToEndAsync()
+
+if (-not $proc.WaitForExit($TimeoutSeconds * 1000)) {
+    try { $proc.Kill($true) } catch {}
     throw "QEMU PVH bare-metal smoke timed out after $TimeoutSeconds seconds."
 }
 
 $expectedExitCode = 85
+$proc.WaitForExit()
+$stdout = $stdoutTask.GetAwaiter().GetResult()
+$stderr = $stderrTask.GetAwaiter().GetResult()
+Set-Content -Path $stdoutPath -Value $stdout -Encoding Ascii
+Set-Content -Path $stderrPath -Value $stderr -Encoding Ascii
 $exitCode = $proc.ExitCode
 if ($exitCode -ne $expectedExitCode) {
     $stderrTail = ""

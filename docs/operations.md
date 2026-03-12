@@ -141,6 +141,7 @@ Recommended sequence:
 - appliance restart recovery smoke check (persisted control-plane replay + recovery actionability)
 - appliance rollout boundary smoke check (real `canary` lane selection + canary-to-stable promotion)
 - appliance minimal profile smoke check (persisted state + auth + secure-boot/readiness contract)
+- FS6 appliance/bare-metal closure gate (`scripts/appliance-baremetal-closure-smoke-check.ps1`, composed appliance + bare-metal acceptance receipt)
 - optional bare-metal QEMU scheduler probe (scheduler reset/timeslice/task-create/policy-enable against the freestanding PVH artifact)
 - optional bare-metal QEMU descriptor bootdiag probe (boot-diagnostics reset/stack capture/boot-phase transition and descriptor reinit/load telemetry against the freestanding PVH artifact)
 - optional bare-metal QEMU descriptor bootdiag wrapper probes (`baremetal-qemu-descriptor-bootdiag-baseline-probe-check.ps1`, `baremetal-qemu-descriptor-bootdiag-reset-capture-probe-check.ps1`, `baremetal-qemu-descriptor-bootdiag-set-init-probe-check.ps1`, `baremetal-qemu-descriptor-bootdiag-invalid-phase-probe-check.ps1`, and `baremetal-qemu-descriptor-bootdiag-final-state-probe-check.ps1`) reuse the broad probe and fail directly on the bootstrap baseline, reset/capture sequence, init-transition state, invalid-phase preservation, and final descriptor-load plus mailbox-state boundaries

@@ -25,6 +25,8 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - appliance rollout boundary is now enforced by live smoke validation (`canary` selection, secure-boot block, canary apply, stable promotion)
   - minimal appliance profile is now a live runtime contract surfaced in `status`, `doctor`, `system.boot.status`, and maintenance responses
   - appliance profile readiness is now enforced by live smoke validation (persisted state, control-plane auth, secure-boot gate, signer, current verification)
+  - FS6 now has a single appliance/bare-metal closure gate (`scripts/appliance-baremetal-closure-smoke-check.ps1`) that composes appliance control-plane, minimal profile, rollout, restart recovery, bare-metal smoke, QEMU smoke, runtime, and command-loop acceptance into one required receipt
+  - Windows-local QEMU smoke exit-code capture is now normalized in the PVH smoke scripts, so the same FS6 closure gate validates cleanly on the workstation and in CI
   - bare-metal timer wake behavior is now enforced by a live QEMU+GDB probe (`command_timer_reset`, `command_timer_set_quantum`, `command_task_create`, `command_task_wait_for`) against the freestanding PVH artifact
   - bare-metal allocator/syscall behavior is now enforced by a live QEMU+GDB probe (`command_allocator_*`, `command_syscall_*`) including blocked and disabled syscall paths
   - bare-metal mixed task-termination cleanup is now enforced again by a live QEMU+GDB probe that validates the current timer-cancel-on-manual-wake semantics before `command_task_terminate`, targeted wake-queue cleanup for the terminated task, and idle stability without ghost timer delivery
@@ -776,6 +778,7 @@ Run local preview packaging with CI-aligned validate gates:
 - appliance restart recovery smoke gate (persisted `compat-state.json` replay across stop/start)
 - appliance rollout boundary smoke gate (real `canary` lane selection, secure-boot block, canary-to-stable promotion)
 - appliance minimal profile smoke gate (readiness contract for persisted state, control-plane auth, secure-boot gating, signer, and fresh verification)
+- FS6 appliance/bare-metal closure gate (`scripts/appliance-baremetal-closure-smoke-check.ps1`, composed acceptance across appliance control-plane, minimal profile, rollout, restart recovery, bare-metal smoke, QEMU smoke, runtime, and command-loop)
 - parity evidence artifact publication (`parity-go-zig.json`, `parity-go-zig.md`)
 
 `docs-pages` workflow (`.github/workflows/docs-pages.yml`):
