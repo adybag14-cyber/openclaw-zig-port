@@ -1,4 +1,5 @@
 pub const console = @import("console.zig");
+pub const framebuffer = @import("framebuffer.zig");
 pub const fs = @import("fs.zig");
 pub const input = @import("input.zig");
 pub const net = @import("net.zig");

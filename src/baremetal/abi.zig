@@ -5,6 +5,7 @@ pub const command_magic: u32 = 0x4f43434d; // "OCCM"
 pub const kernel_info_magic: u32 = 0x4f434b49; // "OCKI"
 pub const boot_diag_magic: u32 = 0x4f434244; // "OCBD"
 pub const console_magic: u32 = 0x4f43434e; // "OCCN"
+pub const framebuffer_magic: u32 = 0x4f434642; // "OCFB"
 pub const storage_magic: u32 = 0x4f435354; // "OCST"
 pub const tool_layout_magic: u32 = 0x4f43544c; // "OCTL"
 pub const filesystem_magic: u32 = 0x4f434653; // "OCFS"
@@ -217,6 +218,7 @@ pub const interrupt_mask_profile_custom: u8 = 255;
 
 pub const console_backend_host_buffer: u8 = 0;
 pub const console_backend_vga_text: u8 = 1;
+pub const console_backend_linear_framebuffer: u8 = 2;
 pub const storage_backend_ram_disk: u8 = 1;
 pub const storage_backend_ata_pio: u8 = 2;
 pub const input_modifier_shift: u8 = 1 << 0;
@@ -285,6 +287,30 @@ pub const BaremetalConsoleState = extern struct {
     write_count: u32,
     scroll_count: u32,
     clear_count: u32,
+};
+
+pub const BaremetalFramebufferState = extern struct {
+    magic: u32,
+    api_version: u16,
+    width: u16,
+    height: u16,
+    cols: u16,
+    rows: u16,
+    pitch: u32,
+    framebuffer_bytes: u32,
+    framebuffer_addr: u64,
+    bytes_per_pixel: u8,
+    backend: u8,
+    hardware_backed: u8,
+    reserved0: u8,
+    write_count: u32,
+    clear_count: u32,
+    present_count: u32,
+    cell_width: u8,
+    cell_height: u8,
+    reserved1: [2]u8,
+    fg_color: u32,
+    bg_color: u32,
 };
 
 pub const BaremetalStorageState = extern struct {

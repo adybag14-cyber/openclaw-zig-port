@@ -124,7 +124,7 @@ Required:
 
 ### Console / Framebuffer Text
 
-Status: `In progress`
+Status: `Complete`
 
 Current local source-of-truth evidence:
 
@@ -137,10 +137,18 @@ Current local source-of-truth evidence:
   - runtime reports `backend=vga_text`
   - runtime startup banner writes `OK`
   - raw VGA memory at `0xB8000` reads back `O` and `K`
-
-Remaining gap before this subsystem is fully closed:
-
-- a framebuffer path beyond VGA text mode is not implemented yet
+- a real linear-framebuffer path now exists beyond VGA text mode:
+  - `src/baremetal/framebuffer_console.zig` programs Bochs/QEMU BGA linear framebuffer mode and renders glyphs into a `640x400x32bpp` surface
+  - `src/baremetal/pci.zig` discovers the display adapter BAR and enables decode on the selected PCI display function
+  - `src/pal/framebuffer.zig` exposes the framebuffer path through the PAL surface
+  - `src/baremetal_main.zig` exports framebuffer state/pixel access through the bare-metal ABI
+- host regressions now prove the framebuffer export surface updates host-backed framebuffer state and glyph pixels
+- a live bare-metal PVH/QEMU proof now passes:
+  - `scripts/baremetal-qemu-framebuffer-console-probe-check.ps1`
+  - exported framebuffer state has `magic=framebuffer_magic`, `api_version=2`, `width=640`, `height=400`, `cols=80`, `rows=25`
+  - runtime reports `backend=linear_framebuffer`
+  - the startup banner writes `OK`
+  - actual MMIO framebuffer pixels read back `bg`, `O`, and `K` from the hardware-backed framebuffer BAR
 
 ### Keyboard / Mouse
 

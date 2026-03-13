@@ -33,6 +33,11 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - `edge-wasm-lifecycle-smoke-check.ps1` and `edge-finetune-lifecycle-smoke-check.ps1` are now part of the strict FS5 CI lane
   - strict FS4 matrix source is [`docs/zig-port/FS4_SECURITY_TRUST_MATRIX.md`](docs/zig-port/FS4_SECURITY_TRUST_MATRIX.md)
 - Current hardware pivot (`FS5.5`):
+  - framebuffer/console is now strict-closed in [`docs/zig-port/FS5_5_HARDWARE_DRIVERS_SYSTEMS.md`](docs/zig-port/FS5_5_HARDWARE_DRIVERS_SYSTEMS.md)
+  - `src/baremetal/framebuffer_console.zig` now contains a real Bochs/QEMU BGA linear-framebuffer console path
+  - `src/baremetal/pci.zig` discovers the display BAR and enables decode on the selected PCI display function
+  - `src/pal/framebuffer.zig` exposes the framebuffer path through the bare-metal PAL
+  - `scripts/baremetal-qemu-framebuffer-console-probe-check.ps1` proves live MMIO banner pixels against the freestanding PVH artifact
   - keyboard/mouse is now strict-closed in [`docs/zig-port/FS5_5_HARDWARE_DRIVERS_SYSTEMS.md`](docs/zig-port/FS5_5_HARDWARE_DRIVERS_SYSTEMS.md)
   - `src/baremetal/ps2_input.zig` now contains a real x86 port-I/O backed PS/2 controller path
   - `scripts/baremetal-qemu-ps2-input-probe-check.ps1` proves IRQ-driven keyboard/mouse state updates against the freestanding PVH artifact

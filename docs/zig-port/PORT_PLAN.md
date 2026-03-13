@@ -11,6 +11,14 @@ while maintaining parity-first validation and release gating.
 
 Full-stack replacement execution reference:
 - `FS5.5` hardware-driver pivot update:
+  - framebuffer/console strict closure is now reached locally.
+  - real linear-framebuffer path shipped in `src/baremetal/framebuffer_console.zig`:
+    - Bochs/QEMU BGA mode programming
+    - `640x400x32bpp` framebuffer layout
+    - glyph rendering into the hardware-backed MMIO surface
+  - PCI display BAR discovery shipped in `src/baremetal/pci.zig` and the PAL surface is exposed in `src/pal/framebuffer.zig`.
+  - hosted/host regressions now prove framebuffer state and glyph pixel updates.
+  - live QEMU+GDB proof `scripts/baremetal-qemu-framebuffer-console-probe-check.ps1` reads back real MMIO banner pixels from the hardware-backed framebuffer BAR over the freestanding PVH artifact.
   - keyboard/mouse strict closure is now reached locally.
   - real PS/2 controller path shipped in `src/baremetal/ps2_input.zig`:
     - x86 port-I/O backed controller data/status/command access (`0x60` / `0x64`)

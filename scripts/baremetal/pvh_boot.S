@@ -20,26 +20,39 @@ pvh_start:
 
     xorl %eax, %eax
     movl $pml4_table, %edi
-    movl $3072/4, %ecx
+    movl $(4096 * 6 / 4), %ecx
     rep stosl
 
     movl $pdpt_table, %eax
     orl $0x003, %eax
     movl %eax, pml4_table
 
-    movl $pd_table, %eax
-    orl $0x003, %eax
-    movl %eax, pdpt_table
-
     xorl %ecx, %ecx
 1:
+    movl %ecx, %edx
+    shll $12, %edx
+    leal pd_tables(%edx), %eax
+    orl $0x003, %eax
+    movl %eax, pdpt_table(,%ecx,8)
+    movl $0x0, pdpt_table+4(,%ecx,8)
+
+    xorl %ebx, %ebx
+2:
     movl %ecx, %eax
+    shll $9, %eax
+    addl %ebx, %eax
     shll $21, %eax
     orl $0x083, %eax
-    movl %eax, pd_table(,%ecx,8)
-    movl $0x0, pd_table+4(,%ecx,8)
+    movl %ecx, %edx
+    shll $12, %edx
+    movl %eax, pd_tables(%edx,%ebx,8)
+    movl $0x0, pd_tables+4(%edx,%ebx,8)
+    incl %ebx
+    cmpl $512, %ebx
+    jne 2b
+
     incl %ecx
-    cmpl $512, %ecx
+    cmpl $4, %ecx
     jne 1b
 
     movl %cr4, %eax
@@ -111,8 +124,8 @@ pml4_table:
     .skip 4096
 pdpt_table:
     .skip 4096
-pd_table:
-    .skip 4096
+pd_tables:
+    .skip 16384
 
 .balign 16
 stack32:

@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const abi = @import("baremetal/abi.zig");
 const ata_pio_disk = @import("baremetal/ata_pio_disk.zig");
 const x86_bootstrap = @import("baremetal/x86_bootstrap.zig");
+const framebuffer_console = @import("baremetal/framebuffer_console.zig");
 const vga_text_console = @import("baremetal/vga_text_console.zig");
 const storage_backend = @import("baremetal/storage_backend.zig");
 const filesystem = @import("baremetal/filesystem.zig");
@@ -14,6 +15,7 @@ const BaremetalCommand = abi.BaremetalCommand;
 const BaremetalKernelInfo = abi.BaremetalKernelInfo;
 const BaremetalBootDiagnostics = abi.BaremetalBootDiagnostics;
 const BaremetalConsoleState = abi.BaremetalConsoleState;
+const BaremetalFramebufferState = abi.BaremetalFramebufferState;
 const BaremetalStorageState = abi.BaremetalStorageState;
 const BaremetalToolLayoutState = abi.BaremetalToolLayoutState;
 const BaremetalToolSlot = abi.BaremetalToolSlot;
@@ -62,12 +64,14 @@ const build_options = if (builtin.is_test)
     struct {
         pub const qemu_smoke: bool = false;
         pub const console_probe_banner: bool = false;
+        pub const framebuffer_probe_banner: bool = false;
         pub const ata_storage_probe: bool = false;
     }
 else
     @import("build_options");
 const qemu_smoke_enabled: bool = build_options.qemu_smoke;
 const console_probe_banner_enabled: bool = build_options.console_probe_banner;
+const framebuffer_probe_banner_enabled: bool = build_options.framebuffer_probe_banner;
 const ata_storage_probe_enabled: bool = build_options.ata_storage_probe;
 
 const ata_probe_raw_lba: u32 = 300;
@@ -346,6 +350,30 @@ pub export fn oc_console_putc(byte: u8) void {
 
 pub export fn oc_console_cell(index: u32) u16 {
     return vga_text_console.cell(index);
+}
+
+pub export fn oc_framebuffer_state_ptr() *const BaremetalFramebufferState {
+    return framebuffer_console.statePtr();
+}
+
+pub export fn oc_framebuffer_init() u8 {
+    return if (framebuffer_console.init()) 1 else 0;
+}
+
+pub export fn oc_framebuffer_clear() void {
+    framebuffer_console.clear();
+}
+
+pub export fn oc_framebuffer_putc(byte: u8) void {
+    framebuffer_console.putByte(byte);
+}
+
+pub export fn oc_framebuffer_pixel(index: u32) u32 {
+    return framebuffer_console.pixel(index);
+}
+
+pub export fn oc_framebuffer_pixel_at(x: u32, y: u32) u32 {
+    return framebuffer_console.pixelAt(x, y);
 }
 
 pub export fn oc_keyboard_state_ptr() *const BaremetalKeyboardState {
@@ -1104,6 +1132,11 @@ fn baremetalStart() callconv(.c) noreturn {
         qemuExit(qemu_boot_ok_code);
     }
     vga_text_console.init();
+    if (framebuffer_probe_banner_enabled) {
+        _ = framebuffer_console.initForProbe();
+    } else {
+        _ = framebuffer_console.init();
+    }
     storage_backend.init();
     if (ata_storage_probe_enabled) {
         runAtaStorageProbe() catch |err| qemuExit(ataStorageProbeFailureCode(err));
@@ -1114,6 +1147,9 @@ fn baremetalStart() callconv(.c) noreturn {
     if (console_probe_banner_enabled) {
         vga_text_console.clear();
         vga_text_console.write("OK");
+    }
+    if (framebuffer_probe_banner_enabled) {
+        framebuffer_console.write("OK");
     }
     setBootPhase(abi.boot_phase_init, abi.boot_phase_change_reason_boot);
     x86_bootstrap.init();
@@ -2667,6 +2703,7 @@ fn resetBaremetalRuntimeForTest() void {
     oc_syscall_reset();
     oc_timer_reset();
     oc_wake_queue_clear();
+    framebuffer_console.resetForTest();
     vga_text_console.resetForTest();
     storage_backend.resetForTest();
     ps2_input.resetForTest();
@@ -9234,6 +9271,42 @@ test "baremetal console export surface updates host-backed console state" {
     try std.testing.expectEqual(@as(u16, 2), console.cursor_col);
     try std.testing.expectEqual((@as(u16, console.attribute) << 8) | @as(u16, 'O'), oc_console_cell(0));
     try std.testing.expectEqual((@as(u16, console.attribute) << 8) | @as(u16, 'K'), oc_console_cell(1));
+}
+
+test "baremetal framebuffer export surface updates host-backed framebuffer state" {
+    resetBaremetalRuntimeForTest();
+
+    try std.testing.expectEqual(@as(u8, 0), oc_framebuffer_init());
+    const framebuffer = oc_framebuffer_state_ptr();
+    try std.testing.expectEqual(@as(u32, abi.framebuffer_magic), framebuffer.magic);
+    try std.testing.expectEqual(@as(u16, abi.api_version), framebuffer.api_version);
+    try std.testing.expectEqual(@as(u8, abi.console_backend_linear_framebuffer), framebuffer.backend);
+    try std.testing.expectEqual(@as(u8, 0), framebuffer.hardware_backed);
+    try std.testing.expectEqual(@as(u16, 640), framebuffer.width);
+    try std.testing.expectEqual(@as(u16, 400), framebuffer.height);
+    try std.testing.expectEqual(@as(u16, 80), framebuffer.cols);
+    try std.testing.expectEqual(@as(u16, 25), framebuffer.rows);
+
+    oc_framebuffer_clear();
+    oc_framebuffer_putc('O');
+    oc_framebuffer_putc('K');
+
+    try std.testing.expectEqual(@as(u32, 2), framebuffer.write_count);
+    try std.testing.expect(framebuffer.clear_count >= 1);
+
+    var o_has_ink = false;
+    var k_has_ink = false;
+    var py: u32 = 0;
+    while (py < 16) : (py += 1) {
+        var px: u32 = 0;
+        while (px < 8) : (px += 1) {
+            if (oc_framebuffer_pixel_at(px, py) != 0) o_has_ink = true;
+            if (oc_framebuffer_pixel_at(8 + px, py) != 0) k_has_ink = true;
+        }
+    }
+    try std.testing.expect(o_has_ink);
+    try std.testing.expect(k_has_ink);
+    try std.testing.expectEqual(@as(u32, 0), oc_framebuffer_pixel_at(0, 0));
 }
 
 test "baremetal storage export surface persists block writes and flush state" {

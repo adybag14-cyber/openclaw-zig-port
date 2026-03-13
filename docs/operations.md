@@ -16,6 +16,11 @@
 - FS5 edge/wasm/finetune closure is now reached locally through the hard matrix at `docs/zig-port/FS5_EDGE_WASM_FINETUNE_MATRIX.md`.
 - `scripts/edge-wasm-lifecycle-smoke-check.ps1` and `scripts/edge-finetune-lifecycle-smoke-check.ps1` are now part of the strict hosted CI/release lane.
 - `FS5.5` hardware-driver closure is now partially advancing through `docs/zig-port/FS5_5_HARDWARE_DRIVERS_SYSTEMS.md`.
+- framebuffer/console is now locally strict-closed in `FS5.5`:
+  - `src/baremetal/framebuffer_console.zig` programs a real Bochs/QEMU BGA linear framebuffer surface
+  - `src/baremetal/pci.zig` discovers the display BAR and enables decode on the selected PCI function
+  - `src/pal/framebuffer.zig` exposes the framebuffer surface through the bare-metal PAL
+  - `scripts/baremetal-qemu-framebuffer-console-probe-check.ps1` proves live MMIO banner pixels over the freestanding PVH image
 - keyboard/mouse is now locally strict-closed in `FS5.5`:
   - `src/baremetal/ps2_input.zig` now has a real x86 port-I/O backed PS/2 controller path
   - `scripts/baremetal-qemu-ps2-input-probe-check.ps1` plus its wrapper probes are the live bare-metal proof for IRQ-driven keyboard/mouse updates
