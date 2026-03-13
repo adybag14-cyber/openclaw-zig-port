@@ -63,16 +63,21 @@ Full-stack replacement execution reference:
       - `src/protocol/arp.zig`
       - `src/protocol/ipv4.zig`
       - `src/protocol/udp.zig`
+      - `src/protocol/tcp.zig`
       - `src/pal/net.zig` `sendArpRequest` / `pollArpPacket`
       - `src/pal/net.zig` `sendIpv4Frame` / `pollIpv4PacketStrict`
       - `src/pal/net.zig` `sendUdpPacket` / `pollUdpPacketStrictInto`
+      - `src/pal/net.zig` `sendTcpPacket` / `pollTcpPacketStrictInto`
       - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`
       - `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`
       - `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`
+      - `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1`
       - live ARP request loopback + decode over the freestanding PVH artifact
       - live IPv4 frame loopback + decode over the freestanding PVH artifact
       - live UDP datagram loopback + decode over the freestanding PVH artifact
-    - TCP, DHCP, and DNS remain the next strict networking stage above that now-real L2 + ARP + IPv4 + UDP slice
+      - live TCP segment framing/payload loopback + decode over the freestanding PVH artifact
+    - DHCP framing/decode is now also proven over the real RTL8139 path via `src/protocol/dhcp.zig`, `src/pal/net.zig`, and `scripts/baremetal-qemu-rtl8139-dhcp-probe-check.ps1`
+    - DNS and full TCP handshake/connection management remain the next strict networking stage above that now-real L2 + ARP + IPv4 + UDP + staged TCP + DHCP slice
   - path-based filesystem usage is now also shipped above the shared backend:
     - `src/baremetal/filesystem.zig` implements directory creation plus file read/write/stat
     - `src/pal/fs.zig` routes the freestanding PAL through that layer

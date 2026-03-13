@@ -38,9 +38,14 @@
   - `src/protocol/ethernet.zig` + `src/protocol/arp.zig` implement Ethernet/ARP framing
   - `src/protocol/ipv4.zig` implements IPv4 framing plus checksum validation
   - `src/protocol/udp.zig` implements UDP framing plus pseudo-header checksum validation
-  - `src/pal/net.zig` now exposes `sendArpRequest` / `pollArpPacket`, `sendIpv4Frame` / `pollIpv4PacketStrict`, and `sendUdpPacket` / `pollUdpPacketStrictInto`
-  - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`, and `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1` prove live ARP, IPv4, and UDP loopback plus decode over the freestanding PVH image
-- TCP, DHCP, and DNS remain the next networking slices above that Ethernet + ARP + IPv4 + UDP proof.
+  - `src/protocol/tcp.zig` now implements a real strict TCP framing/checksum/payload slice
+  - `src/pal/net.zig` now also exposes `sendTcpPacket` / `pollTcpPacketStrictInto`
+  - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`, and `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1` prove live ARP, IPv4, UDP, and TCP framing/payload loopback plus decode over the freestanding PVH image
+- DHCP framing/decode is now also proven on the real RTL8139 path:
+  - `src/protocol/dhcp.zig` provides strict DHCP discover encode/decode
+  - `src/pal/net.zig` exposes DHCP send/poll helpers for the hosted/mock path
+  - `scripts/baremetal-qemu-rtl8139-dhcp-probe-check.ps1` now proves real RTL8139 TX/RX of a DHCP discover payload over a loopback-safe UDP transport envelope, followed by strict DHCP decode and TX/RX counter advance
+- DNS and full TCP handshake/connection management remain open, and that is still the next networking depth above the current TCP framing + DHCP framing slice.
 - filesystem usage is now also on a real shared-backend path in `FS5.5`:
   - `src/baremetal/filesystem.zig` implements path-based directory creation plus file read/write/stat
   - `src/pal/fs.zig` routes the freestanding PAL filesystem surface through that layer

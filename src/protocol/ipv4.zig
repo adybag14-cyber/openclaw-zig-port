@@ -3,6 +3,7 @@ const std = @import("std");
 pub const version: u8 = 4;
 pub const header_len: usize = 20;
 pub const header_words_no_options: u8 = 5;
+pub const protocol_tcp: u8 = 6;
 pub const protocol_udp: u8 = 17;
 pub const default_ttl: u8 = 64;
 
