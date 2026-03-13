@@ -11,7 +11,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 - Original OpenClaw beta baseline (`v2026.3.8-beta.1`): `97/97` covered
 - Union baseline: `138/138` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
-- Latest local validation: `zig build test --summary all` -> main `223/223` + bare-metal host `133/133` passing
+- Latest local validation: `zig build test --summary all` -> main `223/223` + bare-metal host `137/137` passing
 - Latest published edge release tag: `v0.2.0-zig-edge.28`
 - Toolchain policy: Codeberg `master` is canonical; `adybag14-cyber/zig` publishes rolling `latest-master` and immutable `upstream-<sha>` Windows releases for refresh and reproducibility.
 - CI policy: keep hosted build/test/parity/docs on Zig `master`, but pin the freestanding bare-metal compile/probe lane to the known-good Linux build `0.16.0-dev.2736+3b515fbed` until the upstream Linux `master` compiler crash on `zig build baremetal -Doptimize=ReleaseFast` is resolved.
@@ -39,6 +39,10 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - shared storage backend routing is now live through `src/baremetal/storage_backend.zig`
   - `src/baremetal/ata_pio_disk.zig` now provides a real ATA PIO path with `IDENTIFY`, `READ`, `WRITE`, and `FLUSH`
   - PAL storage and bare-metal tool-layout now route through the backend facade instead of talking directly to the RAM disk
+  - path-based filesystem usage is now locally strict-closed:
+    - `src/baremetal/filesystem.zig` implements directory creation plus file read/write/stat on the shared storage backend
+    - `src/pal/fs.zig` routes the freestanding PAL filesystem surface through that layer
+    - hosted and host validation now prove persistence over both RAM-disk and ATA PIO backends
 - Recent FS6 progress (2026-03-06):
   - `update.*` now has a real `canary` rollout lane instead of collapsing `canary` into `edge`
   - appliance rollout boundary is now enforced by live smoke validation (`canary` selection, secure-boot block, canary apply, stable promotion)

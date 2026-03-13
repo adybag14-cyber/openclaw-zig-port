@@ -5,8 +5,10 @@ const ata_pio_disk = @import("baremetal/ata_pio_disk.zig");
 const x86_bootstrap = @import("baremetal/x86_bootstrap.zig");
 const vga_text_console = @import("baremetal/vga_text_console.zig");
 const storage_backend = @import("baremetal/storage_backend.zig");
+const filesystem = @import("baremetal/filesystem.zig");
 const ps2_input = @import("baremetal/ps2_input.zig");
 const tool_layout = @import("baremetal/tool_layout.zig");
+const pal_fs = @import("pal/fs.zig");
 const BaremetalStatus = abi.BaremetalStatus;
 const BaremetalCommand = abi.BaremetalCommand;
 const BaremetalKernelInfo = abi.BaremetalKernelInfo;
@@ -15,6 +17,8 @@ const BaremetalConsoleState = abi.BaremetalConsoleState;
 const BaremetalStorageState = abi.BaremetalStorageState;
 const BaremetalToolLayoutState = abi.BaremetalToolLayoutState;
 const BaremetalToolSlot = abi.BaremetalToolSlot;
+const BaremetalFilesystemState = abi.BaremetalFilesystemState;
+const BaremetalFilesystemEntry = abi.BaremetalFilesystemEntry;
 const BaremetalKeyboardState = abi.BaremetalKeyboardState;
 const BaremetalKeyboardEvent = abi.BaremetalKeyboardEvent;
 const BaremetalMouseState = abi.BaremetalMouseState;
@@ -400,6 +404,19 @@ pub export fn oc_tool_slot_clear(slot_id: u32) i16 {
 
 pub export fn oc_tool_slot_byte(slot_id: u32, offset: u32) u8 {
     return tool_layout.readToolByte(slot_id, offset);
+}
+
+pub export fn oc_filesystem_state_ptr() *const BaremetalFilesystemState {
+    return filesystem.statePtr();
+}
+
+pub export fn oc_filesystem_entry(index: u32) BaremetalFilesystemEntry {
+    return filesystem.entry(index);
+}
+
+pub export fn oc_filesystem_init() i16 {
+    filesystem.init() catch |err| return mapStorageError(err);
+    return abi.result_ok;
 }
 
 pub export fn oc_command_history_capacity() u32 {
@@ -1506,7 +1523,8 @@ fn executeCommand(opcode: u16, arg0: u64, arg1: u64) i16 {
 
 fn mapStorageError(err: anyerror) i16 {
     return switch (err) {
-        error.OutOfRange, error.UnalignedLength, error.InvalidSlot, error.CorruptLayout => abi.result_invalid_argument,
+        error.OutOfRange, error.UnalignedLength, error.InvalidSlot, error.CorruptLayout, error.InvalidPath, error.NotDirectory, error.IsDirectory, error.CorruptFilesystem, error.FileTooBig => abi.result_invalid_argument,
+        error.FileNotFound => abi.result_not_found,
         error.NoSpace => abi.result_no_space,
         error.NotMounted => abi.result_conflict,
         error.NoDevice, error.DeviceFault, error.BusyTimeout, error.ProtocolError => abi.result_not_supported,
@@ -2528,6 +2546,7 @@ fn resetBaremetalRuntimeForTest() void {
     storage_backend.resetForTest();
     ps2_input.resetForTest();
     tool_layout.resetForTest();
+    filesystem.resetForTest();
 }
 
 fn captureStackPointer() u64 {
@@ -9171,6 +9190,72 @@ test "baremetal tool layout persists patterned tool slot payloads on ram disk" {
     try std.testing.expectEqual(@as(u32, 0), cleared.byte_len);
     try std.testing.expectEqual(@as(u32, 0), cleared.flags);
     try std.testing.expectEqual(@as(u8, 0), oc_tool_slot_byte(1, 0));
+}
+
+test "baremetal filesystem persists path-based files on the ram disk" {
+    resetBaremetalRuntimeForTest();
+
+    try std.testing.expectEqual(@as(i16, abi.result_ok), oc_filesystem_init());
+    const fs_state = oc_filesystem_state_ptr();
+    try std.testing.expectEqual(@as(u32, abi.filesystem_magic), fs_state.magic);
+    try std.testing.expectEqual(@as(u8, 1), fs_state.formatted);
+    try std.testing.expectEqual(@as(u8, abi.storage_backend_ram_disk), fs_state.active_backend);
+
+    const io = std.Io.Threaded.global_single_threaded.io();
+    if (builtin.os.tag == .freestanding) {
+        try pal_fs.createDirPath(io, "/runtime/state");
+        try pal_fs.writeFile(io, "/runtime/state/agent.json", "{\"ok\":true}");
+        const stat = try pal_fs.statNoFollow(io, "/runtime/state/agent.json");
+        try std.testing.expectEqual(@as(std.Io.File.Kind, .file), stat.kind);
+        try std.testing.expectEqual(@as(u64, 11), stat.size);
+
+        const content = try pal_fs.readFileAlloc(io, std.testing.allocator, "/runtime/state/agent.json", 64);
+        defer std.testing.allocator.free(content);
+        try std.testing.expectEqualStrings("{\"ok\":true}", content);
+    } else {
+        try filesystem.createDirPath("/runtime/state");
+        try filesystem.writeFile("/runtime/state/agent.json", "{\"ok\":true}", status.ticks);
+        const stat = try filesystem.statNoFollow("/runtime/state/agent.json");
+        try std.testing.expectEqual(@as(std.Io.File.Kind, .file), stat.kind);
+        try std.testing.expectEqual(@as(u64, 11), stat.size);
+
+        const content = try filesystem.readFileAlloc(std.testing.allocator, "/runtime/state/agent.json", 64);
+        defer std.testing.allocator.free(content);
+        try std.testing.expectEqualStrings("{\"ok\":true}", content);
+    }
+
+    try std.testing.expectEqual(@as(u16, 2), fs_state.dir_entries);
+    try std.testing.expectEqual(@as(u16, 1), fs_state.file_entries);
+
+    filesystem.resetForTest();
+    try filesystem.init();
+    const reloaded = try filesystem.readFileAlloc(std.testing.allocator, "/runtime/state/agent.json", 64);
+    defer std.testing.allocator.free(reloaded);
+    try std.testing.expectEqualStrings("{\"ok\":true}", reloaded);
+}
+
+test "baremetal filesystem persists path-based files on ata-backed storage" {
+    resetBaremetalRuntimeForTest();
+    ata_pio_disk.testEnableMockDevice(4096);
+    defer ata_pio_disk.testDisableMockDevice();
+
+    try std.testing.expectEqual(@as(i16, abi.result_ok), oc_filesystem_init());
+    try filesystem.createDirPath("/tools/cache");
+    try filesystem.writeFile("/tools/cache/tool.txt", "edge", 99);
+
+    const fs_state = oc_filesystem_state_ptr();
+    try std.testing.expectEqual(@as(u8, abi.storage_backend_ata_pio), fs_state.active_backend);
+    try std.testing.expectEqual(@as(u16, 2), fs_state.dir_entries);
+    try std.testing.expectEqual(@as(u16, 1), fs_state.file_entries);
+
+    filesystem.resetForTest();
+    try filesystem.init();
+    const stat = try filesystem.statNoFollow("/tools/cache/tool.txt");
+    try std.testing.expectEqual(@as(std.Io.File.Kind, .file), stat.kind);
+    try std.testing.expectEqual(@as(u64, 4), stat.size);
+    const content = try filesystem.readFileAlloc(std.testing.allocator, "/tools/cache/tool.txt", 64);
+    defer std.testing.allocator.free(content);
+    try std.testing.expectEqualStrings("edge", content);
 }
 
 test "baremetal keyboard export surface captures interrupt-driven scancodes" {

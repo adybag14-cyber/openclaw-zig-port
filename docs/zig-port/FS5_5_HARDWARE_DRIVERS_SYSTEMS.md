@@ -234,19 +234,21 @@ Status: `Not started`
 
 ### Filesystem Usage
 
-Status: `In progress`
+Status: `Complete`
 
 Current local source-of-truth evidence:
 
-- tool-layout persistence is now backed by the shared storage backend
-- runtime can store and clear deterministic tool payloads through that path
-- the same path now works over either RAM-disk or ATA PIO backend selection
-
-Remaining gap before this subsystem is fully closed:
-
-- no directory/file abstraction exists yet
-- no `create/read/write/stat` filesystem surface is implemented on the bare-metal storage backend
-- no path-based persistence proof exists yet
+- `src/baremetal/filesystem.zig` now implements a real path-based bare-metal filesystem layer on top of the shared storage backend
+- directory creation is implemented through `createDirPath`
+- file write/read/stat are implemented through `writeFile`, `readFileAlloc`, and `statNoFollow`
+- `src/pal/fs.zig` now routes the freestanding PAL surface through that filesystem layer instead of requiring hosted filesystem calls
+- `src/baremetal_main.zig` now exports filesystem state and entry metadata through the bare-metal ABI surface
+- host regressions and module tests prove path-based persistence on:
+  - the RAM-disk backend
+  - the ATA PIO backend
+- runtime-style state payloads now persist and reload through that path:
+  - `/runtime/state/agent.json`
+  - `/tools/cache/tool.txt`
 
 ### Bare-Metal Tool Execution
 

@@ -7,6 +7,7 @@ pub const boot_diag_magic: u32 = 0x4f434244; // "OCBD"
 pub const console_magic: u32 = 0x4f43434e; // "OCCN"
 pub const storage_magic: u32 = 0x4f435354; // "OCST"
 pub const tool_layout_magic: u32 = 0x4f43544c; // "OCTL"
+pub const filesystem_magic: u32 = 0x4f434653; // "OCFS"
 pub const keyboard_magic: u32 = 0x4f434b42; // "OCKB"
 pub const mouse_magic: u32 = 0x4f434d53; // "OCMS"
 
@@ -329,6 +330,49 @@ pub const BaremetalToolSlot = extern struct {
     checksum: u32,
     reserved0: u32,
     last_write_tick: u64,
+};
+
+pub const filesystem_kind_directory: u8 = 1;
+pub const filesystem_kind_file: u8 = 2;
+
+pub const BaremetalFilesystemState = extern struct {
+    magic: u32,
+    api_version: u16,
+    max_entries: u16,
+    formatted: u8,
+    mounted: u8,
+    dirty: u8,
+    active_backend: u8,
+    superblock_lba: u32,
+    entry_table_lba: u32,
+    entry_table_block_count: u32,
+    data_lba: u32,
+    used_entries: u16,
+    dir_entries: u16,
+    file_entries: u16,
+    reserved0: u16,
+    format_count: u32,
+    create_dir_count: u32,
+    write_count: u32,
+    read_count: u32,
+    stat_count: u32,
+    last_entry_id: u32,
+    last_data_lba: u32,
+    reserved1: u32,
+    last_modified_tick: u64,
+};
+
+pub const BaremetalFilesystemEntry = extern struct {
+    entry_id: u32,
+    path_len: u16,
+    kind: u8,
+    flags: u8,
+    start_lba: u32,
+    block_count: u32,
+    byte_len: u32,
+    checksum: u32,
+    modified_tick: u64,
+    path: [96]u8,
 };
 
 pub const BaremetalKeyboardState = extern struct {
