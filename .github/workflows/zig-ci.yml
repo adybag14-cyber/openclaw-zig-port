@@ -14,29 +14,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Zig (master) primary
+      - name: Setup Zig (0.16.0-dev.2736+3b515fbed) primary
         id: setup_zig_primary
         continue-on-error: true
         uses: mlugg/setup-zig@v2
         with:
-          version: master
+          version: 0.16.0-dev.2736+3b515fbed
           use-cache: true
 
-      - name: Setup Zig (master) mirror fallback
+      - name: Setup Zig (0.16.0-dev.2736+3b515fbed) mirror fallback
         id: setup_zig_mirror_mach
         if: steps.setup_zig_primary.outcome == 'failure'
         continue-on-error: true
         uses: mlugg/setup-zig@v2
         with:
-          version: master
+          version: 0.16.0-dev.2736+3b515fbed
           mirror: https://pkg.machengine.org/zig
           use-cache: true
 
-      - name: Setup Zig (master) mirror fallback (ziglang.org)
+      - name: Setup Zig (0.16.0-dev.2736+3b515fbed) mirror fallback (ziglang.org)
         if: steps.setup_zig_primary.outcome == 'failure' && steps.setup_zig_mirror_mach.outcome == 'failure'
         uses: mlugg/setup-zig@v2
         with:
-          version: master
+          version: 0.16.0-dev.2736+3b515fbed
           mirror: https://ziglang.org/builds
           use-cache: true
 
@@ -643,6 +643,10 @@ jobs:
       - name: Gateway auth smoke check (token gate for rpc + websocket)
         shell: pwsh
         run: ./scripts/gateway-auth-smoke-check.ps1 -SkipBuild
+
+      - name: Security secret-store smoke check (strict FS4 secret/auth lane)
+        shell: pwsh
+        run: ./scripts/security-secret-store-smoke-check.ps1 -SkipBuild
 
       - name: WebSocket smoke check (/ws rpc frames)
         shell: pwsh
@@ -2476,29 +2480,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Zig (master) primary
+      - name: Setup Zig (0.16.0-dev.2736+3b515fbed) primary
         id: setup_zig_primary
         continue-on-error: true
         uses: mlugg/setup-zig@v2
         with:
-          version: master
+          version: 0.16.0-dev.2736+3b515fbed
           use-cache: true
 
-      - name: Setup Zig (master) mirror fallback
+      - name: Setup Zig (0.16.0-dev.2736+3b515fbed) mirror fallback
         id: setup_zig_mirror_mach
         if: steps.setup_zig_primary.outcome == 'failure'
         continue-on-error: true
         uses: mlugg/setup-zig@v2
         with:
-          version: master
+          version: 0.16.0-dev.2736+3b515fbed
           mirror: https://pkg.machengine.org/zig
           use-cache: true
 
-      - name: Setup Zig (master) mirror fallback (ziglang.org)
+      - name: Setup Zig (0.16.0-dev.2736+3b515fbed) mirror fallback (ziglang.org)
         if: steps.setup_zig_primary.outcome == 'failure' && steps.setup_zig_mirror_mach.outcome == 'failure'
         uses: mlugg/setup-zig@v2
         with:
-          version: master
+          version: 0.16.0-dev.2736+3b515fbed
           mirror: https://ziglang.org/builds
           use-cache: true
 

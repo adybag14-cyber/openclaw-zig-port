@@ -74,6 +74,8 @@ Full-stack replacement execution reference:
   - parity gate is at zero missing methods against Go + stable + beta
   - strict phase order now advances to FS4
 - FS4 strict closure is now reached locally:
+  - strict matrix source is `docs/zig-port/FS4_SECURITY_TRUST_MATRIX.md`
+  - `scripts/security-secret-store-smoke-check.ps1` is now enforced in both hosted validation workflows
   - `secrets.store.status` now reports backend truth explicitly instead of implying native-provider support
   - explicit support levels are now emitted for:
     - `env` -> `implemented`

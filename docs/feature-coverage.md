@@ -50,6 +50,10 @@ This page summarizes functional coverage across all major OpenClaw Zig runtime d
   - invalid enabled-threshold posture
 - remediation:
   - audit `--fix` path
+- strict FS4 gate source:
+  - [`docs/zig-port/FS4_SECURITY_TRUST_MATRIX.md`](zig-port/FS4_SECURITY_TRUST_MATRIX.md)
+- strict FS4 secret/auth smoke proof:
+  - `scripts/security-secret-store-smoke-check.ps1`
 
 ## Browser and Auth
 

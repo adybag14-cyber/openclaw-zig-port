@@ -422,6 +422,8 @@ Registry status:
       - `scripts/telegram-reply-memory-context-smoke-check.ps1`
     - both FS3 consumer smokes now run in `zig-ci` and `release-preview`
 - [x] FS4 - Security + trust hardening
+  - Strict FS4 matrix source of truth: `docs/zig-port/FS4_SECURITY_TRUST_MATRIX.md`
+  - `scripts/security-secret-store-smoke-check.ps1` is now part of the enforced hosted validation lane in `zig-ci` and `release-preview`.
   - Strict FS4 closure reached locally on 2026-03-12:
     - `security.audit`, `doctor`, and `secrets.store.*` are documented in:
       - `docs/security-and-diagnostics.md`

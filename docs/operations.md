@@ -129,6 +129,7 @@ Recommended sequence:
 ./scripts/appliance-rollout-boundary-smoke-check.ps1
 ./scripts/appliance-minimal-profile-smoke-check.ps1
 ./scripts/gateway-auth-smoke-check.ps1
+./scripts/security-secret-store-smoke-check.ps1
 ./scripts/websocket-smoke-check.ps1
 ./scripts/web-login-smoke-check.ps1
 ./scripts/browser-request-success-smoke-check.ps1
