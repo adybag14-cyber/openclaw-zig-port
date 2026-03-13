@@ -304,7 +304,12 @@ Notes:
   - `src/protocol/dhcp.zig` provides strict DHCP discover encode/decode
   - `src/pal/net.zig` exposes DHCP send/poll helpers for the hosted/mock path
   - `scripts/baremetal-qemu-rtl8139-dhcp-probe-check.ps1` now proves real RTL8139 TX/RX of a DHCP discover payload over a loopback-safe UDP transport envelope, followed by strict DHCP decode and TX/RX counter advance
-- DNS and full TCP handshake/connection management remain open.
+- A real DNS framing/decode slice is now also closed locally:
+  - `src/protocol/dns.zig` provides strict DNS query and A-response encode/decode
+  - `src/pal/net.zig` exposes `sendDnsQuery`, `pollDnsPacket`, and `pollDnsPacketStrictInto`
+  - host regressions prove DNS query encode/decode, DNS A-response decode, and strict rejection of non-DNS UDP frames over the mock RTL8139 path
+  - `scripts/baremetal-qemu-rtl8139-dns-probe-check.ps1` now proves real RTL8139 TX/RX of a DNS query plus strict decode/validation of a DNS A response over the freestanding PVH artifact
+- full TCP handshake/connection management remains open.
 
 ### Filesystem Usage
 

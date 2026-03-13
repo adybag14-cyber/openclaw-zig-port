@@ -6,6 +6,7 @@ const rtl8139 = @import("../baremetal/rtl8139.zig");
 const ethernet = @import("../protocol/ethernet.zig");
 const arp = @import("../protocol/arp.zig");
 const dhcp = @import("../protocol/dhcp.zig");
+const dns = @import("../protocol/dns.zig");
 const ipv4 = @import("../protocol/ipv4.zig");
 const tcp = @import("../protocol/tcp.zig");
 const udp = @import("../protocol/udp.zig");
@@ -25,10 +26,12 @@ pub const Error = rtl8139.Error;
 pub const ArpPacket = arp.Packet;
 pub const ArpError = rtl8139.Error || arp.Error;
 pub const DhcpError = rtl8139.Error || ethernet.Error || ipv4.Error || udp.Error || dhcp.Error;
+pub const DnsError = rtl8139.Error || ethernet.Error || ipv4.Error || udp.Error || dns.Error;
 pub const Ipv4Error = rtl8139.Error || ethernet.Error || ipv4.Error;
 pub const TcpError = rtl8139.Error || ethernet.Error || ipv4.Error || tcp.Error;
 pub const UdpError = rtl8139.Error || ethernet.Error || ipv4.Error || udp.Error;
 pub const StrictDhcpPollError = rtl8139.Error || ethernet.Error || ipv4.Error || udp.Error || dhcp.Error || error{ NotIpv4, NotUdp, NotDhcp };
+pub const StrictDnsPollError = rtl8139.Error || ethernet.Error || ipv4.Error || udp.Error || dns.Error || error{ NotIpv4, NotUdp, NotDns };
 pub const StrictIpv4PollError = rtl8139.Error || ethernet.Error || ipv4.Error || error{NotIpv4};
 pub const StrictTcpPollError = rtl8139.Error || ethernet.Error || ipv4.Error || tcp.Error || error{ NotIpv4, NotTcp };
 pub const StrictUdpPollError = rtl8139.Error || ethernet.Error || ipv4.Error || udp.Error || error{ NotIpv4, NotUdp };
@@ -40,6 +43,9 @@ pub const max_dhcp_parameter_request_list_len: usize = 64;
 pub const max_dhcp_client_identifier_len: usize = 32;
 pub const max_dhcp_hostname_len: usize = 64;
 pub const max_dhcp_dns_servers: usize = 2;
+pub const max_dns_name_len: usize = dns.max_name_len;
+pub const max_dns_answers: usize = dns.max_answers;
+pub const max_dns_answer_data_len: usize = dns.max_answer_data_len;
 
 pub const Ipv4Packet = struct {
     ethernet_destination: [ethernet.mac_len]u8,
@@ -115,6 +121,27 @@ pub const DhcpPacket = struct {
     hostname: [max_dhcp_hostname_len]u8,
     options_len: usize,
     options: [max_udp_payload_len]u8,
+};
+
+pub const DnsPacket = struct {
+    ethernet_destination: [ethernet.mac_len]u8,
+    ethernet_source: [ethernet.mac_len]u8,
+    ipv4_header: ipv4.Header,
+    source_port: u16,
+    destination_port: u16,
+    udp_checksum_value: u16,
+    id: u16,
+    flags: u16,
+    question_count: u16,
+    answer_count_total: u16,
+    authority_count: u16,
+    additional_count: u16,
+    question_name_len: usize,
+    question_name: [max_dns_name_len]u8,
+    question_type: u16,
+    question_class: u16,
+    answer_count: usize,
+    answers: [max_dns_answers]dns.Answer,
 };
 
 pub fn post(
@@ -262,6 +289,7 @@ pub fn pollIpv4PacketStrict() StrictIpv4PollError!?Ipv4Packet {
     while (index < copy_len) : (index += 1) {
         frame[index] = rxByte(@as(u32, @intCast(index)));
     }
+    if (copy_len < ethernet.header_len) return error.FrameTooShort;
 
     const eth_header = try ethernet.Header.decode(frame[0..copy_len]);
     if (eth_header.ether_type != ethernet.ethertype_ipv4) return error.NotIpv4;
@@ -335,6 +363,22 @@ pub fn sendDhcpDiscoverWithEnvelope(
         dhcp.server_port,
         segment[0..segment_len],
     );
+}
+
+pub fn sendDnsQuery(
+    destination_mac: [ethernet.mac_len]u8,
+    source_ip: [4]u8,
+    destination_ip: [4]u8,
+    source_port: u16,
+    id: u16,
+    name: []const u8,
+    qtype: u16,
+) DnsError!u32 {
+    if (!initDevice()) return error.NotAvailable;
+
+    var segment: [max_ipv4_payload_len]u8 = undefined;
+    const segment_len = try dns.encodeQuery(segment[0..], id, name, qtype);
+    return try sendUdpPacket(destination_mac, source_ip, destination_ip, source_port, dns.default_port, segment[0..segment_len]);
 }
 
 pub fn sendTcpPacket(
@@ -430,6 +474,34 @@ pub fn pollTcpPacket() TcpError!?TcpPacket {
     };
 }
 
+pub fn pollDnsPacket() DnsError!?DnsPacket {
+    return pollDnsPacketStrict() catch |err| switch (err) {
+        error.NotIpv4, error.NotUdp, error.NotDns => null,
+        error.NotAvailable => return error.NotAvailable,
+        error.NotInitialized => return error.NotInitialized,
+        error.FrameTooLarge => return error.FrameTooLarge,
+        error.HardwareFault => return error.HardwareFault,
+        error.Timeout => return error.Timeout,
+        error.BufferTooSmall => return error.BufferTooSmall,
+        error.PacketTooShort => return error.PacketTooShort,
+        error.InvalidVersion => return error.InvalidVersion,
+        error.UnsupportedOptions => return error.UnsupportedOptions,
+        error.InvalidTotalLength => return error.InvalidTotalLength,
+        error.PayloadTooLarge => return error.PayloadTooLarge,
+        error.HeaderChecksumMismatch => return error.HeaderChecksumMismatch,
+        error.FrameTooShort => return error.FrameTooShort,
+        error.InvalidLength => return error.InvalidLength,
+        error.ChecksumMismatch => return error.ChecksumMismatch,
+        error.InvalidLabelLength => return error.InvalidLabelLength,
+        error.InvalidPointer => return error.InvalidPointer,
+        error.UnsupportedLabelType => return error.UnsupportedLabelType,
+        error.NameTooLong => return error.NameTooLong,
+        error.CompressionLoop => return error.CompressionLoop,
+        error.UnsupportedQuestionCount => return error.UnsupportedQuestionCount,
+        error.ResourceDataTooLarge => return error.ResourceDataTooLarge,
+    };
+}
+
 pub fn pollDhcpPacket() DhcpError!?DhcpPacket {
     return pollDhcpPacketStrict() catch |err| switch (err) {
         error.NotIpv4, error.NotUdp, error.NotDhcp => null,
@@ -455,6 +527,45 @@ pub fn pollDhcpPacket() DhcpError!?DhcpPacket {
         error.OptionTruncated => return error.OptionTruncated,
         error.FieldLengthMismatch => return error.FieldLengthMismatch,
     };
+}
+
+pub fn pollDnsPacketStrictInto(result: *DnsPacket) StrictDnsPollError!bool {
+    var packet: UdpPacket = undefined;
+    if (!(try pollUdpPacketStrictInto(&packet))) return false;
+    if (!(packet.source_port == dns.default_port or packet.destination_port == dns.default_port)) return error.NotDns;
+
+    const decoded = try dns.decode(packet.payload[0..packet.payload_len]);
+
+    result.ethernet_destination = packet.ethernet_destination;
+    result.ethernet_source = packet.ethernet_source;
+    result.ipv4_header = packet.ipv4_header;
+    result.source_port = packet.source_port;
+    result.destination_port = packet.destination_port;
+    result.udp_checksum_value = packet.checksum_value;
+    result.id = decoded.id;
+    result.flags = decoded.flags;
+    result.question_count = decoded.question_count;
+    result.answer_count_total = decoded.answer_count_total;
+    result.authority_count = decoded.authority_count;
+    result.additional_count = decoded.additional_count;
+    result.question_name_len = decoded.question_name_len;
+    result.question_name = [_]u8{0} ** max_dns_name_len;
+    if (decoded.question_name_len > 0) {
+        std.mem.copyForwards(u8, result.question_name[0..decoded.question_name_len], decoded.question_name[0..decoded.question_name_len]);
+    }
+    result.question_type = decoded.question_type;
+    result.question_class = decoded.question_class;
+    result.answer_count = decoded.answer_count;
+
+    var answer_index: usize = 0;
+    while (answer_index < max_dns_answers) : (answer_index += 1) {
+        if (answer_index < decoded.answer_count) {
+            result.answers[answer_index] = decoded.answers[answer_index];
+        } else {
+            result.answers[answer_index] = std.mem.zeroes(dns.Answer);
+        }
+    }
+    return true;
 }
 
 pub fn pollDhcpPacketStrictInto(result: *DhcpPacket) StrictDhcpPollError!bool {
@@ -558,6 +669,14 @@ pub fn pollTcpPacketStrictInto(result: *TcpPacket) StrictTcpPollError!bool {
 pub fn pollTcpPacketStrict() StrictTcpPollError!?TcpPacket {
     var result: TcpPacket = undefined;
     if (try pollTcpPacketStrictInto(&result)) {
+        return result;
+    }
+    return null;
+}
+
+pub fn pollDnsPacketStrict() StrictDnsPollError!?DnsPacket {
+    var result: DnsPacket = undefined;
+    if (try pollDnsPacketStrictInto(&result)) {
         return result;
     }
     return null;
@@ -745,6 +864,75 @@ test "baremetal net pal sends and parses dhcp discover through rtl8139 mock devi
     try std.testing.expect(packet.max_message_size_valid);
     try std.testing.expectEqual(@as(u16, 1500), packet.max_message_size);
     try std.testing.expect(packet.udp_checksum_value != 0);
+}
+
+test "baremetal net pal sends and parses dns query through rtl8139 mock device" {
+    rtl8139.testEnableMockDevice();
+    defer rtl8139.testDisableMockDevice();
+
+    try std.testing.expect(initDevice());
+    const source_ip = [4]u8{ 192, 168, 56, 10 };
+    const destination_ip = [4]u8{ 192, 168, 56, 1 };
+    const source_port: u16 = 53000;
+    const query_name = "openclaw.local";
+
+    _ = try sendDnsQuery(macAddress(), source_ip, destination_ip, source_port, 0x1234, query_name, dns.type_a);
+
+    const packet = (try pollDnsPacket()).?;
+    try std.testing.expectEqual(@as(u16, source_port), packet.source_port);
+    try std.testing.expectEqual(@as(u16, dns.default_port), packet.destination_port);
+    try std.testing.expectEqual(ipv4.protocol_udp, packet.ipv4_header.protocol);
+    try std.testing.expectEqual(@as(u16, 0x1234), packet.id);
+    try std.testing.expectEqual(dns.flags_standard_query, packet.flags);
+    try std.testing.expectEqual(@as(u16, 1), packet.question_count);
+    try std.testing.expectEqualStrings(query_name, packet.question_name[0..packet.question_name_len]);
+    try std.testing.expectEqual(dns.type_a, packet.question_type);
+    try std.testing.expectEqual(dns.class_in, packet.question_class);
+    try std.testing.expectEqual(@as(usize, 0), packet.answer_count);
+    try std.testing.expect(packet.udp_checksum_value != 0);
+}
+
+test "baremetal net pal sends and parses dns A response through rtl8139 mock device" {
+    rtl8139.testEnableMockDevice();
+    defer rtl8139.testDisableMockDevice();
+
+    try std.testing.expect(initDevice());
+    const server_ip = [4]u8{ 192, 168, 56, 1 };
+    const client_ip = [4]u8{ 192, 168, 56, 10 };
+    const client_port: u16 = 53000;
+    const query_name = "openclaw.local";
+    const address = [4]u8{ 192, 168, 56, 1 };
+
+    var payload: [max_ipv4_payload_len]u8 = undefined;
+    const payload_len = try dns.encodeAResponse(payload[0..], 0xBEEF, query_name, 300, address);
+    _ = try sendUdpPacket(macAddress(), server_ip, client_ip, dns.default_port, client_port, payload[0..payload_len]);
+
+    const packet = (try pollDnsPacket()).?;
+    try std.testing.expectEqual(@as(u16, dns.default_port), packet.source_port);
+    try std.testing.expectEqual(@as(u16, client_port), packet.destination_port);
+    try std.testing.expectEqual(@as(u16, 0xBEEF), packet.id);
+    try std.testing.expectEqual(dns.flags_standard_success_response, packet.flags);
+    try std.testing.expectEqualStrings(query_name, packet.question_name[0..packet.question_name_len]);
+    try std.testing.expectEqual(@as(u16, 1), packet.answer_count_total);
+    try std.testing.expectEqual(@as(usize, 1), packet.answer_count);
+    try std.testing.expectEqualStrings(query_name, packet.answers[0].nameSlice());
+    try std.testing.expectEqual(dns.type_a, packet.answers[0].rr_type);
+    try std.testing.expectEqual(dns.class_in, packet.answers[0].rr_class);
+    try std.testing.expectEqual(@as(u32, 300), packet.answers[0].ttl);
+    try std.testing.expectEqualSlices(u8, address[0..], packet.answers[0].dataSlice());
+}
+
+test "baremetal net pal strict dns poll reports non-dns udp frame" {
+    rtl8139.testEnableMockDevice();
+    defer rtl8139.testDisableMockDevice();
+
+    try std.testing.expect(initDevice());
+    const source_ip = [4]u8{ 192, 168, 56, 10 };
+    const destination_ip = [4]u8{ 192, 168, 56, 1 };
+    const payload = "OPENCLAW-UDP";
+
+    _ = try sendUdpPacket(macAddress(), source_ip, destination_ip, 4321, 9001, payload);
+    try std.testing.expectError(error.NotDns, pollDnsPacketStrict());
 }
 
 test "baremetal net pal strict dhcp poll reports non-dhcp udp frame" {

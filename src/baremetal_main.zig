@@ -14,6 +14,7 @@ const pal_fs = @import("pal/fs.zig");
 const pal_net = @import("pal/net.zig");
 const arp_protocol = @import("protocol/arp.zig");
 const dhcp_protocol = @import("protocol/dhcp.zig");
+const dns_protocol = @import("protocol/dns.zig");
 const ethernet_protocol = @import("protocol/ethernet.zig");
 const ipv4_protocol = @import("protocol/ipv4.zig");
 const tcp_protocol = @import("protocol/tcp.zig");
@@ -75,6 +76,7 @@ const qemu_rtl8139_ipv4_probe_ok_code: u8 = 0x38;
 const qemu_rtl8139_udp_probe_ok_code: u8 = 0x39;
 const qemu_rtl8139_tcp_probe_ok_code: u8 = 0x3A;
 const qemu_rtl8139_dhcp_probe_ok_code: u8 = 0x3B;
+const qemu_rtl8139_dns_probe_ok_code: u8 = 0x3C;
 const build_options = if (builtin.is_test)
     struct {
         pub const qemu_smoke: bool = false;
@@ -87,6 +89,7 @@ const build_options = if (builtin.is_test)
         pub const rtl8139_udp_probe: bool = false;
         pub const rtl8139_tcp_probe: bool = false;
         pub const rtl8139_dhcp_probe: bool = false;
+        pub const rtl8139_dns_probe: bool = false;
     }
 else
     @import("build_options");
@@ -100,6 +103,7 @@ const rtl8139_ipv4_probe_enabled: bool = build_options.rtl8139_ipv4_probe;
 const rtl8139_udp_probe_enabled: bool = build_options.rtl8139_udp_probe;
 const rtl8139_tcp_probe_enabled: bool = build_options.rtl8139_tcp_probe;
 const rtl8139_dhcp_probe_enabled: bool = build_options.rtl8139_dhcp_probe;
+const rtl8139_dns_probe_enabled: bool = build_options.rtl8139_dns_probe;
 
 const ata_probe_raw_lba: u32 = 300;
 const ata_probe_raw_block_count: u32 = 2;
@@ -325,6 +329,56 @@ const Rtl8139DhcpProbeError = error{
     ParameterRequestListMismatch,
     FlagsMismatch,
     MaxMessageSizeMismatch,
+    ChecksumMissing,
+    FrameLengthMismatch,
+    CounterMismatch,
+};
+
+const Rtl8139DnsProbeError = error{
+    UnsupportedPlatform,
+    DeviceNotFound,
+    ResetTimeout,
+    BufferProgramFailed,
+    MacReadFailed,
+    DataPathEnableFailed,
+    StateMagicMismatch,
+    BackendMismatch,
+    InitFlagMismatch,
+    HardwareBackedMismatch,
+    IoBaseMismatch,
+    TxFailed,
+    RxTimedOut,
+    LastFrameTooShort,
+    LastFrameNotIpv4,
+    LastIpv4DecodeFailed,
+    LastPacketNotUdp,
+    LastUdpDecodeFailed,
+    LastPacketNotDns,
+    LastDnsDecodeFailed,
+    DataPathDropped,
+    TxCompletedNoRxInterrupt,
+    TxCompletedNoRxProgress,
+    RxProducerStalled,
+    RxProducerAdvancedNoFrame,
+    PacketMissing,
+    PacketDestinationMismatch,
+    PacketSourceMismatch,
+    PacketProtocolMismatch,
+    PacketSenderMismatch,
+    PacketTargetMismatch,
+    PacketPortsMismatch,
+    TransactionIdMismatch,
+    FlagsMismatch,
+    QuestionCountMismatch,
+    QuestionNameMismatch,
+    QuestionTypeMismatch,
+    QuestionClassMismatch,
+    AnswerCountMismatch,
+    AnswerNameMismatch,
+    AnswerTypeMismatch,
+    AnswerClassMismatch,
+    AnswerTtlMismatch,
+    AnswerDataMismatch,
     ChecksumMissing,
     FrameLengthMismatch,
     CounterMismatch,
@@ -1428,6 +1482,10 @@ fn baremetalStart() callconv(.c) noreturn {
         runRtl8139DhcpProbe() catch |err| qemuExit(rtl8139DhcpProbeFailureCode(err));
         qemuExit(qemu_rtl8139_dhcp_probe_ok_code);
     }
+    if (rtl8139_dns_probe_enabled) {
+        runRtl8139DnsProbe() catch |err| qemuExit(rtl8139DnsProbeFailureCode(err));
+        qemuExit(qemu_rtl8139_dns_probe_ok_code);
+    }
     ps2_input.init();
     tool_layout.init() catch unreachable;
     if (console_probe_banner_enabled) {
@@ -1786,6 +1844,32 @@ fn classifyDhcpProbeTimeout(eth: *const BaremetalEthernetState) Rtl8139DhcpProbe
             return error.LastPacketNotDhcp;
         }
         _ = dhcp_protocol.decode(udp_packet.payload) catch return error.LastDhcpDecodeFailed;
+    }
+
+    const timeout_class = classifyRtl8139DataPathTimeout(eth);
+    return switch (timeout_class) {
+        .DataPathDropped => error.DataPathDropped,
+        .TxCompletedNoRxInterrupt => error.TxCompletedNoRxInterrupt,
+        .TxCompletedNoRxProgress => error.TxCompletedNoRxProgress,
+        .RxProducerStalled => error.RxProducerStalled,
+        .RxProducerAdvancedNoFrame => error.RxProducerAdvancedNoFrame,
+    };
+}
+
+fn classifyDnsProbeTimeout(eth: *const BaremetalEthernetState) Rtl8139DnsProbeError {
+    if (eth.last_rx_len != 0) {
+        var frame: [pal_net.max_frame_len]u8 = undefined;
+        const copy_len = copyLastEthernetFrame(frame[0..]);
+        if (copy_len < ethernet_protocol.header_len) return error.LastFrameTooShort;
+        const eth_header = ethernet_protocol.Header.decode(frame[0..copy_len]) catch return error.LastFrameTooShort;
+        if (eth_header.ether_type != ethernet_protocol.ethertype_ipv4) return error.LastFrameNotIpv4;
+        const ipv4_packet = ipv4_protocol.decode(frame[ethernet_protocol.header_len..copy_len]) catch return error.LastIpv4DecodeFailed;
+        if (ipv4_packet.header.protocol != ipv4_protocol.protocol_udp) return error.LastPacketNotUdp;
+        const udp_packet = udp_protocol.decode(ipv4_packet.payload, ipv4_packet.header.source_ip, ipv4_packet.header.destination_ip) catch return error.LastUdpDecodeFailed;
+        if (!(udp_packet.source_port == dns_protocol.default_port or udp_packet.destination_port == dns_protocol.default_port)) {
+            return error.LastPacketNotDns;
+        }
+        _ = dns_protocol.decode(udp_packet.payload) catch return error.LastDnsDecodeFailed;
     }
 
     const timeout_class = classifyRtl8139DataPathTimeout(eth);
@@ -2226,6 +2310,185 @@ fn rtl8139DhcpProbeFailureCode(err: Rtl8139DhcpProbeError) u8 {
         error.ChecksumMissing => 0x67,
         error.FrameLengthMismatch => 0x68,
         error.CounterMismatch => 0x69,
+    };
+}
+
+fn runRtl8139DnsProbe() Rtl8139DnsProbeError!void {
+    rtl8139.initDetailed() catch |err| return switch (err) {
+        error.UnsupportedPlatform => error.UnsupportedPlatform,
+        error.DeviceNotFound => error.DeviceNotFound,
+        error.ResetTimeout => error.ResetTimeout,
+        error.BufferProgramFailed => error.BufferProgramFailed,
+        error.MacReadFailed => error.MacReadFailed,
+        error.DataPathEnableFailed => error.DataPathEnableFailed,
+    };
+
+    const eth = oc_ethernet_state_ptr();
+    if (eth.magic != abi.ethernet_magic) return error.StateMagicMismatch;
+    if (eth.backend != abi.ethernet_backend_rtl8139) return error.BackendMismatch;
+    if (eth.initialized == 0) return error.InitFlagMismatch;
+    if (!builtin.is_test and eth.hardware_backed == 0) return error.HardwareBackedMismatch;
+    if (eth.io_base == 0) return error.IoBaseMismatch;
+
+    const source_ip = [4]u8{ 192, 168, 56, 10 };
+    const server_ip = [4]u8{ 192, 168, 56, 1 };
+    const source_port: u16 = 53000;
+    const query_id: u16 = 0x1234;
+    const query_name = "openclaw.local";
+    const resolved_address = [4]u8{ 192, 168, 56, 1 };
+    const response_destination_mac = if (builtin.is_test) eth.mac else ethernet_protocol.broadcast_mac;
+
+    const expected_query_wire_len = pal_net.sendDnsQuery(
+        ethernet_protocol.broadcast_mac,
+        source_ip,
+        server_ip,
+        source_port,
+        query_id,
+        query_name,
+        dns_protocol.type_a,
+    ) catch return error.TxFailed;
+    const expected_query_frame_len: u32 = @max(expected_query_wire_len, 60);
+
+    var attempts: usize = 0;
+    var packet_received = false;
+    var query_packet_storage: pal_net.DnsPacket = undefined;
+    while (attempts < 20_000) : (attempts += 1) {
+        packet_received = pal_net.pollDnsPacketStrictInto(&query_packet_storage) catch |err| return switch (err) {
+            error.NotIpv4 => error.LastFrameNotIpv4,
+            error.NotUdp => error.LastPacketNotUdp,
+            error.NotDns => error.LastPacketNotDns,
+            error.FrameTooShort, error.PacketTooShort => error.LastFrameTooShort,
+            error.InvalidVersion, error.UnsupportedOptions, error.InvalidTotalLength, error.HeaderChecksumMismatch => error.LastIpv4DecodeFailed,
+            error.InvalidLength, error.ChecksumMismatch => error.LastUdpDecodeFailed,
+            error.InvalidLabelLength, error.InvalidPointer, error.UnsupportedLabelType, error.NameTooLong, error.CompressionLoop, error.UnsupportedQuestionCount, error.ResourceDataTooLarge => error.LastDnsDecodeFailed,
+            else => error.PacketMissing,
+        };
+        if (packet_received) break;
+        spinPause(1);
+    }
+
+    if (!packet_received) return classifyDnsProbeTimeout(eth);
+    const query_packet = &query_packet_storage;
+    if (!std.mem.eql(u8, ethernet_protocol.broadcast_mac[0..], query_packet.ethernet_destination[0..])) return error.PacketDestinationMismatch;
+    if (!std.mem.eql(u8, eth.mac[0..], query_packet.ethernet_source[0..])) return error.PacketSourceMismatch;
+    if (query_packet.ipv4_header.protocol != ipv4_protocol.protocol_udp) return error.PacketProtocolMismatch;
+    if (!std.mem.eql(u8, source_ip[0..], query_packet.ipv4_header.source_ip[0..])) return error.PacketSenderMismatch;
+    if (!std.mem.eql(u8, server_ip[0..], query_packet.ipv4_header.destination_ip[0..])) return error.PacketTargetMismatch;
+    if (query_packet.source_port != source_port or query_packet.destination_port != dns_protocol.default_port) return error.PacketPortsMismatch;
+    if (query_packet.id != query_id) return error.TransactionIdMismatch;
+    if (query_packet.flags != dns_protocol.flags_standard_query) return error.FlagsMismatch;
+    if (query_packet.question_count != 1) return error.QuestionCountMismatch;
+    if (!std.mem.eql(u8, query_name, query_packet.question_name[0..query_packet.question_name_len])) return error.QuestionNameMismatch;
+    if (query_packet.question_type != dns_protocol.type_a) return error.QuestionTypeMismatch;
+    if (query_packet.question_class != dns_protocol.class_in) return error.QuestionClassMismatch;
+    if (query_packet.answer_count_total != 0 or query_packet.answer_count != 0) return error.AnswerCountMismatch;
+    if (query_packet.udp_checksum_value == 0) return error.ChecksumMissing;
+    if (eth.last_rx_len != expected_query_frame_len) return error.FrameLengthMismatch;
+
+    var dns_payload: [pal_net.max_ipv4_payload_len]u8 = undefined;
+    const dns_len = dns_protocol.encodeAResponse(dns_payload[0..], query_id, query_name, 300, resolved_address) catch return error.TxFailed;
+    const expected_response_wire_len = pal_net.sendUdpPacket(
+        response_destination_mac,
+        server_ip,
+        source_ip,
+        dns_protocol.default_port,
+        source_port,
+        dns_payload[0..dns_len],
+    ) catch return error.TxFailed;
+    const expected_response_frame_len: u32 = @max(expected_response_wire_len, 60);
+
+    attempts = 0;
+    packet_received = false;
+    var response_packet_storage: pal_net.DnsPacket = undefined;
+    while (attempts < 20_000) : (attempts += 1) {
+        packet_received = pal_net.pollDnsPacketStrictInto(&response_packet_storage) catch |err| return switch (err) {
+            error.NotIpv4 => error.LastFrameNotIpv4,
+            error.NotUdp => error.LastPacketNotUdp,
+            error.NotDns => error.LastPacketNotDns,
+            error.FrameTooShort, error.PacketTooShort => error.LastFrameTooShort,
+            error.InvalidVersion, error.UnsupportedOptions, error.InvalidTotalLength, error.HeaderChecksumMismatch => error.LastIpv4DecodeFailed,
+            error.InvalidLength, error.ChecksumMismatch => error.LastUdpDecodeFailed,
+            error.InvalidLabelLength, error.InvalidPointer, error.UnsupportedLabelType, error.NameTooLong, error.CompressionLoop, error.UnsupportedQuestionCount, error.ResourceDataTooLarge => error.LastDnsDecodeFailed,
+            else => error.PacketMissing,
+        };
+        if (packet_received) break;
+        spinPause(1);
+    }
+
+    if (!packet_received) return classifyDnsProbeTimeout(eth);
+    const response_packet = &response_packet_storage;
+    if (!std.mem.eql(u8, response_destination_mac[0..], response_packet.ethernet_destination[0..])) return error.PacketDestinationMismatch;
+    if (!std.mem.eql(u8, eth.mac[0..], response_packet.ethernet_source[0..])) return error.PacketSourceMismatch;
+    if (response_packet.ipv4_header.protocol != ipv4_protocol.protocol_udp) return error.PacketProtocolMismatch;
+    if (!std.mem.eql(u8, server_ip[0..], response_packet.ipv4_header.source_ip[0..])) return error.PacketSenderMismatch;
+    if (!std.mem.eql(u8, source_ip[0..], response_packet.ipv4_header.destination_ip[0..])) return error.PacketTargetMismatch;
+    if (response_packet.source_port != dns_protocol.default_port or response_packet.destination_port != source_port) return error.PacketPortsMismatch;
+    if (response_packet.id != query_id) return error.TransactionIdMismatch;
+    if (response_packet.flags != dns_protocol.flags_standard_success_response) return error.FlagsMismatch;
+    if (response_packet.question_count != 1) return error.QuestionCountMismatch;
+    if (!std.mem.eql(u8, query_name, response_packet.question_name[0..response_packet.question_name_len])) return error.QuestionNameMismatch;
+    if (response_packet.question_type != dns_protocol.type_a) return error.QuestionTypeMismatch;
+    if (response_packet.question_class != dns_protocol.class_in) return error.QuestionClassMismatch;
+    if (response_packet.answer_count_total != 1 or response_packet.answer_count != 1) return error.AnswerCountMismatch;
+    if (!std.mem.eql(u8, query_name, response_packet.answers[0].nameSlice())) return error.AnswerNameMismatch;
+    if (response_packet.answers[0].rr_type != dns_protocol.type_a) return error.AnswerTypeMismatch;
+    if (response_packet.answers[0].rr_class != dns_protocol.class_in) return error.AnswerClassMismatch;
+    if (response_packet.answers[0].ttl != 300) return error.AnswerTtlMismatch;
+    if (!std.mem.eql(u8, resolved_address[0..], response_packet.answers[0].dataSlice())) return error.AnswerDataMismatch;
+    if (response_packet.udp_checksum_value == 0) return error.ChecksumMissing;
+    if (eth.last_rx_len != expected_response_frame_len) return error.FrameLengthMismatch;
+    if (eth.tx_packets < 2 or eth.rx_packets < 2) return error.CounterMismatch;
+}
+
+fn rtl8139DnsProbeFailureCode(err: Rtl8139DnsProbeError) u8 {
+    return switch (err) {
+        error.UnsupportedPlatform => 0x6A,
+        error.DeviceNotFound => 0x6B,
+        error.ResetTimeout => 0x6C,
+        error.BufferProgramFailed => 0x6D,
+        error.MacReadFailed => 0x6E,
+        error.DataPathEnableFailed => 0x6F,
+        error.StateMagicMismatch => 0x70,
+        error.BackendMismatch => 0x71,
+        error.InitFlagMismatch => 0x72,
+        error.HardwareBackedMismatch => 0x73,
+        error.IoBaseMismatch => 0x74,
+        error.TxFailed => 0x75,
+        error.RxTimedOut => 0x76,
+        error.LastFrameTooShort => 0x77,
+        error.LastFrameNotIpv4 => 0x78,
+        error.LastIpv4DecodeFailed => 0x79,
+        error.LastPacketNotUdp => 0x7A,
+        error.LastUdpDecodeFailed => 0x7B,
+        error.LastPacketNotDns => 0x7C,
+        error.LastDnsDecodeFailed => 0x7D,
+        error.DataPathDropped => 0x7E,
+        error.TxCompletedNoRxInterrupt => 0x7F,
+        error.TxCompletedNoRxProgress => 0x80,
+        error.RxProducerStalled => 0x81,
+        error.RxProducerAdvancedNoFrame => 0x82,
+        error.PacketMissing => 0x83,
+        error.PacketDestinationMismatch => 0x84,
+        error.PacketSourceMismatch => 0x85,
+        error.PacketProtocolMismatch => 0x86,
+        error.PacketSenderMismatch => 0x87,
+        error.PacketTargetMismatch => 0x88,
+        error.PacketPortsMismatch => 0x89,
+        error.TransactionIdMismatch => 0x8A,
+        error.FlagsMismatch => 0x8B,
+        error.QuestionCountMismatch => 0x8C,
+        error.QuestionNameMismatch => 0x8D,
+        error.QuestionTypeMismatch => 0x8E,
+        error.QuestionClassMismatch => 0x8F,
+        error.AnswerCountMismatch => 0x90,
+        error.AnswerNameMismatch => 0x91,
+        error.AnswerTypeMismatch => 0x92,
+        error.AnswerClassMismatch => 0x93,
+        error.AnswerTtlMismatch => 0x94,
+        error.AnswerDataMismatch => 0x95,
+        error.ChecksumMissing => 0x96,
+        error.FrameLengthMismatch => 0x97,
+        error.CounterMismatch => 0x98,
     };
 }
 
@@ -10390,6 +10653,14 @@ test "baremetal rtl8139 dhcp probe succeeds through mock device" {
     defer rtl8139.testDisableMockDevice();
 
     try runRtl8139DhcpProbe();
+}
+
+test "baremetal rtl8139 dns probe succeeds through mock device" {
+    resetBaremetalRuntimeForTest();
+    rtl8139.testEnableMockDevice();
+    defer rtl8139.testDisableMockDevice();
+
+    try runRtl8139DnsProbe();
 }
 
 test "baremetal storage export surface persists block writes and flush state" {

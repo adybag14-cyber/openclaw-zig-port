@@ -13,6 +13,7 @@ pub fn build(b: *std.Build) void {
     const baremetal_rtl8139_udp_probe = b.option(bool, "baremetal-rtl8139-udp-probe", "Enable the RTL8139 UDP validation path in the freestanding image") orelse false;
     const baremetal_rtl8139_tcp_probe = b.option(bool, "baremetal-rtl8139-tcp-probe", "Enable the RTL8139 TCP validation path in the freestanding image") orelse false;
     const baremetal_rtl8139_dhcp_probe = b.option(bool, "baremetal-rtl8139-dhcp-probe", "Enable the RTL8139 DHCP validation path in the freestanding image") orelse false;
+    const baremetal_rtl8139_dns_probe = b.option(bool, "baremetal-rtl8139-dns-probe", "Enable the RTL8139 DNS validation path in the freestanding image") orelse false;
     const root_module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -98,6 +99,7 @@ pub fn build(b: *std.Build) void {
     baremetal_options.addOption(bool, "rtl8139_udp_probe", baremetal_rtl8139_udp_probe);
     baremetal_options.addOption(bool, "rtl8139_tcp_probe", baremetal_rtl8139_tcp_probe);
     baremetal_options.addOption(bool, "rtl8139_dhcp_probe", baremetal_rtl8139_dhcp_probe);
+    baremetal_options.addOption(bool, "rtl8139_dns_probe", baremetal_rtl8139_dns_probe);
     baremetal_module.addOptions("build_options", baremetal_options);
     baremetal_module.single_threaded = true;
     baremetal_module.strip = false;

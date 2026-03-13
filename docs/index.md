@@ -4,14 +4,14 @@ Full documentation for the OpenClaw Zig runtime port.
 
 ## Status Snapshot
 
-- RPC surface in Zig: `174` methods
+- RPC surface in Zig: `175` methods
 - Pinned tri-baseline parity gate:
   - Go baseline (`v2.14.0-go`): `134/134`
-  - Original OpenClaw baseline (`v2026.3.11`): `99/99`
-  - Original OpenClaw beta baseline (`v2026.3.11-beta.1`): `99/99`
-  - Union baseline: `140/140` (`MISSING_IN_ZIG=0`)
+  - Original OpenClaw baseline (`v2026.3.8`): `97/97`
+  - Original OpenClaw beta baseline (`v2026.3.8-beta.1`): `97/97`
+  - Union baseline: `138/138` (`MISSING_IN_ZIG=0`)
   - Gateway events union baseline: `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
-- Latest local validation: `223/223` main tests + `141/141` bare-metal host tests passing
+- Latest local validation: `259/259` main tests + `183/183` bare-metal host tests passing
 - Latest published edge release tag: `v0.2.0-zig-edge.28`
 - Toolchain lane: Codeberg `master` is canonical; `adybag14-cyber/zig` provides rolling `latest-master` and immutable `upstream-<sha>` Windows releases for refresh and reproducibility.
 - Recent FS1 progress (2026-03-06):
