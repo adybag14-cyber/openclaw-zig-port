@@ -6,6 +6,7 @@ const rtl8139 = @import("../baremetal/rtl8139.zig");
 const ethernet = @import("../protocol/ethernet.zig");
 const arp = @import("../protocol/arp.zig");
 const ipv4 = @import("../protocol/ipv4.zig");
+const tcp = @import("../protocol/tcp.zig");
 const udp = @import("../protocol/udp.zig");
 
 pub const Response = struct {
@@ -23,11 +24,14 @@ pub const Error = rtl8139.Error;
 pub const ArpPacket = arp.Packet;
 pub const ArpError = rtl8139.Error || arp.Error;
 pub const Ipv4Error = rtl8139.Error || ethernet.Error || ipv4.Error;
+pub const TcpError = rtl8139.Error || ethernet.Error || ipv4.Error || tcp.Error;
 pub const UdpError = rtl8139.Error || ethernet.Error || ipv4.Error || udp.Error;
 pub const StrictIpv4PollError = rtl8139.Error || ethernet.Error || ipv4.Error || error{NotIpv4};
+pub const StrictTcpPollError = rtl8139.Error || ethernet.Error || ipv4.Error || tcp.Error || error{ NotIpv4, NotTcp };
 pub const StrictUdpPollError = rtl8139.Error || ethernet.Error || ipv4.Error || udp.Error || error{ NotIpv4, NotUdp };
 pub const max_frame_len: usize = 2048;
 pub const max_ipv4_payload_len: usize = max_frame_len - ethernet.header_len - ipv4.header_len;
+pub const max_tcp_payload_len: usize = max_ipv4_payload_len - tcp.header_len;
 pub const max_udp_payload_len: usize = max_ipv4_payload_len - udp.header_len;
 
 pub const Ipv4Packet = struct {
@@ -48,6 +52,22 @@ pub const UdpPacket = struct {
     checksum_value: u16,
     payload_len: usize,
     payload: [max_udp_payload_len]u8,
+};
+
+pub const TcpPacket = struct {
+    ethernet_destination: [ethernet.mac_len]u8,
+    ethernet_source: [ethernet.mac_len]u8,
+    ipv4_header: ipv4.Header,
+    source_port: u16,
+    destination_port: u16,
+    sequence_number: u32,
+    acknowledgment_number: u32,
+    flags: u16,
+    window_size: u16,
+    checksum_value: u16,
+    urgent_pointer: u16,
+    payload_len: usize,
+    payload: [max_tcp_payload_len]u8,
 };
 
 pub fn post(
@@ -233,6 +253,33 @@ pub fn sendUdpPacket(
     return try sendIpv4Frame(destination_mac, source_ip, destination_ip, ipv4.protocol_udp, segment[0..segment_len]);
 }
 
+pub fn sendTcpPacket(
+    destination_mac: [ethernet.mac_len]u8,
+    source_ip: [4]u8,
+    destination_ip: [4]u8,
+    source_port: u16,
+    destination_port: u16,
+    sequence_number: u32,
+    acknowledgment_number: u32,
+    flags: u16,
+    window_size: u16,
+    payload: []const u8,
+) TcpError!u32 {
+    if (!initDevice()) return error.NotAvailable;
+
+    var segment: [max_ipv4_payload_len]u8 = undefined;
+    const tcp_header = tcp.Header{
+        .source_port = source_port,
+        .destination_port = destination_port,
+        .sequence_number = sequence_number,
+        .acknowledgment_number = acknowledgment_number,
+        .flags = flags,
+        .window_size = window_size,
+    };
+    const segment_len = try tcp_header.encode(segment[0..], payload, source_ip, destination_ip);
+    return try sendIpv4Frame(destination_mac, source_ip, destination_ip, ipv4.protocol_tcp, segment[0..segment_len]);
+}
+
 pub fn pollUdpPacket() UdpError!?UdpPacket {
     return pollUdpPacketStrict() catch |err| switch (err) {
         error.NotIpv4, error.NotUdp => null,
@@ -276,6 +323,64 @@ pub fn pollUdpPacketStrictInto(result: *UdpPacket) StrictUdpPollError!bool {
         return true;
     }
     return false;
+}
+
+pub fn pollTcpPacket() TcpError!?TcpPacket {
+    return pollTcpPacketStrict() catch |err| switch (err) {
+        error.NotIpv4, error.NotTcp => null,
+        error.NotAvailable => return error.NotAvailable,
+        error.NotInitialized => return error.NotInitialized,
+        error.FrameTooLarge => return error.FrameTooLarge,
+        error.HardwareFault => return error.HardwareFault,
+        error.Timeout => return error.Timeout,
+        error.BufferTooSmall => return error.BufferTooSmall,
+        error.PacketTooShort => return error.PacketTooShort,
+        error.InvalidVersion => return error.InvalidVersion,
+        error.UnsupportedOptions => return error.UnsupportedOptions,
+        error.InvalidTotalLength => return error.InvalidTotalLength,
+        error.PayloadTooLarge => return error.PayloadTooLarge,
+        error.HeaderChecksumMismatch => return error.HeaderChecksumMismatch,
+        error.FrameTooShort => return error.FrameTooShort,
+        error.InvalidDataOffset => return error.InvalidDataOffset,
+        error.ChecksumMismatch => return error.ChecksumMismatch,
+    };
+}
+
+pub fn pollTcpPacketStrictInto(result: *TcpPacket) StrictTcpPollError!bool {
+    var packet_opt = try pollIpv4PacketStrict();
+    if (packet_opt) |*packet| {
+        if (packet.header.protocol != ipv4.protocol_tcp) return error.NotTcp;
+
+        const decoded = try tcp.decode(packet.payload[0..packet.payload_len], packet.header.source_ip, packet.header.destination_ip);
+        if (decoded.payload.len > max_tcp_payload_len) return error.PayloadTooLarge;
+
+        result.* = .{
+            .ethernet_destination = packet.ethernet_destination,
+            .ethernet_source = packet.ethernet_source,
+            .ipv4_header = packet.header,
+            .source_port = decoded.source_port,
+            .destination_port = decoded.destination_port,
+            .sequence_number = decoded.sequence_number,
+            .acknowledgment_number = decoded.acknowledgment_number,
+            .flags = decoded.flags,
+            .window_size = decoded.window_size,
+            .checksum_value = decoded.checksum_value,
+            .urgent_pointer = decoded.urgent_pointer,
+            .payload_len = decoded.payload.len,
+            .payload = [_]u8{0} ** max_tcp_payload_len,
+        };
+        std.mem.copyForwards(u8, result.payload[0..decoded.payload.len], decoded.payload);
+        return true;
+    }
+    return false;
+}
+
+pub fn pollTcpPacketStrict() StrictTcpPollError!?TcpPacket {
+    var result: TcpPacket = undefined;
+    if (try pollTcpPacketStrictInto(&result)) {
+        return result;
+    }
+    return null;
 }
 
 pub fn pollUdpPacketStrict() StrictUdpPollError!?UdpPacket {
@@ -394,4 +499,41 @@ test "baremetal net pal strict udp poll reports non-udp ipv4 frame" {
 
     _ = try sendIpv4Frame(macAddress(), source_ip, destination_ip, 1, payload);
     try std.testing.expectError(error.NotUdp, pollUdpPacketStrict());
+}
+
+test "baremetal net pal sends and parses tcp packet through rtl8139 mock device" {
+    rtl8139.testEnableMockDevice();
+    defer rtl8139.testDisableMockDevice();
+
+    try std.testing.expect(initDevice());
+    const source_ip = [4]u8{ 192, 168, 56, 10 };
+    const destination_ip = [4]u8{ 192, 168, 56, 1 };
+    const payload = "OPENCLAW-TCP";
+
+    _ = try sendTcpPacket(macAddress(), source_ip, destination_ip, 4321, 443, 0x0102_0304, 0xA0B0_C0D0, tcp.flag_ack | tcp.flag_psh, 8192, payload);
+
+    const packet = (try pollTcpPacket()).?;
+    try std.testing.expectEqual(@as(u16, 4321), packet.source_port);
+    try std.testing.expectEqual(@as(u16, 443), packet.destination_port);
+    try std.testing.expectEqual(@as(u32, 0x0102_0304), packet.sequence_number);
+    try std.testing.expectEqual(@as(u32, 0xA0B0_C0D0), packet.acknowledgment_number);
+    try std.testing.expectEqual(ipv4.protocol_tcp, packet.ipv4_header.protocol);
+    try std.testing.expectEqual(tcp.flag_ack | tcp.flag_psh, packet.flags);
+    try std.testing.expectEqual(@as(u16, 8192), packet.window_size);
+    try std.testing.expectEqualSlices(u8, source_ip[0..], packet.ipv4_header.source_ip[0..]);
+    try std.testing.expectEqualSlices(u8, destination_ip[0..], packet.ipv4_header.destination_ip[0..]);
+    try std.testing.expectEqualSlices(u8, payload, packet.payload[0..packet.payload_len]);
+}
+
+test "baremetal net pal strict tcp poll reports non-tcp ipv4 frame" {
+    rtl8139.testEnableMockDevice();
+    defer rtl8139.testDisableMockDevice();
+
+    try std.testing.expect(initDevice());
+    const source_ip = [4]u8{ 192, 168, 56, 10 };
+    const destination_ip = [4]u8{ 192, 168, 56, 1 };
+    const payload = "OPENCLAW-UDP";
+
+    _ = try sendUdpPacket(macAddress(), source_ip, destination_ip, 4321, 9001, payload);
+    try std.testing.expectError(error.NotTcp, pollTcpPacketStrict());
 }

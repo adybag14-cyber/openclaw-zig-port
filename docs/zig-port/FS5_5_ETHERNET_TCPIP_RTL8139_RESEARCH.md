@@ -394,5 +394,10 @@ Minimum hosted regressions:
 6. hosted regressions
 7. QEMU loopback proof
 8. CI/release-preview wiring
+9. staged TCP framing/payload slice over the same RTL8139 loopback path:
+   - `src/protocol/tcp.zig`
+   - `src/pal/net.zig` `sendTcpPacket` / `pollTcpPacketStrictInto`
+   - `src/baremetal_main.zig` `runRtl8139TcpProbe`
+   - `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1`
 
 This is the correct first hardware networking milestone.

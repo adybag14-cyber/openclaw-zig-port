@@ -38,9 +38,10 @@
   - `src/protocol/ethernet.zig` + `src/protocol/arp.zig` implement Ethernet/ARP framing
   - `src/protocol/ipv4.zig` implements IPv4 framing plus checksum validation
   - `src/protocol/udp.zig` implements UDP framing plus pseudo-header checksum validation
-  - `src/pal/net.zig` now exposes `sendArpRequest` / `pollArpPacket`, `sendIpv4Frame` / `pollIpv4PacketStrict`, and `sendUdpPacket` / `pollUdpPacketStrictInto`
-  - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`, and `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1` prove live ARP, IPv4, and UDP loopback plus decode over the freestanding PVH image
-- TCP, DHCP, and DNS remain the next networking slices above that Ethernet + ARP + IPv4 + UDP proof.
+  - `src/protocol/tcp.zig` now implements a real strict TCP framing/checksum/payload slice
+  - `src/pal/net.zig` now also exposes `sendTcpPacket` / `pollTcpPacketStrictInto`
+  - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`, and `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1` prove live ARP, IPv4, UDP, and TCP framing/payload loopback plus decode over the freestanding PVH image
+- DHCP and DNS remain open, and full TCP handshake/connection management is still the next depth above this TCP framing slice.
 - filesystem usage is now also on a real shared-backend path in `FS5.5`:
   - `src/baremetal/filesystem.zig` implements path-based directory creation plus file read/write/stat
   - `src/pal/fs.zig` routes the freestanding PAL filesystem surface through that layer

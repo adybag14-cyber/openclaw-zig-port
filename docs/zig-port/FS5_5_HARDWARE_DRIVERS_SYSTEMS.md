@@ -282,6 +282,7 @@ Notes:
   - `src/protocol/arp.zig` encodes ARP request frames and decodes ARP frames
   - `src/protocol/ipv4.zig` encodes and decodes IPv4 headers and validates header checksums
   - `src/protocol/udp.zig` encodes and decodes UDP datagrams and validates pseudo-header checksums
+  - `src/protocol/tcp.zig` encodes and decodes strict TCP headers, validates pseudo-header checksums, and rejects unsupported options in this slice
   - `src/pal/net.zig` exposes:
     - `sendArpRequest`
     - `pollArpPacket`
@@ -289,13 +290,16 @@ Notes:
     - `pollIpv4PacketStrict`
     - `sendUdpPacket`
     - `pollUdpPacketStrictInto`
-  - host regressions prove mock-device ARP, IPv4, and UDP loopback/decode through the RTL8139 path
+    - `sendTcpPacket`
+    - `pollTcpPacketStrictInto`
+  - host regressions prove mock-device ARP, IPv4, UDP, and TCP loopback/decode through the RTL8139 path
   - live QEMU proofs now pass:
     - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`
     - `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`
     - `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`
-  - those proofs now cover live ARP request transmission, IPv4 frame encode/decode, UDP datagram encode/decode, and TX/RX counter advance over the freestanding PVH image
-- TCP, DHCP, and DNS remain open
+    - `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1`
+  - those proofs now cover live ARP request transmission, IPv4 frame encode/decode, UDP datagram encode/decode, TCP segment encode/decode, and TX/RX counter advance over the freestanding PVH image
+- The strict staged TCP gate is now the framing/payload slice over RTL8139 loopback. DHCP, DNS, and full TCP handshake/connection management remain open.
 
 ### Filesystem Usage
 
