@@ -13,6 +13,7 @@ const tool_layout = @import("baremetal/tool_layout.zig");
 const pal_fs = @import("pal/fs.zig");
 const pal_net = @import("pal/net.zig");
 const arp_protocol = @import("protocol/arp.zig");
+const dhcp_protocol = @import("protocol/dhcp.zig");
 const ethernet_protocol = @import("protocol/ethernet.zig");
 const ipv4_protocol = @import("protocol/ipv4.zig");
 const tcp_protocol = @import("protocol/tcp.zig");
@@ -73,6 +74,7 @@ const qemu_rtl8139_arp_probe_ok_code: u8 = 0x37;
 const qemu_rtl8139_ipv4_probe_ok_code: u8 = 0x38;
 const qemu_rtl8139_udp_probe_ok_code: u8 = 0x39;
 const qemu_rtl8139_tcp_probe_ok_code: u8 = 0x3A;
+const qemu_rtl8139_dhcp_probe_ok_code: u8 = 0x3B;
 const build_options = if (builtin.is_test)
     struct {
         pub const qemu_smoke: bool = false;
@@ -84,6 +86,7 @@ const build_options = if (builtin.is_test)
         pub const rtl8139_ipv4_probe: bool = false;
         pub const rtl8139_udp_probe: bool = false;
         pub const rtl8139_tcp_probe: bool = false;
+        pub const rtl8139_dhcp_probe: bool = false;
     }
 else
     @import("build_options");
@@ -96,6 +99,7 @@ const rtl8139_arp_probe_enabled: bool = build_options.rtl8139_arp_probe;
 const rtl8139_ipv4_probe_enabled: bool = build_options.rtl8139_ipv4_probe;
 const rtl8139_udp_probe_enabled: bool = build_options.rtl8139_udp_probe;
 const rtl8139_tcp_probe_enabled: bool = build_options.rtl8139_tcp_probe;
+const rtl8139_dhcp_probe_enabled: bool = build_options.rtl8139_dhcp_probe;
 
 const ata_probe_raw_lba: u32 = 300;
 const ata_probe_raw_block_count: u32 = 2;
@@ -277,6 +281,51 @@ const Rtl8139TcpProbeError = error{
     PacketFlagsMismatch,
     WindowSizeMismatch,
     PayloadMismatch,
+    FrameLengthMismatch,
+    CounterMismatch,
+};
+
+const Rtl8139DhcpProbeError = error{
+    UnsupportedPlatform,
+    DeviceNotFound,
+    ResetTimeout,
+    BufferProgramFailed,
+    MacReadFailed,
+    DataPathEnableFailed,
+    StateMagicMismatch,
+    BackendMismatch,
+    InitFlagMismatch,
+    HardwareBackedMismatch,
+    IoBaseMismatch,
+    TxFailed,
+    RxTimedOut,
+    LastFrameTooShort,
+    LastFrameNotIpv4,
+    LastIpv4DecodeFailed,
+    LastPacketNotUdp,
+    LastUdpDecodeFailed,
+    LastPacketNotDhcp,
+    LastDhcpDecodeFailed,
+    DataPathDropped,
+    TxCompletedNoRxInterrupt,
+    TxCompletedNoRxProgress,
+    RxProducerStalled,
+    RxProducerAdvancedNoFrame,
+    PacketMissing,
+    PacketDestinationMismatch,
+    PacketSourceMismatch,
+    PacketProtocolMismatch,
+    PacketSenderMismatch,
+    PacketTargetMismatch,
+    PacketPortsMismatch,
+    PacketOperationMismatch,
+    TransactionIdMismatch,
+    MessageTypeMismatch,
+    PacketClientMacMismatch,
+    ParameterRequestListMismatch,
+    FlagsMismatch,
+    MaxMessageSizeMismatch,
+    ChecksumMissing,
     FrameLengthMismatch,
     CounterMismatch,
 };
@@ -1375,6 +1424,10 @@ fn baremetalStart() callconv(.c) noreturn {
         runRtl8139TcpProbe() catch |err| qemuExit(rtl8139TcpProbeFailureCode(err));
         qemuExit(qemu_rtl8139_tcp_probe_ok_code);
     }
+    if (rtl8139_dhcp_probe_enabled) {
+        runRtl8139DhcpProbe() catch |err| qemuExit(rtl8139DhcpProbeFailureCode(err));
+        qemuExit(qemu_rtl8139_dhcp_probe_ok_code);
+    }
     ps2_input.init();
     tool_layout.init() catch unreachable;
     if (console_probe_banner_enabled) {
@@ -1717,6 +1770,34 @@ fn classifyTcpProbeTimeout(eth: *const BaremetalEthernetState) Rtl8139TcpProbeEr
     };
 }
 
+fn classifyDhcpProbeTimeout(eth: *const BaremetalEthernetState) Rtl8139DhcpProbeError {
+    if (eth.last_rx_len != 0) {
+        var frame: [pal_net.max_frame_len]u8 = undefined;
+        const copy_len = copyLastEthernetFrame(frame[0..]);
+        if (copy_len < ethernet_protocol.header_len) return error.LastFrameTooShort;
+        const eth_header = ethernet_protocol.Header.decode(frame[0..copy_len]) catch return error.LastFrameTooShort;
+        if (eth_header.ether_type != ethernet_protocol.ethertype_ipv4) return error.LastFrameNotIpv4;
+        const ipv4_packet = ipv4_protocol.decode(frame[ethernet_protocol.header_len..copy_len]) catch return error.LastIpv4DecodeFailed;
+        if (ipv4_packet.header.protocol != ipv4_protocol.protocol_udp) return error.LastPacketNotUdp;
+        const udp_packet = udp_protocol.decode(ipv4_packet.payload, ipv4_packet.header.source_ip, ipv4_packet.header.destination_ip) catch return error.LastUdpDecodeFailed;
+        if (!((udp_packet.source_port == dhcp_protocol.client_port and udp_packet.destination_port == dhcp_protocol.server_port) or
+            (udp_packet.source_port == dhcp_protocol.server_port and udp_packet.destination_port == dhcp_protocol.client_port)))
+        {
+            return error.LastPacketNotDhcp;
+        }
+        _ = dhcp_protocol.decode(udp_packet.payload) catch return error.LastDhcpDecodeFailed;
+    }
+
+    const timeout_class = classifyRtl8139DataPathTimeout(eth);
+    return switch (timeout_class) {
+        .DataPathDropped => error.DataPathDropped,
+        .TxCompletedNoRxInterrupt => error.TxCompletedNoRxInterrupt,
+        .TxCompletedNoRxProgress => error.TxCompletedNoRxProgress,
+        .RxProducerStalled => error.RxProducerStalled,
+        .RxProducerAdvancedNoFrame => error.RxProducerAdvancedNoFrame,
+    };
+}
+
 fn runRtl8139Ipv4Probe() Rtl8139Ipv4ProbeError!void {
     rtl8139.initDetailed() catch |err| return switch (err) {
         error.UnsupportedPlatform => error.UnsupportedPlatform,
@@ -2005,6 +2086,146 @@ fn rtl8139TcpProbeFailureCode(err: Rtl8139TcpProbeError) u8 {
         error.PayloadMismatch => 0xEA,
         error.FrameLengthMismatch => 0xEB,
         error.CounterMismatch => 0xEC,
+    };
+}
+
+fn runRtl8139DhcpProbe() Rtl8139DhcpProbeError!void {
+    rtl8139.initDetailed() catch |err| return switch (err) {
+        error.UnsupportedPlatform => error.UnsupportedPlatform,
+        error.DeviceNotFound => error.DeviceNotFound,
+        error.ResetTimeout => error.ResetTimeout,
+        error.BufferProgramFailed => error.BufferProgramFailed,
+        error.MacReadFailed => error.MacReadFailed,
+        error.DataPathEnableFailed => error.DataPathEnableFailed,
+    };
+
+    const eth = oc_ethernet_state_ptr();
+    if (eth.magic != abi.ethernet_magic) return error.StateMagicMismatch;
+    if (eth.backend != abi.ethernet_backend_rtl8139) return error.BackendMismatch;
+    if (eth.initialized == 0) return error.InitFlagMismatch;
+    if (!builtin.is_test and eth.hardware_backed == 0) return error.HardwareBackedMismatch;
+    if (eth.io_base == 0) return error.IoBaseMismatch;
+
+    const source_ip = if (builtin.is_test)
+        [4]u8{ 0, 0, 0, 0 }
+    else
+        [4]u8{ 192, 168, 56, 10 };
+    const destination_ip = if (builtin.is_test)
+        [4]u8{ 255, 255, 255, 255 }
+    else
+        [4]u8{ 192, 168, 56, 1 };
+    const source_port: u16 = if (builtin.is_test) dhcp_protocol.client_port else 4068;
+    const destination_port: u16 = if (builtin.is_test) dhcp_protocol.server_port else 4067;
+    const transaction_id: u32 = 0x1234_5678;
+    const parameter_request_list = [_]u8{
+        dhcp_protocol.option_subnet_mask,
+        dhcp_protocol.option_router,
+        dhcp_protocol.option_dns_server,
+        dhcp_protocol.option_hostname,
+    };
+    var dhcp_payload: [pal_net.max_ipv4_payload_len]u8 = undefined;
+    const dhcp_payload_len = dhcp_protocol.encodeDiscover(
+        dhcp_payload[0..],
+        eth.mac,
+        transaction_id,
+        parameter_request_list[0..],
+    ) catch return error.TxFailed;
+    const expected_wire_len = pal_net.sendUdpPacket(
+        ethernet_protocol.broadcast_mac,
+        source_ip,
+        destination_ip,
+        source_port,
+        destination_port,
+        dhcp_payload[0..dhcp_payload_len],
+    ) catch return error.TxFailed;
+    const expected_frame_len: u32 = @max(expected_wire_len, 60);
+
+    var attempts: usize = 0;
+    var packet_received = false;
+    var packet_storage: pal_net.UdpPacket = undefined;
+    while (attempts < 20_000) : (attempts += 1) {
+        packet_received = pal_net.pollUdpPacketStrictInto(&packet_storage) catch |err| return switch (err) {
+            error.NotIpv4 => error.LastFrameNotIpv4,
+            error.FrameTooShort, error.PacketTooShort => error.LastFrameTooShort,
+            error.InvalidVersion, error.UnsupportedOptions, error.InvalidTotalLength, error.HeaderChecksumMismatch => error.LastIpv4DecodeFailed,
+            error.InvalidLength, error.ChecksumMismatch => error.LastUdpDecodeFailed,
+            else => error.PacketMissing,
+        };
+        if (packet_received) break;
+        spinPause(1);
+    }
+
+    if (!packet_received) return classifyDhcpProbeTimeout(eth);
+    const packet = &packet_storage;
+    if (!std.mem.eql(u8, ethernet_protocol.broadcast_mac[0..], packet.ethernet_destination[0..])) return error.PacketDestinationMismatch;
+    if (!std.mem.eql(u8, eth.mac[0..], packet.ethernet_source[0..])) return error.PacketSourceMismatch;
+    if (packet.ipv4_header.protocol != ipv4_protocol.protocol_udp) return error.PacketProtocolMismatch;
+    if (!std.mem.eql(u8, source_ip[0..], packet.ipv4_header.source_ip[0..])) return error.PacketSenderMismatch;
+    if (!std.mem.eql(u8, destination_ip[0..], packet.ipv4_header.destination_ip[0..])) return error.PacketTargetMismatch;
+    if (packet.source_port != source_port or packet.destination_port != destination_port) return error.PacketPortsMismatch;
+    const decoded = dhcp_protocol.decode(packet.payload[0..packet.payload_len]) catch return error.LastDhcpDecodeFailed;
+    if (decoded.op != dhcp_protocol.boot_request) return error.PacketOperationMismatch;
+    if (decoded.transaction_id != transaction_id) return error.TransactionIdMismatch;
+    if (decoded.message_type == null or decoded.message_type.? != dhcp_protocol.message_type_discover) return error.MessageTypeMismatch;
+    if (!std.mem.eql(u8, eth.mac[0..], decoded.client_mac[0..])) return error.PacketClientMacMismatch;
+    if (decoded.parameter_request_list.len != parameter_request_list.len or !std.mem.eql(u8, parameter_request_list[0..], decoded.parameter_request_list[0..])) {
+        return error.ParameterRequestListMismatch;
+    }
+    if (decoded.flags != dhcp_protocol.flags_broadcast) return error.FlagsMismatch;
+    if (decoded.client_identifier.len != 1 + ethernet_protocol.mac_len) return error.PacketClientMacMismatch;
+    if (decoded.client_identifier[0] != dhcp_protocol.hardware_type_ethernet or !std.mem.eql(u8, eth.mac[0..], decoded.client_identifier[1 .. 1 + ethernet_protocol.mac_len])) {
+        return error.PacketClientMacMismatch;
+    }
+    if (decoded.max_message_size == null or decoded.max_message_size.? != 1500) return error.MaxMessageSizeMismatch;
+    if (packet.checksum_value == 0) return error.ChecksumMissing;
+    if (eth.last_rx_len != expected_frame_len) return error.FrameLengthMismatch;
+    if (eth.tx_packets == 0 or eth.rx_packets == 0) return error.CounterMismatch;
+}
+
+fn rtl8139DhcpProbeFailureCode(err: Rtl8139DhcpProbeError) u8 {
+    return switch (err) {
+        error.UnsupportedPlatform => 0x40,
+        error.DeviceNotFound => 0x41,
+        error.ResetTimeout => 0x42,
+        error.BufferProgramFailed => 0x43,
+        error.MacReadFailed => 0x44,
+        error.DataPathEnableFailed => 0x45,
+        error.StateMagicMismatch => 0x46,
+        error.BackendMismatch => 0x47,
+        error.InitFlagMismatch => 0x48,
+        error.HardwareBackedMismatch => 0x49,
+        error.IoBaseMismatch => 0x4A,
+        error.TxFailed => 0x4B,
+        error.RxTimedOut => 0x4C,
+        error.LastFrameTooShort => 0x4D,
+        error.LastFrameNotIpv4 => 0x4E,
+        error.LastIpv4DecodeFailed => 0x4F,
+        error.LastPacketNotUdp => 0x50,
+        error.LastUdpDecodeFailed => 0x51,
+        error.LastPacketNotDhcp => 0x52,
+        error.LastDhcpDecodeFailed => 0x53,
+        error.DataPathDropped => 0x54,
+        error.TxCompletedNoRxInterrupt => 0x55,
+        error.TxCompletedNoRxProgress => 0x56,
+        error.RxProducerStalled => 0x57,
+        error.RxProducerAdvancedNoFrame => 0x58,
+        error.PacketMissing => 0x59,
+        error.PacketDestinationMismatch => 0x5A,
+        error.PacketSourceMismatch => 0x5B,
+        error.PacketProtocolMismatch => 0x5C,
+        error.PacketSenderMismatch => 0x5D,
+        error.PacketTargetMismatch => 0x5E,
+        error.PacketPortsMismatch => 0x5F,
+        error.PacketOperationMismatch => 0x60,
+        error.TransactionIdMismatch => 0x61,
+        error.MessageTypeMismatch => 0x62,
+        error.PacketClientMacMismatch => 0x63,
+        error.ParameterRequestListMismatch => 0x64,
+        error.FlagsMismatch => 0x65,
+        error.MaxMessageSizeMismatch => 0x66,
+        error.ChecksumMissing => 0x67,
+        error.FrameLengthMismatch => 0x68,
+        error.CounterMismatch => 0x69,
     };
 }
 
@@ -10161,6 +10382,14 @@ test "baremetal rtl8139 tcp probe succeeds through mock device" {
     defer rtl8139.testDisableMockDevice();
 
     try runRtl8139TcpProbe();
+}
+
+test "baremetal rtl8139 dhcp probe succeeds through mock device" {
+    resetBaremetalRuntimeForTest();
+    rtl8139.testEnableMockDevice();
+    defer rtl8139.testDisableMockDevice();
+
+    try runRtl8139DhcpProbe();
 }
 
 test "baremetal storage export surface persists block writes and flush state" {

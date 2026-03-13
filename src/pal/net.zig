@@ -5,6 +5,7 @@ const abi = @import("../baremetal/abi.zig");
 const rtl8139 = @import("../baremetal/rtl8139.zig");
 const ethernet = @import("../protocol/ethernet.zig");
 const arp = @import("../protocol/arp.zig");
+const dhcp = @import("../protocol/dhcp.zig");
 const ipv4 = @import("../protocol/ipv4.zig");
 const tcp = @import("../protocol/tcp.zig");
 const udp = @import("../protocol/udp.zig");
@@ -23,9 +24,11 @@ pub const EthernetState = abi.BaremetalEthernetState;
 pub const Error = rtl8139.Error;
 pub const ArpPacket = arp.Packet;
 pub const ArpError = rtl8139.Error || arp.Error;
+pub const DhcpError = rtl8139.Error || ethernet.Error || ipv4.Error || udp.Error || dhcp.Error;
 pub const Ipv4Error = rtl8139.Error || ethernet.Error || ipv4.Error;
 pub const TcpError = rtl8139.Error || ethernet.Error || ipv4.Error || tcp.Error;
 pub const UdpError = rtl8139.Error || ethernet.Error || ipv4.Error || udp.Error;
+pub const StrictDhcpPollError = rtl8139.Error || ethernet.Error || ipv4.Error || udp.Error || dhcp.Error || error{ NotIpv4, NotUdp, NotDhcp };
 pub const StrictIpv4PollError = rtl8139.Error || ethernet.Error || ipv4.Error || error{NotIpv4};
 pub const StrictTcpPollError = rtl8139.Error || ethernet.Error || ipv4.Error || tcp.Error || error{ NotIpv4, NotTcp };
 pub const StrictUdpPollError = rtl8139.Error || ethernet.Error || ipv4.Error || udp.Error || error{ NotIpv4, NotUdp };
@@ -33,6 +36,10 @@ pub const max_frame_len: usize = 2048;
 pub const max_ipv4_payload_len: usize = max_frame_len - ethernet.header_len - ipv4.header_len;
 pub const max_tcp_payload_len: usize = max_ipv4_payload_len - tcp.header_len;
 pub const max_udp_payload_len: usize = max_ipv4_payload_len - udp.header_len;
+pub const max_dhcp_parameter_request_list_len: usize = 64;
+pub const max_dhcp_client_identifier_len: usize = 32;
+pub const max_dhcp_hostname_len: usize = 64;
+pub const max_dhcp_dns_servers: usize = 2;
 
 pub const Ipv4Packet = struct {
     ethernet_destination: [ethernet.mac_len]u8,
@@ -68,6 +75,46 @@ pub const TcpPacket = struct {
     urgent_pointer: u16,
     payload_len: usize,
     payload: [max_tcp_payload_len]u8,
+};
+
+pub const DhcpPacket = struct {
+    ethernet_destination: [ethernet.mac_len]u8,
+    ethernet_source: [ethernet.mac_len]u8,
+    ipv4_header: ipv4.Header,
+    source_port: u16,
+    destination_port: u16,
+    udp_checksum_value: u16,
+    op: u8,
+    transaction_id: u32,
+    flags: u16,
+    client_ip: [4]u8,
+    your_ip: [4]u8,
+    server_ip: [4]u8,
+    gateway_ip: [4]u8,
+    client_mac: [ethernet.mac_len]u8,
+    message_type: ?u8,
+    subnet_mask_valid: bool,
+    subnet_mask: [4]u8,
+    router_valid: bool,
+    router: [4]u8,
+    requested_ip_valid: bool,
+    requested_ip: [4]u8,
+    server_identifier_valid: bool,
+    server_identifier: [4]u8,
+    lease_time_valid: bool,
+    lease_time_seconds: u32,
+    max_message_size_valid: bool,
+    max_message_size: u16,
+    dns_server_count: usize,
+    dns_servers: [max_dhcp_dns_servers][4]u8,
+    parameter_request_list_len: usize,
+    parameter_request_list: [max_dhcp_parameter_request_list_len]u8,
+    client_identifier_len: usize,
+    client_identifier: [max_dhcp_client_identifier_len]u8,
+    hostname_len: usize,
+    hostname: [max_dhcp_hostname_len]u8,
+    options_len: usize,
+    options: [max_udp_payload_len]u8,
 };
 
 pub fn post(
@@ -253,6 +300,43 @@ pub fn sendUdpPacket(
     return try sendIpv4Frame(destination_mac, source_ip, destination_ip, ipv4.protocol_udp, segment[0..segment_len]);
 }
 
+pub fn sendDhcpDiscover(
+    transaction_id: u32,
+    client_mac: [ethernet.mac_len]u8,
+    parameter_request_list: []const u8,
+) DhcpError!u32 {
+    return sendDhcpDiscoverWithEnvelope(
+        ethernet.broadcast_mac,
+        .{ 0, 0, 0, 0 },
+        .{ 255, 255, 255, 255 },
+        transaction_id,
+        client_mac,
+        parameter_request_list,
+    );
+}
+
+pub fn sendDhcpDiscoverWithEnvelope(
+    destination_mac: [ethernet.mac_len]u8,
+    source_ip: [4]u8,
+    destination_ip: [4]u8,
+    transaction_id: u32,
+    client_mac: [ethernet.mac_len]u8,
+    parameter_request_list: []const u8,
+) DhcpError!u32 {
+    if (!initDevice()) return error.NotAvailable;
+
+    var segment: [max_ipv4_payload_len]u8 = undefined;
+    const segment_len = try dhcp.encodeDiscover(segment[0..], client_mac, transaction_id, parameter_request_list);
+    return try sendUdpPacket(
+        destination_mac,
+        source_ip,
+        destination_ip,
+        dhcp.client_port,
+        dhcp.server_port,
+        segment[0..segment_len],
+    );
+}
+
 pub fn sendTcpPacket(
     destination_mac: [ethernet.mac_len]u8,
     source_ip: [4]u8,
@@ -346,6 +430,102 @@ pub fn pollTcpPacket() TcpError!?TcpPacket {
     };
 }
 
+pub fn pollDhcpPacket() DhcpError!?DhcpPacket {
+    return pollDhcpPacketStrict() catch |err| switch (err) {
+        error.NotIpv4, error.NotUdp, error.NotDhcp => null,
+        error.NotAvailable => return error.NotAvailable,
+        error.NotInitialized => return error.NotInitialized,
+        error.FrameTooLarge => return error.FrameTooLarge,
+        error.HardwareFault => return error.HardwareFault,
+        error.Timeout => return error.Timeout,
+        error.BufferTooSmall => return error.BufferTooSmall,
+        error.PacketTooShort => return error.PacketTooShort,
+        error.InvalidVersion => return error.InvalidVersion,
+        error.UnsupportedOptions => return error.UnsupportedOptions,
+        error.InvalidTotalLength => return error.InvalidTotalLength,
+        error.PayloadTooLarge => return error.PayloadTooLarge,
+        error.HeaderChecksumMismatch => return error.HeaderChecksumMismatch,
+        error.FrameTooShort => return error.FrameTooShort,
+        error.InvalidLength => return error.InvalidLength,
+        error.ChecksumMismatch => return error.ChecksumMismatch,
+        error.InvalidOperation => return error.InvalidOperation,
+        error.InvalidHardwareType => return error.InvalidHardwareType,
+        error.InvalidHardwareLength => return error.InvalidHardwareLength,
+        error.InvalidMagicCookie => return error.InvalidMagicCookie,
+        error.OptionTruncated => return error.OptionTruncated,
+        error.FieldLengthMismatch => return error.FieldLengthMismatch,
+    };
+}
+
+pub fn pollDhcpPacketStrictInto(result: *DhcpPacket) StrictDhcpPollError!bool {
+    const packet_opt = try pollUdpPacketStrict();
+    if (packet_opt) |packet| {
+        if (!((packet.source_port == dhcp.client_port and packet.destination_port == dhcp.server_port) or
+            (packet.source_port == dhcp.server_port and packet.destination_port == dhcp.client_port)))
+        {
+            return error.NotDhcp;
+        }
+
+        const decoded = try dhcp.decode(packet.payload[0..packet.payload_len]);
+        if (decoded.parameter_request_list.len > max_dhcp_parameter_request_list_len) return error.PayloadTooLarge;
+        if (decoded.client_identifier.len > max_dhcp_client_identifier_len) return error.PayloadTooLarge;
+        if (decoded.hostname.len > max_dhcp_hostname_len) return error.PayloadTooLarge;
+        if (decoded.options.len > max_udp_payload_len) return error.PayloadTooLarge;
+
+        result.* = .{
+            .ethernet_destination = packet.ethernet_destination,
+            .ethernet_source = packet.ethernet_source,
+            .ipv4_header = packet.ipv4_header,
+            .source_port = packet.source_port,
+            .destination_port = packet.destination_port,
+            .udp_checksum_value = packet.checksum_value,
+            .op = decoded.op,
+            .transaction_id = decoded.transaction_id,
+            .flags = decoded.flags,
+            .client_ip = decoded.client_ip,
+            .your_ip = decoded.your_ip,
+            .server_ip = decoded.server_ip,
+            .gateway_ip = decoded.gateway_ip,
+            .client_mac = decoded.client_mac,
+            .message_type = decoded.message_type,
+            .subnet_mask_valid = decoded.subnet_mask != null,
+            .subnet_mask = decoded.subnet_mask orelse [_]u8{ 0, 0, 0, 0 },
+            .router_valid = decoded.router != null,
+            .router = decoded.router orelse [_]u8{ 0, 0, 0, 0 },
+            .requested_ip_valid = decoded.requested_ip != null,
+            .requested_ip = decoded.requested_ip orelse [_]u8{ 0, 0, 0, 0 },
+            .server_identifier_valid = decoded.server_identifier != null,
+            .server_identifier = decoded.server_identifier orelse [_]u8{ 0, 0, 0, 0 },
+            .lease_time_valid = decoded.lease_time_seconds != null,
+            .lease_time_seconds = decoded.lease_time_seconds orelse 0,
+            .max_message_size_valid = decoded.max_message_size != null,
+            .max_message_size = decoded.max_message_size orelse 0,
+            .dns_server_count = decoded.dns_server_count,
+            .dns_servers = [_][4]u8{
+                [_]u8{ 0, 0, 0, 0 },
+                [_]u8{ 0, 0, 0, 0 },
+            },
+            .parameter_request_list_len = decoded.parameter_request_list.len,
+            .parameter_request_list = [_]u8{0} ** max_dhcp_parameter_request_list_len,
+            .client_identifier_len = decoded.client_identifier.len,
+            .client_identifier = [_]u8{0} ** max_dhcp_client_identifier_len,
+            .hostname_len = decoded.hostname.len,
+            .hostname = [_]u8{0} ** max_dhcp_hostname_len,
+            .options_len = decoded.options.len,
+            .options = [_]u8{0} ** max_udp_payload_len,
+        };
+        if (decoded.dns_server_count > 0) {
+            std.mem.copyForwards([4]u8, result.dns_servers[0..decoded.dns_server_count], decoded.dns_servers[0..decoded.dns_server_count]);
+        }
+        std.mem.copyForwards(u8, result.parameter_request_list[0..decoded.parameter_request_list.len], decoded.parameter_request_list);
+        std.mem.copyForwards(u8, result.client_identifier[0..decoded.client_identifier.len], decoded.client_identifier);
+        std.mem.copyForwards(u8, result.hostname[0..decoded.hostname.len], decoded.hostname);
+        std.mem.copyForwards(u8, result.options[0..decoded.options.len], decoded.options);
+        return true;
+    }
+    return false;
+}
+
 pub fn pollTcpPacketStrictInto(result: *TcpPacket) StrictTcpPollError!bool {
     var packet_opt = try pollIpv4PacketStrict();
     if (packet_opt) |*packet| {
@@ -378,6 +558,14 @@ pub fn pollTcpPacketStrictInto(result: *TcpPacket) StrictTcpPollError!bool {
 pub fn pollTcpPacketStrict() StrictTcpPollError!?TcpPacket {
     var result: TcpPacket = undefined;
     if (try pollTcpPacketStrictInto(&result)) {
+        return result;
+    }
+    return null;
+}
+
+pub fn pollDhcpPacketStrict() StrictDhcpPollError!?DhcpPacket {
+    var result: DhcpPacket = undefined;
+    if (try pollDhcpPacketStrictInto(&result)) {
         return result;
     }
     return null;
@@ -523,6 +711,53 @@ test "baremetal net pal sends and parses tcp packet through rtl8139 mock device"
     try std.testing.expectEqualSlices(u8, source_ip[0..], packet.ipv4_header.source_ip[0..]);
     try std.testing.expectEqualSlices(u8, destination_ip[0..], packet.ipv4_header.destination_ip[0..]);
     try std.testing.expectEqualSlices(u8, payload, packet.payload[0..packet.payload_len]);
+}
+
+test "baremetal net pal sends and parses dhcp discover through rtl8139 mock device" {
+    rtl8139.testEnableMockDevice();
+    defer rtl8139.testDisableMockDevice();
+
+    try std.testing.expect(initDevice());
+    const client_mac = macAddress();
+    const parameter_request_list = [_]u8{
+        dhcp.option_subnet_mask,
+        dhcp.option_router,
+        dhcp.option_dns_server,
+        dhcp.option_hostname,
+    };
+
+    _ = try sendDhcpDiscover(0x1234_5678, client_mac, parameter_request_list[0..]);
+
+    const packet = (try pollDhcpPacket()).?;
+    try std.testing.expectEqual(@as(u16, dhcp.client_port), packet.source_port);
+    try std.testing.expectEqual(@as(u16, dhcp.server_port), packet.destination_port);
+    try std.testing.expectEqual(ipv4.protocol_udp, packet.ipv4_header.protocol);
+    try std.testing.expectEqualSlices(u8, &[_]u8{ 0, 0, 0, 0 }, packet.ipv4_header.source_ip[0..]);
+    try std.testing.expectEqualSlices(u8, &[_]u8{ 255, 255, 255, 255 }, packet.ipv4_header.destination_ip[0..]);
+    try std.testing.expectEqualSlices(u8, ethernet.broadcast_mac[0..], packet.ethernet_destination[0..]);
+    try std.testing.expectEqualSlices(u8, client_mac[0..], packet.ethernet_source[0..]);
+    try std.testing.expectEqual(@as(u8, dhcp.boot_request), packet.op);
+    try std.testing.expectEqual(@as(u32, 0x1234_5678), packet.transaction_id);
+    try std.testing.expectEqual(@as(u16, dhcp.flags_broadcast), packet.flags);
+    try std.testing.expectEqual(dhcp.message_type_discover, packet.message_type.?);
+    try std.testing.expectEqualSlices(u8, client_mac[0..], packet.client_mac[0..]);
+    try std.testing.expectEqualSlices(u8, parameter_request_list[0..], packet.parameter_request_list[0..packet.parameter_request_list_len]);
+    try std.testing.expect(packet.max_message_size_valid);
+    try std.testing.expectEqual(@as(u16, 1500), packet.max_message_size);
+    try std.testing.expect(packet.udp_checksum_value != 0);
+}
+
+test "baremetal net pal strict dhcp poll reports non-dhcp udp frame" {
+    rtl8139.testEnableMockDevice();
+    defer rtl8139.testDisableMockDevice();
+
+    try std.testing.expect(initDevice());
+    const source_ip = [4]u8{ 192, 168, 56, 10 };
+    const destination_ip = [4]u8{ 192, 168, 56, 1 };
+    const payload = "OPENCLAW-UDP";
+
+    _ = try sendUdpPacket(macAddress(), source_ip, destination_ip, 4321, 9001, payload);
+    try std.testing.expectError(error.NotDhcp, pollDhcpPacketStrict());
 }
 
 test "baremetal net pal strict tcp poll reports non-tcp ipv4 frame" {

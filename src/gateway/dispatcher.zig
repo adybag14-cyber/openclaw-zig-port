@@ -3401,7 +3401,9 @@ pub fn dispatch(allocator: std.mem.Allocator, frame_json: []const u8) ![]u8 {
         });
     }
 
-    if (std.ascii.eqlIgnoreCase(req.method, "agent.identity.get")) {
+    if (std.ascii.eqlIgnoreCase(req.method, "agent.identity.get") or
+        std.ascii.eqlIgnoreCase(req.method, "gateway.identity.get"))
+    {
         const cfg = currentConfig();
         const gateway_token_required = cfg.gateway.require_token or !isLoopbackBind(cfg.http_bind);
         const runtime = getRuntime();
@@ -9326,6 +9328,7 @@ fn shouldEnforceGuard(method: []const u8) bool {
     if (std.ascii.eqlIgnoreCase(method, "voicewake.set")) return false;
     if (std.ascii.eqlIgnoreCase(method, "models.list")) return false;
     if (std.ascii.eqlIgnoreCase(method, "agent.identity.get")) return false;
+    if (std.ascii.eqlIgnoreCase(method, "gateway.identity.get")) return false;
     if (std.ascii.eqlIgnoreCase(method, "agents.list")) return false;
     if (std.ascii.eqlIgnoreCase(method, "agents.create")) return false;
     if (std.ascii.eqlIgnoreCase(method, "agents.update")) return false;
@@ -15928,6 +15931,14 @@ test "dispatch compat agent and skills methods return contracts" {
     try std.testing.expect(std.mem.indexOf(u8, identity, "\"authMode\":\"none\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, identity, "\"startedAt\":\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, identity, "\"startedAtMs\":") != null);
+
+    const gateway_identity = try dispatch(allocator, "{\"id\":\"compat-gateway-identity\",\"method\":\"gateway.identity.get\",\"params\":{}}");
+    defer allocator.free(gateway_identity);
+    try std.testing.expect(std.mem.indexOf(u8, gateway_identity, "\"id\":\"openclaw-zig\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, gateway_identity, "\"runtime\":{\"statePath\":") != null);
+    try std.testing.expect(std.mem.indexOf(u8, gateway_identity, "\"authMode\":\"none\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, gateway_identity, "\"startedAt\":\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, gateway_identity, "\"startedAtMs\":") != null);
 
     const created = try dispatch(allocator, "{\"id\":\"compat-agent-create\",\"method\":\"agents.create\",\"params\":{\"name\":\"zig-agent\",\"description\":\"parity test\",\"model\":\"gpt-5.2\"}}");
     defer allocator.free(created);

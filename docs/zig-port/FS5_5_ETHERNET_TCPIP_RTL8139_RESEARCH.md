@@ -20,7 +20,7 @@ The first strict Ethernet slice is now complete on the local source of truth:
 - `src/baremetal_main.zig` exports the bare-metal Ethernet ABI surface
 - `scripts/baremetal-qemu-rtl8139-probe-check.ps1` is green and proves live MAC readout, TX, RX loopback, payload validation, and TX/RX counter advance over the freestanding PVH image
 
-This report remains relevant because the first strict networking lift above ARP is now implemented, and the next remaining strict networking slices are TCP, DHCP, and DNS above the now-real L2 + ARP + IPv4 + UDP path.
+This report remains relevant because the first strict networking lift above ARP is now implemented, DHCP framing/decode is now also implemented, and the next remaining strict networking slices are DNS and full TCP handshake/connection management above the now-real L2 + ARP + IPv4 + UDP + staged TCP + DHCP path.
 
 ## Scope of This First Slice
 This slice must deliver a real, deterministic Layer 2 path:
@@ -45,7 +45,7 @@ This slice originally did **not** attempt to finish:
 - DNS
 - HTTP
 
-That constraint is now partially lifted. The repo now has real ARP, IPv4, and UDP encode/decode paths above the strict Ethernet L2 slice, but it still does **not** claim TCP, DHCP, or DNS completion.
+That constraint is now partially lifted. The repo now has real ARP, IPv4, UDP, staged TCP framing, and DHCP discover framing/decode above the strict Ethernet L2 slice, but it still does **not** claim DNS or full TCP handshake/connection-management completion.
 
 ## Current ARP + IPv4 + UDP Slice Status
 
@@ -68,7 +68,7 @@ The first strict ARP + IPv4 + UDP slices are now complete on the local source of
 - `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1` now proves live IPv4 frame transmission, receipt, decode, and counter advance against the freestanding PVH image
 - `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1` now proves live UDP datagram transmission, receipt, decode, checksum validation, and counter advance against the freestanding PVH image
 
-This closes the first real Ethernet + ARP + IPv4 + UDP slice above the hardware driver without overstating the rest of the stack. TCP, DHCP, and DNS still remain open.
+This closes the first real Ethernet + ARP + IPv4 + UDP slice above the hardware driver without overstating the rest of the stack. Since then, staged TCP framing/payload and DHCP discover framing/decode have also been proven. DNS and full TCP handshake/connection management still remain open.
 
 ---
 

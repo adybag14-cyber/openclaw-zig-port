@@ -299,7 +299,12 @@ Notes:
     - `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`
     - `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1`
   - those proofs now cover live ARP request transmission, IPv4 frame encode/decode, UDP datagram encode/decode, TCP segment encode/decode, and TX/RX counter advance over the freestanding PVH image
-- The strict staged TCP gate is now the framing/payload slice over RTL8139 loopback. DHCP, DNS, and full TCP handshake/connection management remain open.
+- The strict staged TCP gate is now the framing/payload slice over RTL8139 loopback.
+- A real DHCP framing/decode slice is now also closed locally:
+  - `src/protocol/dhcp.zig` provides strict DHCP discover encode/decode
+  - `src/pal/net.zig` exposes DHCP send/poll helpers for the hosted/mock path
+  - `scripts/baremetal-qemu-rtl8139-dhcp-probe-check.ps1` now proves real RTL8139 TX/RX of a DHCP discover payload over a loopback-safe UDP transport envelope, followed by strict DHCP decode and TX/RX counter advance
+- DNS and full TCP handshake/connection management remain open.
 
 ### Filesystem Usage
 

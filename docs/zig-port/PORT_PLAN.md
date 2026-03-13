@@ -76,7 +76,8 @@ Full-stack replacement execution reference:
       - live IPv4 frame loopback + decode over the freestanding PVH artifact
       - live UDP datagram loopback + decode over the freestanding PVH artifact
       - live TCP segment framing/payload loopback + decode over the freestanding PVH artifact
-    - DHCP, DNS, and full TCP handshake/connection management remain the next strict networking stage above that now-real L2 + ARP + IPv4 + UDP + staged TCP slice
+    - DHCP framing/decode is now also proven over the real RTL8139 path via `src/protocol/dhcp.zig`, `src/pal/net.zig`, and `scripts/baremetal-qemu-rtl8139-dhcp-probe-check.ps1`
+    - DNS and full TCP handshake/connection management remain the next strict networking stage above that now-real L2 + ARP + IPv4 + UDP + staged TCP + DHCP slice
   - path-based filesystem usage is now also shipped above the shared backend:
     - `src/baremetal/filesystem.zig` implements directory creation plus file read/write/stat
     - `src/pal/fs.zig` routes the freestanding PAL through that layer

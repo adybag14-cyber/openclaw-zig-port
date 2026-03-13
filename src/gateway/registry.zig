@@ -25,6 +25,7 @@ pub const supported_methods = [_][]const u8{
     "models.list",
     "agent",
     "agent.identity.get",
+    "gateway.identity.get",
     "agent.wait",
     "agents.list",
     "agents.create",

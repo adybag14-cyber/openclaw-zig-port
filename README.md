@@ -56,7 +56,11 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
     - `src/protocol/tcp.zig` provides strict TCP framing, checksum, and payload decode without pretending the full state machine is done
     - `src/pal/net.zig` now exposes `sendArpRequest` / `pollArpPacket`, `sendIpv4Frame` / `pollIpv4PacketStrict`, `sendUdpPacket` / `pollUdpPacketStrictInto`, and `sendTcpPacket` / `pollTcpPacketStrictInto`
     - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`, and `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1` now prove live ARP, IPv4, UDP, and TCP framing/payload loopback over the freestanding PVH artifact
-  - DHCP and DNS remain open, and full TCP handshake/connection management is still a later networking depth beyond this real TCP framing slice
+  - DHCP framing/decode is now also proven on the real RTL8139 path:
+    - `src/protocol/dhcp.zig` provides strict DHCP discover encode/decode
+    - `src/pal/net.zig` exposes DHCP send/poll helpers for the hosted/mock path
+    - `scripts/baremetal-qemu-rtl8139-dhcp-probe-check.ps1` now proves real RTL8139 TX/RX of a DHCP discover payload over a loopback-safe UDP transport envelope, followed by strict DHCP decode and TX/RX counter advance
+  - DNS and full TCP handshake/connection management remain open networking depth above the now-real L2 + ARP + IPv4 + UDP + TCP framing + DHCP framing slice
   - path-based filesystem usage is now locally strict-closed:
     - `src/baremetal/filesystem.zig` implements directory creation plus file read/write/stat on the shared storage backend
     - `src/pal/fs.zig` routes the freestanding PAL filesystem surface through that layer
