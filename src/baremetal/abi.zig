@@ -4,6 +4,7 @@ pub const status_magic: u32 = 0x4f43424d; // "OCBM"
 pub const command_magic: u32 = 0x4f43434d; // "OCCM"
 pub const kernel_info_magic: u32 = 0x4f434b49; // "OCKI"
 pub const boot_diag_magic: u32 = 0x4f434244; // "OCBD"
+pub const console_magic: u32 = 0x4f43434e; // "OCCN"
 
 pub const api_version: u16 = 2;
 
@@ -46,6 +47,7 @@ pub const feature_timer_export: u32 = 1 << 26;
 pub const feature_wake_queue_export: u32 = 1 << 27;
 pub const feature_syscall_abi_v2: u32 = 1 << 28;
 pub const feature_interrupt_mask_export: u32 = 1 << 29;
+pub const feature_console_export: u32 = 1 << 30;
 
 pub const kernel_abi_multiboot2: u32 = 1 << 0;
 pub const kernel_abi_command_mailbox: u32 = 1 << 1;
@@ -74,6 +76,7 @@ pub const kernel_abi_timer: u32 = 1 << 23;
 pub const kernel_abi_wake_queue: u32 = 1 << 24;
 pub const kernel_abi_syscall_abi_v2: u32 = 1 << 25;
 pub const kernel_abi_interrupt_mask: u32 = 1 << 26;
+pub const kernel_abi_console: u32 = 1 << 27;
 
 pub const command_nop: u16 = 0;
 pub const command_set_health_code: u16 = 1;
@@ -205,6 +208,9 @@ pub const interrupt_mask_profile_external_all: u8 = 1;
 pub const interrupt_mask_profile_external_high: u8 = 2;
 pub const interrupt_mask_profile_custom: u8 = 255;
 
+pub const console_backend_host_buffer: u8 = 0;
+pub const console_backend_vga_text: u8 = 1;
+
 pub const BaremetalStatus = extern struct {
     magic: u32,
     api_version: u16,
@@ -252,6 +258,21 @@ pub const BaremetalBootDiagnostics = extern struct {
     stack_pointer_snapshot: u64,
     phase_changes: u32,
     reserved1: u32,
+};
+
+pub const BaremetalConsoleState = extern struct {
+    magic: u32,
+    api_version: u16,
+    cols: u16,
+    rows: u16,
+    cursor_row: u16,
+    cursor_col: u16,
+    attribute: u8,
+    backend: u8,
+    reserved0: u16,
+    write_count: u32,
+    scroll_count: u32,
+    clear_count: u32,
 };
 
 pub const BaremetalCommandEvent = extern struct {
@@ -472,7 +493,8 @@ pub fn defaultFeatureFlags() u32 {
         feature_timer_export |
         feature_wake_queue_export |
         feature_syscall_abi_v2 |
-        feature_interrupt_mask_export;
+        feature_interrupt_mask_export |
+        feature_console_export;
 }
 
 pub fn defaultAbiFlags() u32 {
@@ -502,7 +524,8 @@ pub fn defaultAbiFlags() u32 {
         kernel_abi_timer |
         kernel_abi_wake_queue |
         kernel_abi_syscall_abi_v2 |
-        kernel_abi_interrupt_mask;
+        kernel_abi_interrupt_mask |
+        kernel_abi_console;
 }
 
 pub fn modeIsValid(mode: u8) bool {
@@ -548,6 +571,7 @@ test "baremetal kernel info size contract stays stable" {
     try std.testing.expectEqual(@as(usize, 20), @sizeOf(BaremetalKernelInfo));
     try std.testing.expectEqual(@as(usize, 32), @sizeOf(BaremetalCommand));
     try std.testing.expectEqual(@as(usize, 48), @sizeOf(BaremetalBootDiagnostics));
+    try std.testing.expectEqual(@as(usize, 32), @sizeOf(BaremetalConsoleState));
     try std.testing.expectEqual(@as(usize, 32), @sizeOf(BaremetalCommandEvent));
     try std.testing.expectEqual(@as(usize, 24), @sizeOf(BaremetalHealthEvent));
     try std.testing.expectEqual(@as(usize, 24), @sizeOf(BaremetalModeEvent));

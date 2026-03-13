@@ -2,10 +2,12 @@ const std = @import("std");
 const builtin = @import("builtin");
 const abi = @import("baremetal/abi.zig");
 const x86_bootstrap = @import("baremetal/x86_bootstrap.zig");
+const vga_text_console = @import("baremetal/vga_text_console.zig");
 const BaremetalStatus = abi.BaremetalStatus;
 const BaremetalCommand = abi.BaremetalCommand;
 const BaremetalKernelInfo = abi.BaremetalKernelInfo;
 const BaremetalBootDiagnostics = abi.BaremetalBootDiagnostics;
+const BaremetalConsoleState = abi.BaremetalConsoleState;
 const BaremetalCommandEvent = abi.BaremetalCommandEvent;
 const BaremetalHealthEvent = abi.BaremetalHealthEvent;
 const BaremetalModeEvent = abi.BaremetalModeEvent;
@@ -40,7 +42,15 @@ const multiboot2_magic: u32 = 0xE85250D6;
 const multiboot2_architecture_i386: u32 = 0;
 const qemu_debug_exit_port: u16 = 0xF4;
 const qemu_boot_ok_code: u8 = 0x2A;
-const qemu_smoke_enabled: bool = if (builtin.is_test) false else @import("build_options").qemu_smoke;
+const build_options = if (builtin.is_test)
+    struct {
+        pub const qemu_smoke: bool = false;
+        pub const console_probe_banner: bool = false;
+    }
+else
+    @import("build_options");
+const qemu_smoke_enabled: bool = build_options.qemu_smoke;
+const console_probe_banner_enabled: bool = build_options.console_probe_banner;
 
 const Multiboot2Header = extern struct {
     magic: u32,
@@ -270,6 +280,26 @@ pub export fn oc_boot_diag_capture_stack() u64 {
     const snapshot = captureStackPointer();
     boot_diagnostics.stack_pointer_snapshot = snapshot;
     return snapshot;
+}
+
+pub export fn oc_console_state_ptr() *const BaremetalConsoleState {
+    return vga_text_console.statePtr();
+}
+
+pub export fn oc_console_init() void {
+    vga_text_console.init();
+}
+
+pub export fn oc_console_clear() void {
+    vga_text_console.clear();
+}
+
+pub export fn oc_console_putc(byte: u8) void {
+    vga_text_console.putByte(byte);
+}
+
+pub export fn oc_console_cell(index: u32) u16 {
+    return vga_text_console.cell(index);
 }
 
 pub export fn oc_command_history_capacity() u32 {
@@ -923,6 +953,11 @@ pub export fn oc_tick_n(iterations: u32) void {
 fn baremetalStart() callconv(.c) noreturn {
     if (qemu_smoke_enabled) {
         qemuExit(qemu_boot_ok_code);
+    }
+    vga_text_console.init();
+    if (console_probe_banner_enabled) {
+        vga_text_console.clear();
+        vga_text_console.write("OK");
     }
     setBootPhase(abi.boot_phase_init, abi.boot_phase_change_reason_boot);
     x86_bootstrap.init();
@@ -2375,6 +2410,7 @@ fn resetBaremetalRuntimeForTest() void {
     oc_syscall_reset();
     oc_timer_reset();
     oc_wake_queue_clear();
+    vga_text_console.resetForTest();
 }
 
 fn captureStackPointer() u64 {
@@ -8911,4 +8947,30 @@ test "baremetal interrupt wait timeout clamps near max tick without wraparound" 
     try std.testing.expectEqual(@as(u8, abi.task_state_ready), oc_scheduler_task(0).state);
     try std.testing.expectEqual(@as(u8, abi.wake_reason_timer), oc_wake_queue_event(0).reason);
     try std.testing.expectEqual(std.math.maxInt(u64), oc_wake_queue_event(0).tick);
+}
+
+test "baremetal console export surface updates host-backed console state" {
+    resetBaremetalRuntimeForTest();
+
+    const console = oc_console_state_ptr();
+    try std.testing.expectEqual(@as(u32, abi.console_magic), console.magic);
+    try std.testing.expectEqual(@as(u16, abi.api_version), console.api_version);
+    try std.testing.expectEqual(@as(u16, 80), console.cols);
+    try std.testing.expectEqual(@as(u16, 25), console.rows);
+    try std.testing.expectEqual(@as(u8, abi.console_backend_host_buffer), console.backend);
+    try std.testing.expectEqual(@as(u32, 0), console.write_count);
+    try std.testing.expectEqual(@as(u32, 0), console.scroll_count);
+    try std.testing.expectEqual(@as(u32, 0), console.clear_count);
+
+    oc_console_clear();
+    try std.testing.expectEqual(@as(u32, 1), console.clear_count);
+    try std.testing.expectEqual((@as(u16, console.attribute) << 8) | @as(u16, ' '), oc_console_cell(0));
+
+    oc_console_putc('O');
+    oc_console_putc('K');
+    try std.testing.expectEqual(@as(u32, 2), console.write_count);
+    try std.testing.expectEqual(@as(u16, 0), console.cursor_row);
+    try std.testing.expectEqual(@as(u16, 2), console.cursor_col);
+    try std.testing.expectEqual((@as(u16, console.attribute) << 8) | @as(u16, 'O'), oc_console_cell(0));
+    try std.testing.expectEqual((@as(u16, console.attribute) << 8) | @as(u16, 'K'), oc_console_cell(1));
 }
