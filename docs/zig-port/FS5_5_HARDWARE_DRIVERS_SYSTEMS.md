@@ -272,12 +272,30 @@ Current local source-of-truth evidence:
 
 ### TCP/IP
 
-Status: `Not started`
+Status: `In progress`
 
 Notes:
 
-- strict Ethernet L2 closure does **not** imply ARP, IPv4, UDP, DHCP, DNS, or TCP closure
-- the next strict networking slice is packet framing and exchange above the now-real RTL8139 raw-frame path
+- strict Ethernet L2 closure did **not** imply ARP, IPv4, UDP, DHCP, DNS, or TCP closure
+- the first strict networking slices above the raw-frame RTL8139 path are now complete locally:
+  - `src/protocol/ethernet.zig` encodes and decodes Ethernet headers
+  - `src/protocol/arp.zig` encodes ARP request frames and decodes ARP frames
+  - `src/protocol/ipv4.zig` encodes and decodes IPv4 headers and validates header checksums
+  - `src/protocol/udp.zig` encodes and decodes UDP datagrams and validates pseudo-header checksums
+  - `src/pal/net.zig` exposes:
+    - `sendArpRequest`
+    - `pollArpPacket`
+    - `sendIpv4Frame`
+    - `pollIpv4PacketStrict`
+    - `sendUdpPacket`
+    - `pollUdpPacketStrictInto`
+  - host regressions prove mock-device ARP, IPv4, and UDP loopback/decode through the RTL8139 path
+  - live QEMU proofs now pass:
+    - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`
+    - `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`
+    - `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`
+  - those proofs now cover live ARP request transmission, IPv4 frame encode/decode, UDP datagram encode/decode, and TX/RX counter advance over the freestanding PVH image
+- TCP, DHCP, and DNS remain open
 
 ### Filesystem Usage
 
