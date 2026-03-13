@@ -39,6 +39,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - shared storage backend routing is now live through `src/baremetal/storage_backend.zig`
   - `src/baremetal/ata_pio_disk.zig` now provides a real ATA PIO path with `IDENTIFY`, `READ`, `WRITE`, and `FLUSH`
   - PAL storage and bare-metal tool-layout now route through the backend facade instead of talking directly to the RAM disk
+  - `scripts/baremetal-qemu-ata-storage-probe-check.ps1` now proves live ATA-backed raw block mutation + readback plus ATA-backed tool-layout and filesystem persistence against the freestanding PVH artifact
   - path-based filesystem usage is now locally strict-closed:
     - `src/baremetal/filesystem.zig` implements directory creation plus file read/write/stat on the shared storage backend
     - `src/pal/fs.zig` routes the freestanding PAL filesystem surface through that layer

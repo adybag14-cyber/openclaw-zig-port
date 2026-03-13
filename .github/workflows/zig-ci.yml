@@ -157,6 +157,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-command-loop-check.ps1
 
+      - name: Bare-metal QEMU ATA storage probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-ata-storage-probe-check.ps1
+
       - name: Bare-metal QEMU mailbox header validation probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-mailbox-header-validation-probe-check.ps1

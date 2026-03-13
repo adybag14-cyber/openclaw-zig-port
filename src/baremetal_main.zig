@@ -57,15 +57,46 @@ const multiboot2_magic: u32 = 0xE85250D6;
 const multiboot2_architecture_i386: u32 = 0;
 const qemu_debug_exit_port: u16 = 0xF4;
 const qemu_boot_ok_code: u8 = 0x2A;
+const qemu_ata_storage_probe_ok_code: u8 = 0x34;
 const build_options = if (builtin.is_test)
     struct {
         pub const qemu_smoke: bool = false;
         pub const console_probe_banner: bool = false;
+        pub const ata_storage_probe: bool = false;
     }
 else
     @import("build_options");
 const qemu_smoke_enabled: bool = build_options.qemu_smoke;
 const console_probe_banner_enabled: bool = build_options.console_probe_banner;
+const ata_storage_probe_enabled: bool = build_options.ata_storage_probe;
+
+const ata_probe_raw_lba: u32 = 300;
+const ata_probe_raw_block_count: u32 = 2;
+const ata_probe_raw_seed: u8 = 0x41;
+const ata_probe_tool_slot_id: u32 = 1;
+const ata_probe_tool_slot_byte_len: u32 = 600;
+const ata_probe_tool_slot_seed: u8 = 0x30;
+const ata_probe_tool_slot_expected_lba: u32 = tool_layout.slot_data_lba + (@as(u32, ata_probe_tool_slot_id) * @as(u32, tool_layout.slot_block_capacity));
+const ata_probe_filesystem_dir = "/runtime/state";
+const ata_probe_filesystem_path = "/runtime/state/ata.json";
+const ata_probe_filesystem_payload = "{\"disk\":\"ata\"}";
+
+const AtaStorageProbeError = error{
+    AtaBackendUnavailable,
+    AtaCapacityTooSmall,
+    RawPatternWriteFailed,
+    RawPatternFlushFailed,
+    RawPatternReadbackFailed,
+    ToolLayoutInitFailed,
+    ToolLayoutWriteFailed,
+    ToolLayoutReadbackFailed,
+    ToolLayoutReloadFailed,
+    FilesystemInitFailed,
+    FilesystemDirCreateFailed,
+    FilesystemWriteFailed,
+    FilesystemReadbackFailed,
+    FilesystemReloadFailed,
+};
 
 const Multiboot2Header = extern struct {
     magic: u32,
@@ -1074,6 +1105,10 @@ fn baremetalStart() callconv(.c) noreturn {
     }
     vga_text_console.init();
     storage_backend.init();
+    if (ata_storage_probe_enabled) {
+        runAtaStorageProbe() catch |err| qemuExit(ataStorageProbeFailureCode(err));
+        qemuExit(qemu_ata_storage_probe_ok_code);
+    }
     ps2_input.init();
     tool_layout.init() catch unreachable;
     if (console_probe_banner_enabled) {
@@ -1091,6 +1126,96 @@ fn baremetalStart() callconv(.c) noreturn {
         oc_tick();
         spinPause(100_000);
     }
+}
+
+fn runAtaStorageProbe() AtaStorageProbeError!void {
+    storage_backend.init();
+    const storage = storage_backend.statePtr();
+    if (storage.backend != abi.storage_backend_ata_pio or storage.mounted == 0) {
+        return error.AtaBackendUnavailable;
+    }
+    if (storage.block_count <= ata_probe_raw_lba + ata_probe_raw_block_count) {
+        return error.AtaCapacityTooSmall;
+    }
+
+    if (oc_storage_write_pattern(ata_probe_raw_lba, ata_probe_raw_block_count, ata_probe_raw_seed) != abi.result_ok) {
+        return error.RawPatternWriteFailed;
+    }
+    if (oc_storage_flush() != abi.result_ok) {
+        return error.RawPatternFlushFailed;
+    }
+    if (oc_storage_read_byte(ata_probe_raw_lba, 0) != ata_probe_raw_seed or
+        oc_storage_read_byte(ata_probe_raw_lba, 1) != ata_probe_raw_seed +% 1 or
+        oc_storage_read_byte(ata_probe_raw_lba + 1, 0) != ata_probe_raw_seed)
+    {
+        return error.RawPatternReadbackFailed;
+    }
+
+    tool_layout.resetForTest();
+    tool_layout.init() catch return error.ToolLayoutInitFailed;
+    tool_layout.writePattern(ata_probe_tool_slot_id, ata_probe_tool_slot_byte_len, ata_probe_tool_slot_seed, status.ticks) catch return error.ToolLayoutWriteFailed;
+    const slot = tool_layout.slot(ata_probe_tool_slot_id);
+    if (slot.start_lba != ata_probe_tool_slot_expected_lba or
+        tool_layout.readToolByte(ata_probe_tool_slot_id, 0) != ata_probe_tool_slot_seed or
+        tool_layout.readToolByte(ata_probe_tool_slot_id, 1) != ata_probe_tool_slot_seed +% 1 or
+        tool_layout.readToolByte(ata_probe_tool_slot_id, 512) != ata_probe_tool_slot_seed or
+        storage_backend.readByte(slot.start_lba, 0) != ata_probe_tool_slot_seed)
+    {
+        return error.ToolLayoutReadbackFailed;
+    }
+
+    tool_layout.resetForTest();
+    tool_layout.init() catch return error.ToolLayoutReloadFailed;
+    if (tool_layout.readToolByte(ata_probe_tool_slot_id, 0) != ata_probe_tool_slot_seed or
+        tool_layout.readToolByte(ata_probe_tool_slot_id, 512) != ata_probe_tool_slot_seed)
+    {
+        return error.ToolLayoutReloadFailed;
+    }
+
+    filesystem.resetForTest();
+    filesystem.init() catch return error.FilesystemInitFailed;
+    if (filesystem.statePtr().active_backend != abi.storage_backend_ata_pio) {
+        return error.FilesystemInitFailed;
+    }
+    filesystem.createDirPath(ata_probe_filesystem_dir) catch return error.FilesystemDirCreateFailed;
+    filesystem.writeFile(ata_probe_filesystem_path, ata_probe_filesystem_payload, status.ticks) catch return error.FilesystemWriteFailed;
+    if (!probeFilesystemContent(ata_probe_filesystem_path, ata_probe_filesystem_payload)) {
+        return error.FilesystemReadbackFailed;
+    }
+
+    filesystem.resetForTest();
+    filesystem.init() catch return error.FilesystemReloadFailed;
+    if (filesystem.statePtr().active_backend != abi.storage_backend_ata_pio or
+        !probeFilesystemContent(ata_probe_filesystem_path, ata_probe_filesystem_payload))
+    {
+        return error.FilesystemReloadFailed;
+    }
+}
+
+fn probeFilesystemContent(path: []const u8, expected: []const u8) bool {
+    var scratch: [64]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&scratch);
+    const content = filesystem.readFileAlloc(fba.allocator(), path, scratch.len) catch return false;
+    return std.mem.eql(u8, content, expected);
+}
+
+fn ataStorageProbeFailureCode(err: AtaStorageProbeError) u8 {
+    return switch (err) {
+        error.AtaBackendUnavailable => 0x41,
+        error.AtaCapacityTooSmall => 0x42,
+        error.RawPatternWriteFailed => 0x43,
+        error.RawPatternFlushFailed => 0x44,
+        error.RawPatternReadbackFailed => 0x45,
+        error.ToolLayoutInitFailed => 0x46,
+        error.ToolLayoutWriteFailed => 0x47,
+        error.ToolLayoutReadbackFailed => 0x48,
+        error.ToolLayoutReloadFailed => 0x49,
+        error.FilesystemInitFailed => 0x4A,
+        error.FilesystemDirCreateFailed => 0x4B,
+        error.FilesystemWriteFailed => 0x4C,
+        error.FilesystemReadbackFailed => 0x4D,
+        error.FilesystemReloadFailed => 0x4E,
+    };
 }
 
 comptime {
@@ -9256,6 +9381,29 @@ test "baremetal filesystem persists path-based files on ata-backed storage" {
     const content = try filesystem.readFileAlloc(std.testing.allocator, "/tools/cache/tool.txt", 64);
     defer std.testing.allocator.free(content);
     try std.testing.expectEqualStrings("edge", content);
+}
+
+test "baremetal ata storage probe validates raw, tool layout, and filesystem persistence" {
+    resetBaremetalRuntimeForTest();
+    ata_pio_disk.testEnableMockDevice(4096);
+    defer ata_pio_disk.testDisableMockDevice();
+
+    try runAtaStorageProbe();
+
+    const storage = oc_storage_state_ptr();
+    try std.testing.expectEqual(@as(u8, abi.storage_backend_ata_pio), storage.backend);
+    try std.testing.expectEqual(@as(u8, 0x41), oc_storage_read_byte(ata_probe_raw_lba, 0));
+    try std.testing.expectEqual(@as(u8, 0x42), oc_storage_read_byte(ata_probe_raw_lba, 1));
+    try std.testing.expectEqual(@as(u8, 0x41), oc_storage_read_byte(ata_probe_raw_lba + 1, 0));
+
+    const slot = oc_tool_layout_slot(ata_probe_tool_slot_id);
+    try std.testing.expectEqual(ata_probe_tool_slot_expected_lba, slot.start_lba);
+    try std.testing.expectEqual(@as(u8, ata_probe_tool_slot_seed), oc_tool_slot_byte(ata_probe_tool_slot_id, 0));
+    try std.testing.expectEqual(@as(u8, ata_probe_tool_slot_seed), oc_tool_slot_byte(ata_probe_tool_slot_id, 512));
+
+    const content = try filesystem.readFileAlloc(std.testing.allocator, ata_probe_filesystem_path, 64);
+    defer std.testing.allocator.free(content);
+    try std.testing.expectEqualStrings(ata_probe_filesystem_payload, content);
 }
 
 test "baremetal keyboard export surface captures interrupt-driven scancodes" {

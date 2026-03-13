@@ -35,12 +35,13 @@ Full-stack replacement execution reference:
       - identify-backed capacity detection
       - ATA mock-device read/write/flush behavior
       - ATA-backed bare-metal export reporting
+      - live QEMU ATA-backed mutation + readback
+      - ATA-backed tool-layout persistence
+      - ATA-backed filesystem persistence
     - path-based filesystem usage is now also shipped above the shared backend:
       - `src/baremetal/filesystem.zig` implements directory creation plus file read/write/stat
       - `src/pal/fs.zig` routes the freestanding PAL through that layer
       - hosted and host validation now proves RAM-disk and ATA-backed persistence for `/runtime/state/agent.json` and `/tools/cache/tool.txt`
-    - remaining strict gap:
-      - first live bare-metal/QEMU disk mutation + readback proof
 - `docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md` (FS0..FS7 scope/gates)
 
 ## Critical Points

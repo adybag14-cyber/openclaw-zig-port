@@ -5,6 +5,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const baremetal_qemu_smoke = b.option(bool, "baremetal-qemu-smoke", "Enable QEMU auto-exit boot smoke path in bare-metal image") orelse false;
     const baremetal_console_probe_banner = b.option(bool, "baremetal-console-probe-banner", "Enable the bare-metal console probe banner in the freestanding image") orelse false;
+    const baremetal_ata_storage_probe = b.option(bool, "baremetal-ata-storage-probe", "Enable the ATA-backed storage validation path in the freestanding image") orelse false;
     const root_module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -82,6 +83,7 @@ pub fn build(b: *std.Build) void {
     const baremetal_options = b.addOptions();
     baremetal_options.addOption(bool, "qemu_smoke", baremetal_qemu_smoke);
     baremetal_options.addOption(bool, "console_probe_banner", baremetal_console_probe_banner);
+    baremetal_options.addOption(bool, "ata_storage_probe", baremetal_ata_storage_probe);
     baremetal_module.addOptions("build_options", baremetal_options);
     baremetal_module.single_threaded = true;
     baremetal_module.strip = false;

@@ -196,7 +196,7 @@ Current local source-of-truth evidence:
 
 ### Disk Driver / Block I/O
 
-Status: `In progress`
+Status: `Complete`
 
 Current local source-of-truth evidence:
 
@@ -217,12 +217,16 @@ Current local source-of-truth evidence:
   - ATA PIO mock-device mount and identify-backed capacity detection
   - ATA PIO mock-device read/write/flush behavior
 - bare-metal exports now report ATA PIO as the active backend when a device is present
+- the live freestanding/QEMU ATA proof is now strict-closed through:
+  - `scripts/baremetal-qemu-ata-storage-probe-check.ps1`
+  - raw ATA-backed block mutation + readback at live LBAs
+  - tool-layout persistence through the ATA-backed shared storage facade
+  - path-based filesystem persistence through the ATA-backed shared storage facade
 
-Remaining gap before this subsystem is fully closed:
+Notes:
 
-- no live bare-metal/QEMU proof exists yet for a real hardware-facing disk mutation + readback path
-- no filesystem-on-block layer exists yet on top of the shared backend
-- no AHCI/NVMe path exists yet; only ATA PIO is implemented today
+- the strict FS5.5 gate only requires one real device-facing block path with live bare-metal mutation + readback proof; ATA PIO satisfies that gate now
+- AHCI/NVMe remain future depth, not a blocker for current FS5.5 disk closure
 
 ### Ethernet Driver
 

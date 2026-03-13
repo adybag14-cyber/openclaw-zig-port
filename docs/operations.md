@@ -23,6 +23,7 @@
   - `src/baremetal/storage_backend.zig` selects between RAM-disk and ATA PIO backends
   - `src/baremetal/ata_pio_disk.zig` now performs real x86 ATA PIO `IDENTIFY` / `READ` / `WRITE` / `FLUSH`
   - `src/pal/storage.zig` and `src/baremetal/tool_layout.zig` now route through the backend facade instead of directly targeting the RAM disk
+  - `scripts/baremetal-qemu-ata-storage-probe-check.ps1` now proves live ATA-backed raw block mutation + readback plus ATA-backed tool-layout and filesystem persistence over the freestanding PVH image
 - filesystem usage is now also on a real shared-backend path in `FS5.5`:
   - `src/baremetal/filesystem.zig` implements path-based directory creation plus file read/write/stat
   - `src/pal/fs.zig` routes the freestanding PAL filesystem surface through that layer
