@@ -265,7 +265,7 @@ if (-not $SkipBuild) {
     New-Item -ItemType Directory -Force -Path $zigLocalCacheDir | Out-Null
 
     @"
-pub const qemu_smoke: bool = false;
+pub const qemu_smoke: bool = false;`r`npub const console_probe_banner: bool = false;
 "@ | Set-Content -Path $optionsPath -Encoding Ascii
 
     & $zig build-obj `
@@ -621,3 +621,4 @@ Write-Output "BAREMETAL_GDB_BINARY=$gdb"
 Write-Output "BAREMETAL_NM_BINARY=$nm"
 Write-Output "BAREMETAL_QEMU_TIMER_PRESSURE_PROBE=pass"
 Write-Output $gdbOutput.TrimEnd()
+

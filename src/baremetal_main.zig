@@ -9164,11 +9164,23 @@ test "baremetal keyboard export surface captures interrupt-driven scancodes" {
     try std.testing.expectEqual(@as(u32, 2), keyboard.event_count);
     try std.testing.expectEqual(@as(u8, 0x1E), keyboard.last_scancode);
     try std.testing.expectEqual(@as(u16, 'A'), keyboard.last_keycode);
+    try std.testing.expectEqual(@as(u64, 1), keyboard.last_tick);
+
+    const evt0 = oc_keyboard_event(0);
+    try std.testing.expectEqual(@as(u8, 0x2A), evt0.scancode);
+    try std.testing.expectEqual(@as(u8, 1), evt0.pressed);
+    try std.testing.expectEqual(@as(u8, abi.input_modifier_shift), evt0.modifiers);
+    try std.testing.expectEqual(@as(u16, 0x2A), evt0.keycode);
+    try std.testing.expectEqual(@as(u64, 0), evt0.tick);
+    try std.testing.expectEqual(@as(u32, 1), evt0.interrupt_seq);
 
     const evt = oc_keyboard_event(1);
     try std.testing.expectEqual(@as(u8, 0x1E), evt.scancode);
     try std.testing.expectEqual(@as(u8, 1), evt.pressed);
+    try std.testing.expectEqual(@as(u8, abi.input_modifier_shift), evt.modifiers);
     try std.testing.expectEqual(@as(u16, 'A'), evt.keycode);
+    try std.testing.expectEqual(@as(u64, 1), evt.tick);
+    try std.testing.expectEqual(@as(u32, 2), evt.interrupt_seq);
 }
 
 test "baremetal mouse export surface captures interrupt-driven packets" {
@@ -9188,9 +9200,14 @@ test "baremetal mouse export surface captures interrupt-driven packets" {
     try std.testing.expectEqual(@as(u8, 0x05), mouse.last_buttons);
     try std.testing.expectEqual(@as(i32, 6), mouse.accum_x);
     try std.testing.expectEqual(@as(i32, -3), mouse.accum_y);
+    try std.testing.expectEqual(@as(i16, 6), mouse.last_dx);
+    try std.testing.expectEqual(@as(i16, -3), mouse.last_dy);
+    try std.testing.expectEqual(@as(u64, 0), mouse.last_tick);
 
     const pkt = oc_mouse_packet(0);
     try std.testing.expectEqual(@as(u8, 0x05), pkt.buttons);
     try std.testing.expectEqual(@as(i16, 6), pkt.dx);
     try std.testing.expectEqual(@as(i16, -3), pkt.dy);
+    try std.testing.expectEqual(@as(u64, 0), pkt.tick);
+    try std.testing.expectEqual(@as(u32, 1), pkt.interrupt_seq);
 }

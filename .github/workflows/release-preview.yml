@@ -306,6 +306,30 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-descriptor-bootdiag-final-state-probe-check.ps1
 
+      - name: Bare-metal QEMU PS/2 input probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-ps2-input-probe-check.ps1
+
+      - name: Bare-metal QEMU PS/2 input baseline probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-ps2-input-baseline-probe-check.ps1
+
+      - name: Bare-metal QEMU PS/2 keyboard event payload probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-ps2-keyboard-event-payload-probe-check.ps1
+
+      - name: Bare-metal QEMU PS/2 keyboard modifier queue probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-ps2-keyboard-modifier-queue-probe-check.ps1
+
+      - name: Bare-metal QEMU PS/2 mouse accumulator state probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-ps2-mouse-accumulator-state-probe-check.ps1
+
+      - name: Bare-metal QEMU PS/2 mouse packet payload probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-ps2-mouse-packet-payload-probe-check.ps1
+
       - name: Bare-metal QEMU bootdiag history clear probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-bootdiag-history-clear-probe-check.ps1

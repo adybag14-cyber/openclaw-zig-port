@@ -15,6 +15,10 @@
 - FS3 memory/knowledge closure is also reached locally through the hard matrix at `docs/zig-port/FS3_MEMORY_KNOWLEDGE_MATRIX.md`.
 - FS5 edge/wasm/finetune closure is now reached locally through the hard matrix at `docs/zig-port/FS5_EDGE_WASM_FINETUNE_MATRIX.md`.
 - `scripts/edge-wasm-lifecycle-smoke-check.ps1` and `scripts/edge-finetune-lifecycle-smoke-check.ps1` are now part of the strict hosted CI/release lane.
+- `FS5.5` hardware-driver closure is now partially advancing through `docs/zig-port/FS5_5_HARDWARE_DRIVERS_SYSTEMS.md`.
+- keyboard/mouse is now locally strict-closed in `FS5.5`:
+  - `src/baremetal/ps2_input.zig` now has a real x86 port-I/O backed PS/2 controller path
+  - `scripts/baremetal-qemu-ps2-input-probe-check.ps1` plus its wrapper probes are the live bare-metal proof for IRQ-driven keyboard/mouse updates
 - `scripts/package-registry-status.ps1` now performs default npmjs/PyPI visibility checks even when invoked with only `-ReleaseTag`, so local package diagnostics no longer silently skip unresolved public-registry state.
 - Latest CI:
   - latest pushed `main` head is tracked in issue `#1`
@@ -51,6 +55,12 @@ Recommended sequence:
 ./scripts/baremetal-qemu-feature-flags-tick-batch-mailbox-state-probe-check.ps1
 ./scripts/baremetal-qemu-feature-flags-tick-batch-state-preserve-probe-check.ps1
 ./scripts/baremetal-qemu-descriptor-bootdiag-probe-check.ps1
+./scripts/baremetal-qemu-ps2-input-probe-check.ps1
+./scripts/baremetal-qemu-ps2-input-baseline-probe-check.ps1
+./scripts/baremetal-qemu-ps2-keyboard-event-payload-probe-check.ps1
+./scripts/baremetal-qemu-ps2-keyboard-modifier-queue-probe-check.ps1
+./scripts/baremetal-qemu-ps2-mouse-accumulator-state-probe-check.ps1
+./scripts/baremetal-qemu-ps2-mouse-packet-payload-probe-check.ps1
 ./scripts/baremetal-qemu-descriptor-table-content-probe-check.ps1
 ./scripts/baremetal-qemu-descriptor-dispatch-probe-check.ps1
 ./scripts/baremetal-qemu-vector-counter-reset-probe-check.ps1

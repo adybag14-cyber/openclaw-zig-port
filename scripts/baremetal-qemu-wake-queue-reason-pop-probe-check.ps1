@@ -268,7 +268,7 @@ if (-not $SkipBuild) {
     New-Item -ItemType Directory -Force -Path $zigLocalCacheDir | Out-Null
 
     @"
-pub const qemu_smoke: bool = false;
+pub const qemu_smoke: bool = false;`r`npub const console_probe_banner: bool = false;
 "@ | Set-Content -Path $optionsPath -Encoding Ascii
 
     & $zig build-obj `
@@ -835,4 +835,5 @@ Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_POP_FINAL_TASK1=$finalTask1"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_POP_FINAL_VECTOR0=$finalVector0"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_POP_FINAL_VECTOR1=$finalVector1"
 Write-Output "BAREMETAL_QEMU_WAKE_QUEUE_REASON_POP_PROBE=pass"
+
 

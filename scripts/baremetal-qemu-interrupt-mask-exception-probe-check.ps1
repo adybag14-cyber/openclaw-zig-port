@@ -340,7 +340,7 @@ if (-not $SkipBuild) {
     New-Item -ItemType Directory -Force -Path $zigLocalCacheDir | Out-Null
 
     @"
-pub const qemu_smoke: bool = false;
+pub const qemu_smoke: bool = false;`r`npub const console_probe_banner: bool = false;
 "@ | Set-Content -Path $optionsPath -Encoding Ascii
 
     & $zig build-obj `
@@ -855,3 +855,4 @@ if (Test-Path $qemuStderr) {
     Get-Content -Path $qemuStderr -Tail 120
 }
 exit 1
+

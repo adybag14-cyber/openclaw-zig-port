@@ -332,7 +332,7 @@ if (-not $SkipBuild) {
     New-Item -ItemType Directory -Force -Path $zigLocalCacheDir | Out-Null
 
     @"
-pub const qemu_smoke: bool = false;
+pub const qemu_smoke: bool = false;`r`npub const console_probe_banner: bool = false;
 "@ | Set-Content -Path $optionsPath -Encoding Ascii
 
     & $zig build-obj `
@@ -655,3 +655,4 @@ Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_CLAMP_WAKE0_TIMER_ID=$wake0TimerI
 Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_CLAMP_WAKE0_REASON=$wake0Reason"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_CLAMP_WAKE0_VECTOR=$wake0Vector"
 Write-Output "BAREMETAL_QEMU_INTERRUPT_TIMEOUT_CLAMP_WAKE0_TICK=$wake0Tick"
+

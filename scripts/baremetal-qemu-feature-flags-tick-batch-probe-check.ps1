@@ -241,7 +241,7 @@ if (-not $SkipBuild) {
     New-Item -ItemType Directory -Force -Path $zigLocalCacheDir | Out-Null
 
     @"
-pub const qemu_smoke: bool = false;
+pub const qemu_smoke: bool = false;`r`npub const console_probe_banner: bool = false;
 "@ | Set-Content -Path $optionsPath -Encoding Ascii
 
     & $zig build-obj `
@@ -488,3 +488,4 @@ foreach ($entry in $stageExpectedInts) {
     }
     Write-Output "BAREMETAL_QEMU_FEATURE_FLAGS_TICK_BATCH_${label}=$actual"
 }
+

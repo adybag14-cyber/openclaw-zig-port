@@ -10,6 +10,21 @@ Track and achieve OpenClaw Zig parity against upstream stable + beta baselines:
 while maintaining parity-first validation and release gating.
 
 Full-stack replacement execution reference:
+- `FS5.5` hardware-driver pivot update:
+  - keyboard/mouse strict closure is now reached locally.
+  - real PS/2 controller path shipped in `src/baremetal/ps2_input.zig`:
+    - x86 port-I/O backed controller data/status/command access (`0x60` / `0x64`)
+    - controller config read/write
+    - controller keyboard + mouse enable flow
+    - controller output-buffer drain and mouse packet assembly
+  - new live QEMU+GDB proof:
+    - `scripts/baremetal-qemu-ps2-input-probe-check.ps1`
+  - new narrow wrapper proofs:
+    - `scripts/baremetal-qemu-ps2-input-baseline-probe-check.ps1`
+    - `scripts/baremetal-qemu-ps2-keyboard-event-payload-probe-check.ps1`
+    - `scripts/baremetal-qemu-ps2-keyboard-modifier-queue-probe-check.ps1`
+    - `scripts/baremetal-qemu-ps2-mouse-accumulator-state-probe-check.ps1`
+    - `scripts/baremetal-qemu-ps2-mouse-packet-payload-probe-check.ps1`
 - `docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md` (FS0..FS7 scope/gates)
 
 ## Critical Points

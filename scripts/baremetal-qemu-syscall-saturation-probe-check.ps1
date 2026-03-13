@@ -214,7 +214,7 @@ if (-not $SkipBuild) {
     New-Item -ItemType Directory -Force -Path $zigGlobalCacheDir | Out-Null
     New-Item -ItemType Directory -Force -Path $zigLocalCacheDir | Out-Null
 @"
-pub const qemu_smoke: bool = false;
+pub const qemu_smoke: bool = false;`r`npub const console_probe_banner: bool = false;
 "@ | Set-Content -Path $optionsPath -Encoding Ascii
     & $zig build-obj -fno-strip -fsingle-threaded -ODebug -target x86_64-freestanding-none -mcpu baseline --dep build_options "-Mroot=$repo\src\baremetal_main.zig" "-Mbuild_options=$optionsPath" --cache-dir "$zigLocalCacheDir" --global-cache-dir "$zigGlobalCacheDir" --name "openclaw-zig-baremetal-main-syscall-saturation-probe" "-femit-bin=$mainObj"
     if ($LASTEXITCODE -ne 0) { throw "zig build-obj for syscall-saturation probe runtime failed with exit code $LASTEXITCODE" }
@@ -546,3 +546,4 @@ try {
         try { $qemuProcess.WaitForExit() } catch {}
     }
 }
+

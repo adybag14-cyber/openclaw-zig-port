@@ -308,7 +308,7 @@ if (-not $SkipBuild) {
     New-Item -ItemType Directory -Force -Path $zigLocalCacheDir | Out-Null
 
     @"
-pub const qemu_smoke: bool = false;
+pub const qemu_smoke: bool = false;`r`npub const console_probe_banner: bool = false;
 "@ | Set-Content -Path $optionsPath -Encoding Ascii
 
     & $zig build-obj `
@@ -640,3 +640,4 @@ Write-Output "BAREMETAL_QEMU_SCHEDULER_ROUND_ROBIN_SECOND_RUN_AFTER_THIRD=$secon
 Write-Output "BAREMETAL_QEMU_SCHEDULER_ROUND_ROBIN_FIRST_BUDGET_AFTER_FIRST=$firstBudgetAfterFirst"
 Write-Output "BAREMETAL_QEMU_SCHEDULER_ROUND_ROBIN_SECOND_BUDGET_AFTER_SECOND=$secondBudgetAfterSecond"
 Write-Output "BAREMETAL_QEMU_SCHEDULER_ROUND_ROBIN_FIRST_BUDGET_AFTER_THIRD=$firstBudgetAfterThird"
+

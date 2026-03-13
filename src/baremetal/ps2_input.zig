@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const abi = @import("abi.zig");
 const x86_bootstrap = @import("x86_bootstrap.zig");
 
@@ -9,11 +10,24 @@ pub const mouse_packet_capacity: usize = 16;
 const controller_keyboard_capacity: usize = 32;
 const controller_mouse_capacity: usize = 16;
 
-const PendingMousePacket = struct {
+const PendingMousePacket = extern struct {
     buttons: u8,
     dx: i16,
     dy: i16,
 };
+
+const controller_data_port: u16 = 0x60;
+const controller_status_port: u16 = 0x64;
+const controller_command_port: u16 = 0x64;
+const controller_status_output_full: u8 = 1 << 0;
+const controller_status_input_full: u8 = 1 << 1;
+const controller_status_aux_data: u8 = 1 << 5;
+const controller_command_read_config: u8 = 0x20;
+const controller_command_write_config: u8 = 0x60;
+const controller_command_enable_keyboard: u8 = 0xAE;
+const controller_command_enable_mouse: u8 = 0xA8;
+const controller_wait_limit: usize = 1024;
+const controller_drain_limit: usize = 64;
 
 var keyboard_state: abi.BaremetalKeyboardState = .{
     .magic = abi.keyboard_magic,
@@ -67,11 +81,15 @@ var pending_keyboard_count: u32 = 0;
 var pending_mouse: [controller_mouse_capacity]PendingMousePacket = undefined;
 var pending_mouse_head: u32 = 0;
 var pending_mouse_count: u32 = 0;
+var controller_mouse_bytes: [3]u8 = .{ 0, 0, 0 };
+var controller_mouse_byte_count: u8 = 0;
+var controller_configured: bool = false;
 
 var last_processed_interrupt_seq: u32 = 0;
 
 pub fn init() void {
     resetForTest();
+    initController();
 }
 
 pub fn resetForTest() void {
@@ -124,6 +142,9 @@ pub fn resetForTest() void {
     @memset(&pending_mouse, .{ .buttons = 0, .dx = 0, .dy = 0 });
     pending_mouse_head = 0;
     pending_mouse_count = 0;
+    controller_mouse_bytes = .{ 0, 0, 0 };
+    controller_mouse_byte_count = 0;
+    controller_configured = false;
     last_processed_interrupt_seq = 0;
 }
 
@@ -152,6 +173,55 @@ pub fn mousePacket(index: u32) abi.BaremetalMousePacket {
 }
 
 pub fn injectKeyboardScancode(scancode: u8) void {
+    queueKeyboardScancode(scancode);
+}
+
+pub fn injectMousePacket(buttons: u8, dx: i16, dy: i16) void {
+    queueMousePacket(buttons, dx, dy);
+}
+
+fn isHardwareBacked() bool {
+    return builtin.os.tag == .freestanding and builtin.cpu.arch == .x86_64;
+}
+
+fn readPort(port: u16) u8 {
+    if (!isHardwareBacked()) return 0;
+    return asm volatile ("inb %[dx], %[al]"
+        : [al] "={al}" (-> u8),
+        : [dx] "{dx}" (port),
+        : "memory");
+}
+
+fn writePort(port: u16, value: u8) void {
+    if (!isHardwareBacked()) return;
+    asm volatile ("outb %[al], %[dx]"
+        :
+        : [dx] "{dx}" (port),
+          [al] "{al}" (value),
+        : "memory");
+}
+
+fn waitControllerInputClear() bool {
+    if (!isHardwareBacked()) return false;
+    var attempt: usize = 0;
+    while (attempt < controller_wait_limit) : (attempt += 1) {
+        if ((readPort(controller_status_port) & controller_status_input_full) == 0) return true;
+        std.atomic.spinLoopHint();
+    }
+    return false;
+}
+
+fn waitControllerOutputReady() bool {
+    if (!isHardwareBacked()) return false;
+    var attempt: usize = 0;
+    while (attempt < controller_wait_limit) : (attempt += 1) {
+        if ((readPort(controller_status_port) & controller_status_output_full) != 0) return true;
+        std.atomic.spinLoopHint();
+    }
+    return false;
+}
+
+fn queueKeyboardScancode(scancode: u8) void {
     const cap: u32 = @as(u32, controller_keyboard_capacity);
     const write_index = @mod(pending_keyboard_head + pending_keyboard_count, cap);
     pending_keyboard[write_index] = scancode;
@@ -162,7 +232,7 @@ pub fn injectKeyboardScancode(scancode: u8) void {
     }
 }
 
-pub fn injectMousePacket(buttons: u8, dx: i16, dy: i16) void {
+fn queueMousePacket(buttons: u8, dx: i16, dy: i16) void {
     const cap: u32 = @as(u32, controller_mouse_capacity);
     const write_index = @mod(pending_mouse_head + pending_mouse_count, cap);
     pending_mouse[write_index] = .{ .buttons = buttons, .dx = dx, .dy = dy };
@@ -171,6 +241,66 @@ pub fn injectMousePacket(buttons: u8, dx: i16, dy: i16) void {
     } else {
         pending_mouse_head = @mod(pending_mouse_head + 1, cap);
     }
+}
+
+fn signExtendByte(raw: u8) i16 {
+    return @as(i16, @intCast(@as(i8, @bitCast(raw))));
+}
+
+fn queueControllerMouseByte(raw: u8) void {
+    if (controller_mouse_byte_count >= controller_mouse_bytes.len) {
+        controller_mouse_byte_count = 0;
+    }
+    controller_mouse_bytes[controller_mouse_byte_count] = raw;
+    controller_mouse_byte_count += 1;
+    if (controller_mouse_byte_count == controller_mouse_bytes.len) {
+        queueMousePacket(
+            controller_mouse_bytes[0] & 0x07,
+            signExtendByte(controller_mouse_bytes[1]),
+            signExtendByte(controller_mouse_bytes[2]),
+        );
+        controller_mouse_byte_count = 0;
+    }
+}
+
+fn drainControllerOutput() void {
+    if (!isHardwareBacked()) return;
+    var iteration: usize = 0;
+    while (iteration < controller_drain_limit) : (iteration += 1) {
+        const status = readPort(controller_status_port);
+        if ((status & controller_status_output_full) == 0) break;
+        const raw = readPort(controller_data_port);
+        if ((status & controller_status_aux_data) != 0) {
+            queueControllerMouseByte(raw);
+        } else {
+            queueKeyboardScancode(raw);
+        }
+    }
+}
+
+fn initController() void {
+    if (!isHardwareBacked()) return;
+
+    // Flush stale output before touching config so a previous boot does not leak bytes into this session.
+    drainControllerOutput();
+
+    if (!waitControllerInputClear()) return;
+    writePort(controller_command_port, controller_command_enable_keyboard);
+    if (!waitControllerInputClear()) return;
+    writePort(controller_command_port, controller_command_enable_mouse);
+
+    if (!waitControllerInputClear()) return;
+    writePort(controller_command_port, controller_command_read_config);
+    if (!waitControllerOutputReady()) return;
+    var config = readPort(controller_data_port);
+    config |= 0x03;
+    config &= ~@as(u8, 0x30);
+
+    if (!waitControllerInputClear()) return;
+    writePort(controller_command_port, controller_command_write_config);
+    if (!waitControllerInputClear()) return;
+    writePort(controller_data_port, config);
+    controller_configured = true;
 }
 
 pub fn processInterruptHistory(current_tick: u64) void {
@@ -189,6 +319,7 @@ pub fn processInterruptHistory(current_tick: u64) void {
 }
 
 fn processKeyboardInterrupt(interrupt_seq: u32, current_tick: u64) void {
+    drainControllerOutput();
     if (pending_keyboard_count == 0) return;
     const scancode = pending_keyboard[pending_keyboard_head];
     pending_keyboard_head = @mod(pending_keyboard_head + 1, @as(u32, controller_keyboard_capacity));
@@ -234,6 +365,7 @@ fn processKeyboardInterrupt(interrupt_seq: u32, current_tick: u64) void {
 }
 
 fn processMouseInterrupt(interrupt_seq: u32, current_tick: u64) void {
+    drainControllerOutput();
     if (pending_mouse_count == 0) return;
     const packet = pending_mouse[pending_mouse_head];
     pending_mouse_head = @mod(pending_mouse_head + 1, @as(u32, controller_mouse_capacity));

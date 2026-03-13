@@ -32,6 +32,10 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - `FS5` is now locally strict-closed through the hard matrix at [`docs/zig-port/FS5_EDGE_WASM_FINETUNE_MATRIX.md`](docs/zig-port/FS5_EDGE_WASM_FINETUNE_MATRIX.md)
   - `edge-wasm-lifecycle-smoke-check.ps1` and `edge-finetune-lifecycle-smoke-check.ps1` are now part of the strict FS5 CI lane
   - strict FS4 matrix source is [`docs/zig-port/FS4_SECURITY_TRUST_MATRIX.md`](docs/zig-port/FS4_SECURITY_TRUST_MATRIX.md)
+- Current hardware pivot (`FS5.5`):
+  - keyboard/mouse is now strict-closed in [`docs/zig-port/FS5_5_HARDWARE_DRIVERS_SYSTEMS.md`](docs/zig-port/FS5_5_HARDWARE_DRIVERS_SYSTEMS.md)
+  - `src/baremetal/ps2_input.zig` now contains a real x86 port-I/O backed PS/2 controller path
+  - `scripts/baremetal-qemu-ps2-input-probe-check.ps1` proves IRQ-driven keyboard/mouse state updates against the freestanding PVH artifact
 - Recent FS6 progress (2026-03-06):
   - `update.*` now has a real `canary` rollout lane instead of collapsing `canary` into `edge`
   - appliance rollout boundary is now enforced by live smoke validation (`canary` selection, secure-boot block, canary apply, stable promotion)

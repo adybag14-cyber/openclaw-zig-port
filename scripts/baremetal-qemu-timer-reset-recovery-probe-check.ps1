@@ -287,7 +287,7 @@ if (-not $SkipBuild) {
     New-Item -ItemType Directory -Force -Path $zigLocalCacheDir | Out-Null
 
     @"
-pub const qemu_smoke: bool = false;
+pub const qemu_smoke: bool = false;`r`npub const console_probe_banner: bool = false;
 "@ | Set-Content -Path $optionsPath -Encoding Ascii
 
     & $zig build-obj `
@@ -832,3 +832,4 @@ Write-Output "WAKE1_VECTOR=$wake1Vector"
 Write-Output "REARM_TIMER_COUNT=$rearmTimerCount"
 Write-Output "REARM_TIMER_ID=$rearmTimerId"
 Write-Output "REARM_NEXT_TIMER_ID=$rearmNextTimerId"
+

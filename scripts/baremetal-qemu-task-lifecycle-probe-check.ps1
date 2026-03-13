@@ -311,7 +311,7 @@ if (-not $SkipBuild) {
     New-Item -ItemType Directory -Force -Path $zigLocalCacheDir | Out-Null
 
     @"
-pub const qemu_smoke: bool = false;
+pub const qemu_smoke: bool = false;`r`npub const console_probe_banner: bool = false;
 "@ | Set-Content -Path $optionsPath -Encoding Ascii
 
     & $zig build-obj `
@@ -699,3 +699,4 @@ Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_WAKE2_TASK_ID=$wake2TaskId"
 Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_TERMINATE_STATE=$terminateState"
 Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_TERMINATE_TASK_COUNT=$terminateTaskCount"
 Write-Output "BAREMETAL_QEMU_TASK_LIFECYCLE_REJECTED_WAKE_QUEUE_LEN=$rejectedWakeQueueLen"
+
