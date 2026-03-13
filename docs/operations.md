@@ -34,7 +34,11 @@
   - `src/baremetal/pci.zig` now discovers the RTL8139 I/O BAR and IRQ line and enables I/O plus bus mastering on the selected PCI function
   - `src/pal/net.zig` and `src/baremetal_main.zig` now expose the raw-frame PAL/export seam through the same driver path
   - `scripts/baremetal-qemu-rtl8139-probe-check.ps1` now proves live MAC readout, TX, RX loopback, payload validation, and counter advance over the freestanding PVH image
-- TCP/IP remains the next networking slice above that L2 proof; it is not claimed complete yet.
+- the first TCP/IP slice is now present above that L2 proof:
+  - `src/protocol/ethernet.zig` + `src/protocol/arp.zig` implement Ethernet/ARP framing
+  - `src/pal/net.zig` now exposes `sendArpRequest` and `pollArpPacket`
+  - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1` proves live ARP request loopback + decode over the freestanding PVH image
+- IPv4/UDP/TCP remain the next networking slices above that ARP proof.
 - filesystem usage is now also on a real shared-backend path in `FS5.5`:
   - `src/baremetal/filesystem.zig` implements path-based directory creation plus file read/write/stat
   - `src/pal/fs.zig` routes the freestanding PAL filesystem surface through that layer

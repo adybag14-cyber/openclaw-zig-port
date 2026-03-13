@@ -8,6 +8,7 @@ pub fn build(b: *std.Build) void {
     const baremetal_framebuffer_probe_banner = b.option(bool, "baremetal-framebuffer-probe-banner", "Enable the bare-metal linear framebuffer probe banner in the freestanding image") orelse false;
     const baremetal_ata_storage_probe = b.option(bool, "baremetal-ata-storage-probe", "Enable the ATA-backed storage validation path in the freestanding image") orelse false;
     const baremetal_rtl8139_probe = b.option(bool, "baremetal-rtl8139-probe", "Enable the RTL8139 Ethernet validation path in the freestanding image") orelse false;
+    const baremetal_rtl8139_arp_probe = b.option(bool, "baremetal-rtl8139-arp-probe", "Enable the RTL8139 ARP validation path in the freestanding image") orelse false;
     const root_module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -88,6 +89,7 @@ pub fn build(b: *std.Build) void {
     baremetal_options.addOption(bool, "framebuffer_probe_banner", baremetal_framebuffer_probe_banner);
     baremetal_options.addOption(bool, "ata_storage_probe", baremetal_ata_storage_probe);
     baremetal_options.addOption(bool, "rtl8139_probe", baremetal_rtl8139_probe);
+    baremetal_options.addOption(bool, "rtl8139_arp_probe", baremetal_rtl8139_arp_probe);
     baremetal_module.addOptions("build_options", baremetal_options);
     baremetal_module.single_threaded = true;
     baremetal_module.strip = false;

@@ -58,7 +58,13 @@ Full-stack replacement execution reference:
       - TX/RX loopback
       - payload validation
       - TX/RX counter advance
-    - TCP/IP remains the next strict networking stage above that now-real L2 slice
+    - the first TCP/IP slice is now real:
+      - `src/protocol/ethernet.zig`
+      - `src/protocol/arp.zig`
+      - `src/pal/net.zig` `sendArpRequest` / `pollArpPacket`
+      - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`
+      - live ARP request loopback + decode over the freestanding PVH artifact
+    - IPv4/UDP/TCP remain the next strict networking stage above that now-real L2 + ARP slice
   - path-based filesystem usage is now also shipped above the shared backend:
     - `src/baremetal/filesystem.zig` implements directory creation plus file read/write/stat
     - `src/pal/fs.zig` routes the freestanding PAL through that layer

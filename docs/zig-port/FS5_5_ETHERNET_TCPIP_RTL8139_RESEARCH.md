@@ -20,7 +20,7 @@ The first strict Ethernet slice is now complete on the local source of truth:
 - `src/baremetal_main.zig` exports the bare-metal Ethernet ABI surface
 - `scripts/baremetal-qemu-rtl8139-probe-check.ps1` is green and proves live MAC readout, TX, RX loopback, payload validation, and TX/RX counter advance over the freestanding PVH image
 
-This report remains relevant because TCP/IP is still pending. The next strict networking slice is ARP/IPv4/UDP/TCP above the now-real L2 driver.
+This report remains relevant because IPv4/UDP/TCP are still pending. The next strict networking slices after this update are IPv4 framing and deterministic UDP exchange above the now-real L2 + ARP path.
 
 ## Scope of This First Slice
 This slice must deliver a real, deterministic Layer 2 path:
@@ -34,7 +34,7 @@ This slice must deliver a real, deterministic Layer 2 path:
 - deterministic packet receive proof
 - bare-metal PAL seam for raw Ethernet frames
 
-This slice does **not** attempt to finish:
+This slice originally did **not** attempt to finish:
 
 - ARP
 - IPv4
@@ -45,7 +45,21 @@ This slice does **not** attempt to finish:
 - DNS
 - HTTP
 
-Those are unlocked only after this slice is proven.
+That constraint is now partially lifted. The repo now has a real ARP request encode/decode path above the strict Ethernet L2 slice, but it still does **not** claim IPv4, UDP, TCP, DHCP, or DNS completion.
+
+## Current ARP Slice Status
+
+The strict ARP slice is now complete on the local source of truth:
+
+- `src/protocol/ethernet.zig` provides real Ethernet header encode/decode helpers and constants
+- `src/protocol/arp.zig` provides ARP request frame encode plus full ARP frame decode
+- `src/pal/net.zig` now exposes:
+  - `sendArpRequest`
+  - `pollArpPacket`
+- `src/baremetal_main.zig` now contains a dedicated `rtl8139_arp_probe` boot path and host regression proving ARP request loopback through the RTL8139 mock path
+- `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1` now proves live ARP request transmission, receipt, decode, and counter advance against the freestanding PVH image
+
+This closes the first real TCP/IP-adjacent slice above the Ethernet driver without overstating the rest of the stack.
 
 ---
 

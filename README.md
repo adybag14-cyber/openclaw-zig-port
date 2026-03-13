@@ -49,7 +49,11 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - `src/baremetal/rtl8139.zig` now contains the real RTL8139 PCI-discovered bring-up, raw-frame TX/RX path, and loopback-friendly datapath checks
   - `src/pal/net.zig` and `src/baremetal_main.zig` now expose the raw-frame PAL + bare-metal ABI/export surface through the same driver path
   - `scripts/baremetal-qemu-rtl8139-probe-check.ps1` now proves live MAC readout, TX, RX loopback, payload validation, and TX/RX counter advance against the freestanding PVH artifact
-  - TCP/IP is still pending above that L2 slice; Ethernet closure here does not claim ARP/IPv4/UDP/TCP completion
+  - the first TCP/IP slice is now also live:
+    - `src/protocol/ethernet.zig` + `src/protocol/arp.zig` provide Ethernet/ARP framing
+    - `src/pal/net.zig` exposes `sendArpRequest` and `pollArpPacket`
+    - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1` proves live ARP request loopback + decode over the freestanding PVH artifact
+  - IPv4/UDP/TCP are still pending above that ARP slice
   - path-based filesystem usage is now locally strict-closed:
     - `src/baremetal/filesystem.zig` implements directory creation plus file read/write/stat on the shared storage backend
     - `src/pal/fs.zig` routes the freestanding PAL filesystem surface through that layer
