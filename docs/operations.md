@@ -3,9 +3,9 @@
 ## Current Snapshot
 
 - Latest published edge release: `v0.2.0-zig-edge.28`
-- Latest local test gate: `zig build test --summary all` -> main `259/259` + bare-metal host `183/183` passing
+- Latest local test gate: `zig build test --summary all` -> main `270/270` + bare-metal host `200/200` passing
 - Latest parity gate: `scripts/check-go-method-parity.ps1` -> `GO_MISSING_IN_ZIG=0`, `ORIGINAL_MISSING_IN_ZIG=0`, `ORIGINAL_BETA_MISSING_IN_ZIG=0`, `UNION_MISSING_IN_ZIG=0`, `UNION_EVENTS_MISSING_IN_ZIG=0`, `ZIG_COUNT=175`, `ZIG_EVENTS_COUNT=19`
-- Current head: local source-of-truth on `main` (exact pushed head is tracked in issue `#1` and the latest GitHub Actions runs)
+- Current head: local source-of-truth on `fs55-ethernet-integration` (exact pushed head is tracked in issue `#1` and the latest branch GitHub Actions runs)
 - Toolchain lane: Codeberg `master` is canonical; `adybag14-cyber/zig` is the Windows release mirror with rolling `latest-master` plus immutable `upstream-<sha>` releases.
 - CI split: hosted validation stays on Zig `master`, while the freestanding bare-metal smoke/probe and bare-metal asset lanes are pinned to the known-good Linux build `0.16.0-dev.2736+3b515fbed` until the upstream Linux `master` compiler crash on `zig build baremetal -Doptimize=ReleaseFast` is no longer reproducible.
 - Strict hosted-phase order is now locked to `FS1 -> FS4 -> FS2 -> FS3 -> FS5`.
@@ -15,7 +15,7 @@
 - FS3 memory/knowledge closure is also reached locally through the hard matrix at `docs/zig-port/FS3_MEMORY_KNOWLEDGE_MATRIX.md`.
 - FS5 edge/wasm/finetune closure is now reached locally through the hard matrix at `docs/zig-port/FS5_EDGE_WASM_FINETUNE_MATRIX.md`.
 - `scripts/edge-wasm-lifecycle-smoke-check.ps1` and `scripts/edge-finetune-lifecycle-smoke-check.ps1` are now part of the strict hosted CI/release lane.
-- `FS5.5` hardware-driver closure is now partially advancing through `docs/zig-port/FS5_5_HARDWARE_DRIVERS_SYSTEMS.md`.
+- `FS5.5` hardware-driver closure is now reached locally through `docs/zig-port/FS5_5_HARDWARE_DRIVERS_SYSTEMS.md`.
 - framebuffer/console is now locally strict-closed in `FS5.5`:
   - `src/baremetal/framebuffer_console.zig` programs a real Bochs/QEMU BGA linear framebuffer surface
   - `src/baremetal/pci.zig` discovers the display BAR and enables decode on the selected PCI function
@@ -34,13 +34,13 @@
   - `src/baremetal/pci.zig` now discovers the RTL8139 I/O BAR and IRQ line and enables I/O plus bus mastering on the selected PCI function
   - `src/pal/net.zig` and `src/baremetal_main.zig` now expose the raw-frame PAL/export seam through the same driver path
   - `scripts/baremetal-qemu-rtl8139-probe-check.ps1` now proves live MAC readout, TX, RX loopback, payload validation, and counter advance over the freestanding PVH image
-- the first TCP/IP slices are now present above that L2 proof:
+- TCP/IP is now also strict-closed for the FS5.5 acceptance bar above that L2 proof:
   - `src/protocol/ethernet.zig` + `src/protocol/arp.zig` implement Ethernet/ARP framing
   - `src/protocol/ipv4.zig` implements IPv4 framing plus checksum validation
   - `src/protocol/udp.zig` implements UDP framing plus pseudo-header checksum validation
-  - `src/protocol/tcp.zig` now implements a real strict TCP framing/checksum/payload slice
+  - `src/protocol/tcp.zig` now implements a real strict TCP framing/checksum slice plus a minimal client/server handshake and payload-exchange state machine with bounded client-side SYN and established-payload retransmission plus a strict remote-window guard for the single-segment send path
   - `src/pal/net.zig` now also exposes `sendTcpPacket` / `pollTcpPacketStrictInto`
-  - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`, and `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1` prove live ARP, IPv4, UDP, and TCP framing/payload loopback plus decode over the freestanding PVH image
+  - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`, and `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1` prove live ARP, IPv4, UDP, and TCP handshake/payload exchange plus decode over the freestanding PVH image, including dropped-first-SYN recovery and dropped-first-payload recovery through bounded retransmission
 - DHCP framing/decode is now also proven on the real RTL8139 path:
   - `src/protocol/dhcp.zig` provides strict DHCP discover encode/decode
   - `src/pal/net.zig` exposes DHCP send/poll helpers for the hosted/mock path
@@ -49,7 +49,13 @@
   - `src/protocol/dns.zig` implements strict DNS query + A-response encode/decode
   - `src/pal/net.zig` now exposes `sendDnsQuery`, `pollDnsPacket`, and `pollDnsPacketStrictInto`
   - `scripts/baremetal-qemu-rtl8139-dns-probe-check.ps1` proves live RTL8139 DNS query transport and strict A-response decode over the freestanding PVH image
-- full TCP handshake/connection management remains the next networking depth above the current TCP framing + DHCP + DNS slice.
+- ARP cache + gateway routing are now also proven on the real RTL8139 path:
+  - `src/protocol/arp.zig` now also encodes ARP reply frames
+  - `src/pal/net.zig` now exposes `configureIpv4Route`, `configureIpv4RouteFromDhcp`, `resolveNextHop`, `learnArpPacket`, and `sendUdpPacketRouted`
+  - hosted regressions prove DHCP-driven route configuration, gateway ARP learning, routed off-subnet UDP delivery, and direct-subnet gateway bypass
+  - `scripts/baremetal-qemu-rtl8139-gateway-probe-check.ps1` proves live ARP-reply learning, ARP-cache population, gateway next-hop selection, direct-subnet bypass, and routed UDP delivery over the freestanding PVH image
+- deeper networking depth remains future work above the FS5.5 closure bar:
+  - connection teardown and multi-flow session management
 - filesystem usage is now also on a real shared-backend path in `FS5.5`:
   - `src/baremetal/filesystem.zig` implements path-based directory creation plus file read/write/stat
   - `src/pal/fs.zig` routes the freestanding PAL filesystem surface through that layer

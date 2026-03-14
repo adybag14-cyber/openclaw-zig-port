@@ -11,7 +11,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 - Original OpenClaw beta baseline (`v2026.3.11-beta.1`): `99/99` covered
 - Union baseline: `140/140` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
-- Latest local validation: `zig build test --summary all` -> main `263/263` + bare-metal host `192/192` passing
+- Latest local validation: `zig build test --summary all` -> main `270/270` + bare-metal host `200/200` passing
 - Latest published edge release tag: `v0.2.0-zig-edge.28`
 - Toolchain policy: Codeberg `master` is canonical; `adybag14-cyber/zig` publishes rolling `latest-master` and immutable `upstream-<sha>` Windows releases for refresh and reproducibility.
 - CI policy: keep hosted build/test/parity/docs on Zig `master`, but pin the freestanding bare-metal compile/probe lane to the known-good Linux build `0.16.0-dev.2736+3b515fbed` until the upstream Linux `master` compiler crash on `zig build baremetal -Doptimize=ReleaseFast` is resolved.
@@ -49,13 +49,13 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - `src/baremetal/rtl8139.zig` now contains the real RTL8139 PCI-discovered bring-up, raw-frame TX/RX path, and loopback-friendly datapath checks
   - `src/pal/net.zig` and `src/baremetal_main.zig` now expose the raw-frame PAL + bare-metal ABI/export surface through the same driver path
   - `scripts/baremetal-qemu-rtl8139-probe-check.ps1` now proves live MAC readout, TX, RX loopback, payload validation, and TX/RX counter advance against the freestanding PVH artifact
-  - the first TCP/IP slices are now also live:
+  - TCP/IP is now strict-closed for the FS5.5 acceptance bar:
     - `src/protocol/ethernet.zig` + `src/protocol/arp.zig` provide Ethernet/ARP framing
     - `src/protocol/ipv4.zig` provides IPv4 header encode/decode plus checksum handling
     - `src/protocol/udp.zig` provides UDP encode/decode plus pseudo-header checksum handling
-    - `src/protocol/tcp.zig` provides strict TCP framing, checksum, and payload decode without pretending the full state machine is done
+    - `src/protocol/tcp.zig` now provides strict TCP framing, checksum, a minimal client/server session state machine for `SYN -> SYN-ACK -> ACK` plus established payload exchange, bounded client-side SYN and established-payload retransmission state, and a strict remote-window guard for the single-segment send path
     - `src/pal/net.zig` now exposes `sendArpRequest` / `pollArpPacket`, `sendIpv4Frame` / `pollIpv4PacketStrict`, `sendUdpPacket` / `pollUdpPacketStrictInto`, and `sendTcpPacket` / `pollTcpPacketStrictInto`
-    - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`, and `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1` now prove live ARP, IPv4, UDP, and TCP framing/payload loopback over the freestanding PVH artifact
+    - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`, and `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1` now prove live ARP, IPv4, UDP, and TCP handshake/payload exchange over the freestanding PVH artifact, including dropped-first-SYN recovery and dropped-first-payload recovery through bounded retransmission
   - DHCP framing/decode is now also proven on the real RTL8139 path:
     - `src/protocol/dhcp.zig` provides strict DHCP discover encode/decode
     - `src/pal/net.zig` exposes DHCP send/poll helpers for the hosted/mock path
@@ -64,7 +64,13 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
     - `src/protocol/dns.zig` provides strict DNS query and A-response encode/decode
     - `src/pal/net.zig` exposes `sendDnsQuery`, `pollDnsPacket`, and `pollDnsPacketStrictInto`
     - `scripts/baremetal-qemu-rtl8139-dns-probe-check.ps1` now proves real RTL8139 TX/RX of a DNS query and strict decode of a DNS A response with checksum, question, and answer validation
-  - full TCP handshake/connection management remains the next networking depth above the now-real L2 + ARP + IPv4 + UDP + TCP framing + DHCP + DNS slice
+  - ARP cache + gateway routing are now also proven on the real RTL8139 path:
+    - `src/protocol/arp.zig` now also encodes ARP reply frames
+    - `src/pal/net.zig` now exposes `configureIpv4Route`, `configureIpv4RouteFromDhcp`, `resolveNextHop`, `learnArpPacket`, and `sendUdpPacketRouted`
+    - hosted regressions prove DHCP-driven route configuration, gateway ARP learning, routed off-subnet UDP delivery, and direct-subnet gateway bypass
+    - `scripts/baremetal-qemu-rtl8139-gateway-probe-check.ps1` now proves live ARP-reply learning, ARP-cache population, gateway next-hop selection, direct-subnet bypass, and routed UDP delivery over the freestanding PVH artifact
+  - deeper networking depth remains open above the FS5.5 closure bar:
+    - connection teardown and multi-flow session management
   - path-based filesystem usage is now locally strict-closed:
     - `src/baremetal/filesystem.zig` implements directory creation plus file read/write/stat on the shared storage backend
     - `src/pal/fs.zig` routes the freestanding PAL filesystem surface through that layer

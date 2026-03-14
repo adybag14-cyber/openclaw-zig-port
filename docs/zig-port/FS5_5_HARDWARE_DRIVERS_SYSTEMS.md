@@ -272,17 +272,18 @@ Current local source-of-truth evidence:
 
 ### TCP/IP
 
-Status: `In progress`
+Status: `Complete`
 
 Notes:
 
-- strict Ethernet L2 closure did **not** imply ARP, IPv4, UDP, DHCP, DNS, or TCP closure
-- the first strict networking slices above the raw-frame RTL8139 path are now complete locally:
+- strict Ethernet L2 closure did **not** imply ARP, IPv4, UDP, DHCP, DNS, or TCP closure; that gap is now closed for the FS5.5 acceptance bar
+- the strict networking slices above the raw-frame RTL8139 path are now complete locally:
   - `src/protocol/ethernet.zig` encodes and decodes Ethernet headers
-  - `src/protocol/arp.zig` encodes ARP request frames and decodes ARP frames
+  - `src/protocol/arp.zig` encodes ARP request/reply frames and decodes ARP frames
   - `src/protocol/ipv4.zig` encodes and decodes IPv4 headers and validates header checksums
   - `src/protocol/udp.zig` encodes and decodes UDP datagrams and validates pseudo-header checksums
-  - `src/protocol/tcp.zig` encodes and decodes strict TCP headers, validates pseudo-header checksums, and rejects unsupported options in this slice
+  - `src/protocol/tcp.zig` now also provides a minimal session/state machine for client/server handshake and established payload exchange
+  - `src/protocol/tcp.zig` now also provides client-side SYN retransmission/timeout recovery for the initial handshake path plus established-payload retransmission/timeout recovery and a strict remote-window guard for the single-segment send path
   - `src/pal/net.zig` exposes:
     - `sendArpRequest`
     - `pollArpPacket`
@@ -292,14 +293,20 @@ Notes:
     - `pollUdpPacketStrictInto`
     - `sendTcpPacket`
     - `pollTcpPacketStrictInto`
-  - host regressions prove mock-device ARP, IPv4, UDP, and TCP loopback/decode through the RTL8139 path
+    - `configureIpv4Route`
+    - `configureIpv4RouteFromDhcp`
+    - `resolveNextHop`
+    - `learnArpPacket`
+    - `sendUdpPacketRouted`
+  - host regressions prove mock-device ARP, IPv4, UDP, DHCP, DNS, TCP handshake/payload exchange, SYN retransmission/timeout recovery, dropped-first-payload retransmission/timeout recovery, DHCP-driven route configuration, gateway ARP learning, routed off-subnet UDP delivery, and direct-subnet UDP bypass through the RTL8139 path
   - live QEMU proofs now pass:
     - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`
     - `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`
     - `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`
     - `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1`
-  - those proofs now cover live ARP request transmission, IPv4 frame encode/decode, UDP datagram encode/decode, TCP segment encode/decode, and TX/RX counter advance over the freestanding PVH image
-- The strict staged TCP gate is now the framing/payload slice over RTL8139 loopback.
+    - `scripts/baremetal-qemu-rtl8139-gateway-probe-check.ps1`
+  - those proofs now cover live ARP request transmission, IPv4 frame encode/decode, UDP datagram encode/decode, TCP `SYN -> SYN-ACK -> ACK` handshake plus payload exchange, and TX/RX counter advance over the freestanding PVH image
+  - the routed UDP proof now also covers live ARP-reply learning, ARP-cache population, gateway next-hop selection for off-subnet traffic, direct-subnet gateway bypass, and routed UDP delivery with the gateway MAC on the Ethernet frame while preserving the remote IPv4 destination
 - A real DHCP framing/decode slice is now also closed locally:
   - `src/protocol/dhcp.zig` provides strict DHCP discover encode/decode
   - `src/pal/net.zig` exposes DHCP send/poll helpers for the hosted/mock path
@@ -309,7 +316,8 @@ Notes:
   - `src/pal/net.zig` exposes `sendDnsQuery`, `pollDnsPacket`, and `pollDnsPacketStrictInto`
   - host regressions prove DNS query encode/decode, DNS A-response decode, and strict rejection of non-DNS UDP frames over the mock RTL8139 path
   - `scripts/baremetal-qemu-rtl8139-dns-probe-check.ps1` now proves real RTL8139 TX/RX of a DNS query plus strict decode/validation of a DNS A response over the freestanding PVH artifact
-- full TCP handshake/connection management remains open.
+- deeper networking depth remains future work above the FS5.5 closure bar:
+  - connection teardown and multi-flow session management
 
 ### Filesystem Usage
 
@@ -364,3 +372,5 @@ Current local source-of-truth evidence:
 ## Completion Rule
 
 `FS5.5` is only complete when every subsystem above is implemented and validated end to end with the dependency chain satisfied.
+
+Current local source-of-truth verdict: every FS5.5 subsystem above is now implemented and validated end to end with the stated dependency chain satisfied.
