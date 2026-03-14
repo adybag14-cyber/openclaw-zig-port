@@ -99,7 +99,8 @@ test "storage backend facade exposes ram-disk baseline semantics" {
 
 test "storage backend facade prefers ata pio backend when a device is available" {
     resetForTest();
-    ata_pio_disk.testEnableMockDevice(4096);
+    ata_pio_disk.testEnableMockDevice(8192);
+    ata_pio_disk.testInstallMockMbrPartition(2048, 4096, 0x83);
     defer ata_pio_disk.testDisableMockDevice();
 
     init();
@@ -109,6 +110,7 @@ test "storage backend facade prefers ata pio backend when a device is available"
     try std.testing.expectEqual(@as(u8, abi.storage_backend_ata_pio), storage.backend);
     try std.testing.expectEqual(@as(u8, 1), storage.mounted);
     try std.testing.expectEqual(@as(u32, 4096), storage.block_count);
+    try std.testing.expectEqual(@as(u32, 2048), ata_pio_disk.logicalBaseLba());
 
     var payload = [_]u8{0} ** block_size;
     for (&payload, 0..) |*byte, idx| {
@@ -117,4 +119,7 @@ test "storage backend facade prefers ata pio backend when a device is available"
     try writeBlocks(9, payload[0..]);
     try std.testing.expectEqual(@as(u8, 0x20), readByte(9, 0));
     try std.testing.expectEqual(@as(u8, 0x21), readByte(9, 1));
+    try std.testing.expectEqual(@as(u8, 0), ata_pio_disk.testReadMockByteRaw(9, 0));
+    try std.testing.expectEqual(@as(u8, 0x20), ata_pio_disk.testReadMockByteRaw(2048 + 9, 0));
+    try std.testing.expectEqual(@as(u8, 0x21), ata_pio_disk.testReadMockByteRaw(2048 + 9, 1));
 }

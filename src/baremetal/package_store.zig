@@ -126,10 +126,12 @@ test "package store installs script packages into canonical layout" {
 test "package store persists canonical layout on ata-backed storage" {
     storage_backend.resetForTest();
     filesystem.resetForTest();
-    ata_pio_disk.testEnableMockDevice(4096);
+    ata_pio_disk.testEnableMockDevice(8192);
+    ata_pio_disk.testInstallMockMbrPartition(2048, 4096, 0x83);
     defer ata_pio_disk.testDisableMockDevice();
 
     try installScriptPackage("persisted", "echo persisted-package", 11);
+    try std.testing.expectEqual(@as(u32, 2048), ata_pio_disk.logicalBaseLba());
 
     filesystem.resetForTest();
 

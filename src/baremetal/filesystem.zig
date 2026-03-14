@@ -523,13 +523,15 @@ test "filesystem persists path-based files on the ram disk" {
 test "filesystem persists path-based files on the ata backend" {
     storage_backend.resetForTest();
     resetForTest();
-    @import("ata_pio_disk.zig").testEnableMockDevice(4096);
+    @import("ata_pio_disk.zig").testEnableMockDevice(8192);
+    @import("ata_pio_disk.zig").testInstallMockMbrPartition(2048, 4096, 0x83);
     defer @import("ata_pio_disk.zig").testDisableMockDevice();
 
     try init();
     try createDirPath("/tools/cache");
     try writeFile("/tools/cache/tool.txt", "edge", 99);
     try std.testing.expectEqual(@as(u8, abi.storage_backend_ata_pio), state.active_backend);
+    try std.testing.expectEqual(@as(u32, 2048), @import("ata_pio_disk.zig").logicalBaseLba());
 
     const content = try readFileAlloc(std.testing.allocator, "/tools/cache/tool.txt", 64);
     defer std.testing.allocator.free(content);

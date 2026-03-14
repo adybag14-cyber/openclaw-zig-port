@@ -46,9 +46,9 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - `src/baremetal/ps2_input.zig` now contains a real x86 port-I/O backed PS/2 controller path
   - `scripts/baremetal-qemu-ps2-input-probe-check.ps1` proves IRQ-driven keyboard/mouse state updates against the freestanding PVH artifact
   - shared storage backend routing is now live through `src/baremetal/storage_backend.zig`
-  - `src/baremetal/ata_pio_disk.zig` now provides a real ATA PIO path with `IDENTIFY`, `READ`, `WRITE`, and `FLUSH`
+- `src/baremetal/ata_pio_disk.zig` now provides a real ATA PIO path with `IDENTIFY`, `READ`, `WRITE`, `FLUSH`, and first-partition MBR mounting
   - PAL storage and bare-metal tool-layout now route through the backend facade instead of talking directly to the RAM disk
-  - `scripts/baremetal-qemu-ata-storage-probe-check.ps1` now proves live ATA-backed raw block mutation + readback plus ATA-backed tool-layout and filesystem persistence against the freestanding PVH artifact
+- `scripts/baremetal-qemu-ata-storage-probe-check.ps1` now proves live ATA-backed raw block mutation + readback plus ATA-backed tool-layout and filesystem persistence against the freestanding PVH artifact on top of a real MBR-partitioned disk image
   - Ethernet L2 is now strict-closed in [`docs/zig-port/FS5_5_HARDWARE_DRIVERS_SYSTEMS.md`](docs/zig-port/FS5_5_HARDWARE_DRIVERS_SYSTEMS.md)
   - `src/baremetal/rtl8139.zig` now contains the real RTL8139 PCI-discovered bring-up, raw-frame TX/RX path, and loopback-friendly datapath checks
   - `src/pal/net.zig` and `src/baremetal_main.zig` now expose the raw-frame PAL + bare-metal ABI/export surface through the same driver path
@@ -82,7 +82,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - path-based filesystem usage is now locally strict-closed:
     - `src/baremetal/filesystem.zig` implements directory creation plus file read/write/stat on the shared storage backend
     - `src/pal/fs.zig` routes the freestanding PAL filesystem surface through that layer
-    - hosted and host validation now prove persistence over both RAM-disk and ATA PIO backends
+- hosted and host validation now prove persistence over both RAM-disk and ATA PIO backends, including the partition-mounted ATA view
   - bare-metal tool execution is now also on a real freestanding path:
     - `src/baremetal/tool_exec.zig` provides the builtin command substrate instead of falling back to hosted process execution, including canonical `run-package` support
     - `src/pal/proc.zig` exposes the explicit freestanding capture path used by the bare-metal PAL

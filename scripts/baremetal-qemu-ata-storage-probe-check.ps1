@@ -10,6 +10,8 @@ $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $releaseDir = Join-Path $repo "release"
 $expectedProbeCode = 0x34
 $expectedExitCode = ($expectedProbeCode * 2) + 1
+$partitionStartLba = 2048
+$partitionType = 0x83
 $rawProbeLba = 300
 $rawProbeSeed = 0x41
 $toolSlotLba = 34
@@ -180,6 +182,45 @@ function Read-ImageU32LE {
     return [System.BitConverter]::ToUInt32($Bytes, $index)
 }
 
+function Write-ImageU32LE {
+    param(
+        [byte[]] $Bytes,
+        [int] $Index,
+        [uint32] $Value
+    )
+
+    $Bytes[$Index + 0] = [byte]($Value -band 0xFF)
+    $Bytes[$Index + 1] = [byte](($Value -shr 8) -band 0xFF)
+    $Bytes[$Index + 2] = [byte](($Value -shr 16) -band 0xFF)
+    $Bytes[$Index + 3] = [byte](($Value -shr 24) -band 0xFF)
+}
+
+function Initialize-MbrPartitionedImage {
+    param(
+        [string] $Path,
+        [int] $SizeMiB,
+        [uint32] $PartitionStartLba,
+        [byte] $PartitionType
+    )
+
+    New-RawDiskImage -Path $Path -SizeMiB $SizeMiB
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    $totalSectors = [uint32]($bytes.Length / $blockSize)
+    if ($totalSectors -le $PartitionStartLba) {
+        throw "Disk image is too small for ATA partition start LBA $PartitionStartLba."
+    }
+
+    $partitionSectorCount = [uint32]($totalSectors - $PartitionStartLba)
+    $entryOffset = 446
+    $bytes[$entryOffset + 4] = $PartitionType
+    Write-ImageU32LE -Bytes $bytes -Index ($entryOffset + 8) -Value $PartitionStartLba
+    Write-ImageU32LE -Bytes $bytes -Index ($entryOffset + 12) -Value $partitionSectorCount
+    $bytes[510] = 0x55
+    $bytes[511] = 0xAA
+    [System.IO.File]::WriteAllBytes($Path, $bytes)
+    return $partitionSectorCount
+}
+
 Set-Location $repo
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 
@@ -224,7 +265,17 @@ if (-not $SkipBuild) {
     @"
 pub const qemu_smoke: bool = false;
 pub const console_probe_banner: bool = false;
+pub const framebuffer_probe_banner: bool = false;
 pub const ata_storage_probe: bool = true;
+pub const rtl8139_probe: bool = false;
+pub const rtl8139_arp_probe: bool = false;
+pub const rtl8139_ipv4_probe: bool = false;
+pub const rtl8139_udp_probe: bool = false;
+pub const rtl8139_tcp_probe: bool = false;
+pub const rtl8139_dhcp_probe: bool = false;
+pub const rtl8139_dns_probe: bool = false;
+pub const tool_exec_probe: bool = false;
+pub const rtl8139_gateway_probe: bool = false;
 "@ | Set-Content -Path $optionsPath -Encoding Ascii
 
     & $zig build-obj `
@@ -259,7 +310,7 @@ if (-not (Test-Path $artifact)) {
     throw "ATA storage probe artifact is missing: $artifact"
 }
 
-New-RawDiskImage -Path $diskImage -SizeMiB $DiskSizeMiB
+$partitionSectorCount = Initialize-MbrPartitionedImage -Path $diskImage -SizeMiB $DiskSizeMiB -PartitionStartLba $partitionStartLba -PartitionType $partitionType
 if (Test-Path $stdoutPath) { Remove-Item -Force $stdoutPath }
 if (Test-Path $stderrPath) { Remove-Item -Force $stderrPath }
 
@@ -310,14 +361,17 @@ if ($exitCode -ne $expectedExitCode) {
 }
 
 $imageBytes = [System.IO.File]::ReadAllBytes($diskImage)
-$rawByte0 = Read-ImageByte -Bytes $imageBytes -Lba $rawProbeLba -Offset 0
-$rawByte1 = Read-ImageByte -Bytes $imageBytes -Lba $rawProbeLba -Offset 1
-$rawNextBlockByte0 = Read-ImageByte -Bytes $imageBytes -Lba ($rawProbeLba + 1) -Offset 0
-$toolByte0 = Read-ImageByte -Bytes $imageBytes -Lba $toolSlotLba -Offset 0
-$toolByte1 = Read-ImageByte -Bytes $imageBytes -Lba $toolSlotLba -Offset 1
-$toolByte512 = Read-ImageByte -Bytes $imageBytes -Lba ($toolSlotLba + 1) -Offset 0
-$toolMagic = Read-ImageU32LE -Bytes $imageBytes -Lba 0
-$fsMagic = Read-ImageU32LE -Bytes $imageBytes -Lba $filesystemSuperblockLba
+$rawProbePhysicalLba = $partitionStartLba + $rawProbeLba
+$toolSlotPhysicalLba = $partitionStartLba + $toolSlotLba
+$filesystemSuperblockPhysicalLba = $partitionStartLba + $filesystemSuperblockLba
+$rawByte0 = Read-ImageByte -Bytes $imageBytes -Lba $rawProbePhysicalLba -Offset 0
+$rawByte1 = Read-ImageByte -Bytes $imageBytes -Lba $rawProbePhysicalLba -Offset 1
+$rawNextBlockByte0 = Read-ImageByte -Bytes $imageBytes -Lba ($rawProbePhysicalLba + 1) -Offset 0
+$toolByte0 = Read-ImageByte -Bytes $imageBytes -Lba $toolSlotPhysicalLba -Offset 0
+$toolByte1 = Read-ImageByte -Bytes $imageBytes -Lba $toolSlotPhysicalLba -Offset 1
+$toolByte512 = Read-ImageByte -Bytes $imageBytes -Lba ($toolSlotPhysicalLba + 1) -Offset 0
+$toolMagic = Read-ImageU32LE -Bytes $imageBytes -Lba $partitionStartLba
+$fsMagic = Read-ImageU32LE -Bytes $imageBytes -Lba $filesystemSuperblockPhysicalLba
 
 if ($rawByte0 -ne $rawProbeSeed -or $rawByte1 -ne ($rawProbeSeed + 1) -or $rawNextBlockByte0 -ne $rawProbeSeed) {
     throw "Host-side ATA raw readback did not match the expected pattern."
@@ -336,6 +390,8 @@ Write-Output "BAREMETAL_QEMU_AVAILABLE=True"
 Write-Output "BAREMETAL_QEMU_BINARY=$qemu"
 Write-Output "BAREMETAL_QEMU_ATA_STORAGE_PROBE=pass"
 Write-Output "BAREMETAL_QEMU_ATA_STORAGE_IMAGE=$diskImage"
+Write-Output "BAREMETAL_ATA_PARTITION_START_LBA=$partitionStartLba"
+Write-Output "BAREMETAL_ATA_PARTITION_SECTOR_COUNT=$partitionSectorCount"
 Write-Output "BAREMETAL_ATA_RAW_LBA300_BYTE0=$rawByte0"
 Write-Output "BAREMETAL_ATA_RAW_LBA300_BYTE1=$rawByte1"
 Write-Output "BAREMETAL_ATA_RAW_LBA301_BYTE0=$rawNextBlockByte0"

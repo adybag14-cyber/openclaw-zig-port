@@ -117,6 +117,8 @@ const rtl8139_gateway_probe_enabled: bool = build_options.rtl8139_gateway_probe;
 const ata_probe_raw_lba: u32 = 300;
 const ata_probe_raw_block_count: u32 = 2;
 const ata_probe_raw_seed: u8 = 0x41;
+const ata_probe_partition_start_lba: u32 = 2048;
+const ata_probe_partition_sector_count: u32 = 4096;
 const ata_probe_tool_slot_id: u32 = 1;
 const ata_probe_tool_slot_byte_len: u32 = 600;
 const ata_probe_tool_slot_seed: u8 = 0x30;
@@ -128,6 +130,7 @@ const ata_probe_filesystem_payload = "{\"disk\":\"ata\"}";
 const AtaStorageProbeError = error{
     AtaBackendUnavailable,
     AtaCapacityTooSmall,
+    PartitionMountMismatch,
     RawPatternWriteFailed,
     RawPatternFlushFailed,
     RawPatternReadbackFailed,
@@ -1609,6 +1612,9 @@ fn runAtaStorageProbe() AtaStorageProbeError!void {
     }
     if (storage.block_count <= ata_probe_raw_lba + ata_probe_raw_block_count) {
         return error.AtaCapacityTooSmall;
+    }
+    if (ata_pio_disk.logicalBaseLba() != ata_probe_partition_start_lba) {
+        return error.PartitionMountMismatch;
     }
 
     if (oc_storage_write_pattern(ata_probe_raw_lba, ata_probe_raw_block_count, ata_probe_raw_seed) != abi.result_ok) {
@@ -3528,18 +3534,19 @@ fn ataStorageProbeFailureCode(err: AtaStorageProbeError) u8 {
     return switch (err) {
         error.AtaBackendUnavailable => 0x41,
         error.AtaCapacityTooSmall => 0x42,
-        error.RawPatternWriteFailed => 0x43,
-        error.RawPatternFlushFailed => 0x44,
-        error.RawPatternReadbackFailed => 0x45,
-        error.ToolLayoutInitFailed => 0x46,
-        error.ToolLayoutWriteFailed => 0x47,
-        error.ToolLayoutReadbackFailed => 0x48,
-        error.ToolLayoutReloadFailed => 0x49,
-        error.FilesystemInitFailed => 0x4A,
-        error.FilesystemDirCreateFailed => 0x4B,
-        error.FilesystemWriteFailed => 0x4C,
-        error.FilesystemReadbackFailed => 0x4D,
-        error.FilesystemReloadFailed => 0x4E,
+        error.PartitionMountMismatch => 0x43,
+        error.RawPatternWriteFailed => 0x44,
+        error.RawPatternFlushFailed => 0x45,
+        error.RawPatternReadbackFailed => 0x46,
+        error.ToolLayoutInitFailed => 0x47,
+        error.ToolLayoutWriteFailed => 0x48,
+        error.ToolLayoutReadbackFailed => 0x49,
+        error.ToolLayoutReloadFailed => 0x4A,
+        error.FilesystemInitFailed => 0x4B,
+        error.FilesystemDirCreateFailed => 0x4C,
+        error.FilesystemWriteFailed => 0x4D,
+        error.FilesystemReadbackFailed => 0x4E,
+        error.FilesystemReloadFailed => 0x4F,
     };
 }
 
@@ -11737,17 +11744,20 @@ test "baremetal storage backend facade reports ram-disk backend baseline" {
 
 test "baremetal storage exports report ata pio backend when a device is available" {
     resetBaremetalRuntimeForTest();
-    ata_pio_disk.testEnableMockDevice(4096);
+    ata_pio_disk.testEnableMockDevice(8192);
+    ata_pio_disk.testInstallMockMbrPartition(ata_probe_partition_start_lba, ata_probe_partition_sector_count, 0x83);
     defer ata_pio_disk.testDisableMockDevice();
 
     oc_storage_init();
     const storage = oc_storage_state_ptr();
     try std.testing.expectEqual(@as(u8, abi.storage_backend_ata_pio), storage.backend);
     try std.testing.expectEqual(@as(u8, 1), storage.mounted);
-    try std.testing.expectEqual(@as(u32, 4096), storage.block_count);
+    try std.testing.expectEqual(@as(u32, ata_probe_partition_sector_count), storage.block_count);
+    try std.testing.expectEqual(ata_probe_partition_start_lba, ata_pio_disk.logicalBaseLba());
 
     try std.testing.expectEqual(@as(i16, abi.result_ok), oc_storage_write_pattern(6, 1, 0x55));
     try std.testing.expectEqual(@as(u8, 0x55), oc_storage_read_byte(6, 0));
+    try std.testing.expectEqual(@as(u8, 0x55), ata_pio_disk.testReadMockByteRaw(ata_probe_partition_start_lba + 6, 0));
     try std.testing.expectEqual(@as(i16, abi.result_ok), oc_storage_flush());
 }
 
@@ -11825,10 +11835,12 @@ test "baremetal filesystem persists path-based files on the ram disk" {
 
 test "baremetal filesystem persists path-based files on ata-backed storage" {
     resetBaremetalRuntimeForTest();
-    ata_pio_disk.testEnableMockDevice(4096);
+    ata_pio_disk.testEnableMockDevice(8192);
+    ata_pio_disk.testInstallMockMbrPartition(ata_probe_partition_start_lba, ata_probe_partition_sector_count, 0x83);
     defer ata_pio_disk.testDisableMockDevice();
 
     try std.testing.expectEqual(@as(i16, abi.result_ok), oc_filesystem_init());
+    try std.testing.expectEqual(ata_probe_partition_start_lba, ata_pio_disk.logicalBaseLba());
     try filesystem.createDirPath("/tools/cache");
     try filesystem.writeFile("/tools/cache/tool.txt", "edge", 99);
 
@@ -11849,21 +11861,27 @@ test "baremetal filesystem persists path-based files on ata-backed storage" {
 
 test "baremetal ata storage probe validates raw, tool layout, and filesystem persistence" {
     resetBaremetalRuntimeForTest();
-    ata_pio_disk.testEnableMockDevice(4096);
+    ata_pio_disk.testEnableMockDevice(8192);
+    ata_pio_disk.testInstallMockMbrPartition(ata_probe_partition_start_lba, ata_probe_partition_sector_count, 0x83);
     defer ata_pio_disk.testDisableMockDevice();
 
     try runAtaStorageProbe();
 
     const storage = oc_storage_state_ptr();
     try std.testing.expectEqual(@as(u8, abi.storage_backend_ata_pio), storage.backend);
+    try std.testing.expectEqual(ata_probe_partition_start_lba, ata_pio_disk.logicalBaseLba());
     try std.testing.expectEqual(@as(u8, 0x41), oc_storage_read_byte(ata_probe_raw_lba, 0));
     try std.testing.expectEqual(@as(u8, 0x42), oc_storage_read_byte(ata_probe_raw_lba, 1));
     try std.testing.expectEqual(@as(u8, 0x41), oc_storage_read_byte(ata_probe_raw_lba + 1, 0));
+    try std.testing.expectEqual(@as(u8, 0x41), ata_pio_disk.testReadMockByteRaw(ata_probe_partition_start_lba + ata_probe_raw_lba, 0));
+    try std.testing.expectEqual(@as(u8, 0x42), ata_pio_disk.testReadMockByteRaw(ata_probe_partition_start_lba + ata_probe_raw_lba, 1));
+    try std.testing.expectEqual(@as(u8, 0x41), ata_pio_disk.testReadMockByteRaw(ata_probe_partition_start_lba + ata_probe_raw_lba + 1, 0));
 
     const slot = oc_tool_layout_slot(ata_probe_tool_slot_id);
     try std.testing.expectEqual(ata_probe_tool_slot_expected_lba, slot.start_lba);
     try std.testing.expectEqual(@as(u8, ata_probe_tool_slot_seed), oc_tool_slot_byte(ata_probe_tool_slot_id, 0));
     try std.testing.expectEqual(@as(u8, ata_probe_tool_slot_seed), oc_tool_slot_byte(ata_probe_tool_slot_id, 512));
+    try std.testing.expectEqual(@as(u8, ata_probe_tool_slot_seed), ata_pio_disk.testReadMockByteRaw(ata_probe_partition_start_lba + slot.start_lba, 0));
 
     const content = try filesystem.readFileAlloc(std.testing.allocator, ata_probe_filesystem_path, 64);
     defer std.testing.allocator.free(content);

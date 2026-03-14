@@ -38,11 +38,20 @@ const status_bsy: u8 = 1 << 7;
 
 const drive_master_lba: u8 = 0xE0;
 const poll_limit: usize = 100_000;
-const mock_block_capacity: usize = 4096;
+const mock_block_capacity: usize = 16384;
+const mbr_partition_table_offset: usize = 446;
+const mbr_partition_entry_len: usize = 16;
+const mbr_partition_count: usize = 4;
+const mbr_signature_offset: usize = 510;
+const mbr_signature_low: u8 = 0x55;
+const mbr_signature_high: u8 = 0xAA;
+const mbr_partition_type_protective_gpt: u8 = 0xEE;
 
 var state: abi.BaremetalStorageState = undefined;
 var probe_completed: bool = false;
 var probe_saw_device: bool = false;
+var raw_block_count: u32 = 0;
+var mounted_lba_base: u32 = 0;
 
 const MockDevice = struct {
     enabled: bool = false,
@@ -88,20 +97,25 @@ pub fn statePtr() *const abi.BaremetalStorageState {
     return &state;
 }
 
+pub fn logicalBaseLba() u32 {
+    return mounted_lba_base;
+}
+
 pub fn readBlocks(lba: u32, out: []u8) Error!void {
     if (state.mounted == 0) return error.NotMounted;
     if (out.len % block_size != 0) return error.UnalignedLength;
     const blocks: usize = out.len / block_size;
     if (@as(u64, lba) + blocks > state.block_count) return error.OutOfRange;
 
+    const physical_lba = translateLba(lba);
     if (mockAvailable() and state.mounted != 0) {
-        const start = @as(usize, lba) * block_size;
+        const start = @as(usize, physical_lba) * block_size;
         const end = start + out.len;
         @memcpy(out, mock_device.data[start..end]);
     } else {
         var block_index: usize = 0;
         while (block_index < blocks) : (block_index += 1) {
-            try readSectorHardware(lba + @as(u32, @intCast(block_index)), out[block_index * block_size ..][0..block_size]);
+            try readSectorHardware(physical_lba + @as(u32, @intCast(block_index)), out[block_index * block_size ..][0..block_size]);
         }
     }
 
@@ -117,14 +131,15 @@ pub fn writeBlocks(lba: u32, input: []const u8) Error!void {
     const blocks: usize = input.len / block_size;
     if (@as(u64, lba) + blocks > state.block_count) return error.OutOfRange;
 
+    const physical_lba = translateLba(lba);
     if (mockAvailable() and state.mounted != 0) {
-        const start = @as(usize, lba) * block_size;
+        const start = @as(usize, physical_lba) * block_size;
         const end = start + input.len;
         @memcpy(mock_device.data[start..end], input);
     } else {
         var block_index: usize = 0;
         while (block_index < blocks) : (block_index += 1) {
-            try writeSectorHardware(lba + @as(u32, @intCast(block_index)), input[block_index * block_size ..][0..block_size]);
+            try writeSectorHardware(physical_lba + @as(u32, @intCast(block_index)), input[block_index * block_size ..][0..block_size]);
         }
     }
 
@@ -147,13 +162,14 @@ pub fn flush() Error!void {
 pub fn readByte(lba: u32, offset: u32) u8 {
     if (state.mounted == 0) return 0;
     if (lba >= state.block_count or offset >= state.block_size) return 0;
+    const physical_lba = translateLba(lba);
     if (mockAvailable() and state.mounted != 0) {
-        const index = (@as(usize, lba) * block_size) + @as(usize, offset);
+        const index = (@as(usize, physical_lba) * block_size) + @as(usize, offset);
         return mock_device.data[index];
     }
 
     var scratch = [_]u8{0} ** block_size;
-    readSectorHardware(lba, scratch[0..]) catch return 0;
+    readSectorHardware(physical_lba, scratch[0..]) catch return 0;
     return scratch[offset];
 }
 
@@ -168,6 +184,28 @@ pub fn testEnableMockDevice(sector_count: u32) void {
 pub fn testDisableMockDevice() void {
     if (!builtin.is_test) return;
     resetForTest();
+}
+
+pub fn testInstallMockMbrPartition(start_lba: u32, sector_count: u32, partition_type: u8) void {
+    if (!builtin.is_test or !mock_device.enabled) return;
+    std.debug.assert(start_lba > 0);
+    std.debug.assert(sector_count > 0);
+    std.debug.assert(@as(u64, start_lba) + sector_count <= mock_device.sector_count);
+
+    @memset(mock_device.data[0..block_size], 0);
+    const entry = mock_device.data[mbr_partition_table_offset .. mbr_partition_table_offset + mbr_partition_entry_len];
+    entry[4] = partition_type;
+    writeLeU32(entry[8..12], start_lba);
+    writeLeU32(entry[12..16], sector_count);
+    mock_device.data[mbr_signature_offset] = mbr_signature_low;
+    mock_device.data[mbr_signature_offset + 1] = mbr_signature_high;
+}
+
+pub fn testReadMockByteRaw(lba: u32, offset: u32) u8 {
+    if (!builtin.is_test or !mock_device.enabled) return 0;
+    if (lba >= mock_device.sector_count or offset >= block_size) return 0;
+    const index = (@as(usize, lba) * block_size) + @as(usize, offset);
+    return mock_device.data[index];
 }
 
 fn resetState() void {
@@ -188,6 +226,8 @@ fn resetState() void {
         .bytes_read = 0,
         .bytes_written = 0,
     };
+    raw_block_count = 0;
+    mounted_lba_base = 0;
 }
 
 fn hardwareBacked() bool {
@@ -199,8 +239,9 @@ fn mockAvailable() bool {
 }
 
 fn mountMock() void {
-    state.mounted = 1;
-    state.block_count = mock_device.sector_count;
+    var sector0 = [_]u8{0} ** block_size;
+    @memcpy(sector0[0..], mock_device.data[0..block_size]);
+    mountPartitionedView(sector0[0..], mock_device.sector_count);
 }
 
 fn detectHardwareDevice() bool {
@@ -234,8 +275,72 @@ fn mountFromIdentifyWords(words: []const u16) Error!void {
     if (words.len < 256) return error.ProtocolError;
     const sector_count = (@as(u32, words[61]) << 16) | @as(u32, words[60]);
     if (sector_count == 0) return error.ProtocolError;
-    state.block_count = sector_count;
+
+    var sector0 = [_]u8{0} ** block_size;
+    if (readSectorHardware(0, sector0[0..])) |_| {
+        mountPartitionedView(sector0[0..], sector_count);
+    } else |_| {
+        mountWholeDisk(sector_count);
+    }
+}
+
+fn translateLba(logical_lba: u32) u32 {
+    return mounted_lba_base + logical_lba;
+}
+
+fn mountWholeDisk(block_count_value: u32) void {
+    raw_block_count = block_count_value;
+    mounted_lba_base = 0;
+    state.block_count = block_count_value;
     state.mounted = 1;
+}
+
+fn mountPartitionedView(sector0: []const u8, block_count_value: u32) void {
+    raw_block_count = block_count_value;
+    if (!mountFirstMbrPartition(sector0, block_count_value)) {
+        mountWholeDisk(block_count_value);
+    }
+}
+
+fn mountFirstMbrPartition(sector0: []const u8, block_count_value: u32) bool {
+    if (sector0.len < block_size) return false;
+    if (sector0[mbr_signature_offset] != mbr_signature_low or sector0[mbr_signature_offset + 1] != mbr_signature_high) {
+        return false;
+    }
+
+    var entry_index: usize = 0;
+    while (entry_index < mbr_partition_count) : (entry_index += 1) {
+        const offset = mbr_partition_table_offset + (entry_index * mbr_partition_entry_len);
+        const entry = sector0[offset .. offset + mbr_partition_entry_len];
+        const partition_type = entry[4];
+        const start_lba = readLeU32(entry[8..12]);
+        const sector_count = readLeU32(entry[12..16]);
+        if (partition_type == 0 or partition_type == mbr_partition_type_protective_gpt) continue;
+        if (start_lba == 0 or sector_count == 0) continue;
+        if (@as(u64, start_lba) + sector_count > block_count_value) continue;
+
+        mounted_lba_base = start_lba;
+        state.block_count = sector_count;
+        state.mounted = 1;
+        return true;
+    }
+    return false;
+}
+
+fn readLeU32(bytes: []const u8) u32 {
+    std.debug.assert(bytes.len >= 4);
+    return @as(u32, bytes[0]) |
+        (@as(u32, bytes[1]) << 8) |
+        (@as(u32, bytes[2]) << 16) |
+        (@as(u32, bytes[3]) << 24);
+}
+
+fn writeLeU32(bytes: []u8, value: u32) void {
+    std.debug.assert(bytes.len >= 4);
+    bytes[0] = @as(u8, @truncate(value));
+    bytes[1] = @as(u8, @truncate(value >> 8));
+    bytes[2] = @as(u8, @truncate(value >> 16));
+    bytes[3] = @as(u8, @truncate(value >> 24));
 }
 
 fn readSectorHardware(lba: u32, out: []u8) Error!void {
@@ -398,4 +503,28 @@ test "ata pio mock device read write and flush update storage state" {
     try flush();
     try std.testing.expectEqual(@as(u32, 1), storage.flush_ops);
     try std.testing.expectEqual(@as(u8, 0), storage.dirty);
+}
+
+test "ata pio mock device mounts first MBR partition as logical disk" {
+    testEnableMockDevice(8192);
+    defer testDisableMockDevice();
+    testInstallMockMbrPartition(2048, 4096, 0x83);
+
+    init();
+
+    const storage = statePtr();
+    try std.testing.expectEqual(@as(u8, 1), storage.mounted);
+    try std.testing.expectEqual(@as(u32, 4096), storage.block_count);
+    try std.testing.expectEqual(@as(u32, 2048), logicalBaseLba());
+
+    var payload = [_]u8{0} ** block_size;
+    for (&payload, 0..) |*byte, idx| {
+        byte.* = @as(u8, @truncate(0x60 + idx));
+    }
+    try writeBlocks(6, payload[0..]);
+    try std.testing.expectEqual(@as(u8, payload[0]), readByte(6, 0));
+    try std.testing.expectEqual(@as(u8, payload[1]), readByte(6, 1));
+    try std.testing.expectEqual(@as(u8, 0), testReadMockByteRaw(6, 0));
+    try std.testing.expectEqual(@as(u8, payload[0]), testReadMockByteRaw(2054, 0));
+    try std.testing.expectEqual(@as(u8, payload[1]), testReadMockByteRaw(2054, 1));
 }
