@@ -282,7 +282,7 @@ Notes:
   - `src/protocol/arp.zig` encodes ARP request/reply frames and decodes ARP frames
   - `src/protocol/ipv4.zig` encodes and decodes IPv4 headers and validates header checksums
   - `src/protocol/udp.zig` encodes and decodes UDP datagrams and validates pseudo-header checksums
-  - `src/protocol/tcp.zig` now also provides a minimal session/state machine for client/server handshake and established payload exchange
+  - `src/protocol/tcp.zig` now also provides a minimal session/state machine for client/server handshake, established payload exchange, and bounded four-way teardown
   - `src/protocol/tcp.zig` now also provides client-side SYN retransmission/timeout recovery for the initial handshake path plus established-payload retransmission/timeout recovery and a strict remote-window guard for the single-segment send path
   - `src/pal/net.zig` exposes:
     - `sendArpRequest`
@@ -298,14 +298,14 @@ Notes:
     - `resolveNextHop`
     - `learnArpPacket`
     - `sendUdpPacketRouted`
-  - host regressions prove mock-device ARP, IPv4, UDP, DHCP, DNS, TCP handshake/payload exchange, SYN retransmission/timeout recovery, dropped-first-payload retransmission/timeout recovery, DHCP-driven route configuration, gateway ARP learning, routed off-subnet UDP delivery, and direct-subnet UDP bypass through the RTL8139 path
+  - host regressions prove mock-device ARP, IPv4, UDP, DHCP, DNS, TCP handshake/payload exchange, bounded four-way close, SYN retransmission/timeout recovery, dropped-first-payload retransmission/timeout recovery, DHCP-driven route configuration, gateway ARP learning, routed off-subnet UDP delivery, and direct-subnet UDP bypass through the RTL8139 path
   - live QEMU proofs now pass:
     - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`
     - `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`
     - `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`
     - `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1`
     - `scripts/baremetal-qemu-rtl8139-gateway-probe-check.ps1`
-  - those proofs now cover live ARP request transmission, IPv4 frame encode/decode, UDP datagram encode/decode, TCP `SYN -> SYN-ACK -> ACK` handshake plus payload exchange, and TX/RX counter advance over the freestanding PVH image
+  - those proofs now cover live ARP request transmission, IPv4 frame encode/decode, UDP datagram encode/decode, TCP `SYN -> SYN-ACK -> ACK` handshake plus payload exchange and bounded four-way close, and TX/RX counter advance over the freestanding PVH image
   - the routed UDP proof now also covers live ARP-reply learning, ARP-cache population, gateway next-hop selection for off-subnet traffic, direct-subnet gateway bypass, and routed UDP delivery with the gateway MAC on the Ethernet frame while preserving the remote IPv4 destination
 - A real DHCP framing/decode slice is now also closed locally:
   - `src/protocol/dhcp.zig` provides strict DHCP discover encode/decode
@@ -317,7 +317,8 @@ Notes:
   - host regressions prove DNS query encode/decode, DNS A-response decode, and strict rejection of non-DNS UDP frames over the mock RTL8139 path
   - `scripts/baremetal-qemu-rtl8139-dns-probe-check.ps1` now proves real RTL8139 TX/RX of a DNS query plus strict decode/validation of a DNS A response over the freestanding PVH artifact
 - deeper networking depth remains future work above the FS5.5 closure bar:
-  - connection teardown and multi-flow session management
+  - multi-flow session management
+  - broader teardown robustness beyond the current bounded four-way close slice
 
 ### Filesystem Usage
 

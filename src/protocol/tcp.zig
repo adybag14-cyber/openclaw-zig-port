@@ -92,6 +92,10 @@ pub const State = enum {
     syn_sent,
     syn_received,
     established,
+    fin_wait_1,
+    fin_wait_2,
+    close_wait,
+    last_ack,
 };
 
 pub const RetransmitKind = enum {
@@ -269,8 +273,30 @@ pub const Session = struct {
         switch (self.state) {
             .syn_received => self.state = .established,
             .established => self.clearRetransmit(),
+            .fin_wait_1 => self.state = .fin_wait_2,
+            .last_ack => self.state = .closed,
             else => return error.InvalidState,
         }
+    }
+
+    pub fn buildFin(self: *Session) Error!Outbound {
+        if (self.retransmit.armed()) return error.InvalidState;
+
+        const next_state = switch (self.state) {
+            .established => State.fin_wait_1,
+            .close_wait => State.last_ack,
+            else => return error.InvalidState,
+        };
+
+        const outbound = Outbound{
+            .sequence_number = self.send_next,
+            .acknowledgment_number = self.recv_next,
+            .flags = flag_fin | flag_ack,
+            .window_size = self.local_window,
+        };
+        self.send_next +%= 1;
+        self.state = next_state;
+        return outbound;
     }
 
     pub fn buildAck(self: *Session) Error!Outbound {
@@ -310,6 +336,27 @@ pub const Session = struct {
         };
         self.send_next +%= @as(u32, @intCast(payload.len));
         return outbound;
+    }
+
+    pub fn acceptFin(self: *Session, packet: Packet) Error!Outbound {
+        try self.validatePorts(packet);
+        if (packet.flags != (flag_fin | flag_ack) or packet.payload.len != 0) return error.UnexpectedFlags;
+        if (packet.sequence_number != self.recv_next) return error.SequenceMismatch;
+        if (packet.acknowledgment_number != self.send_next) return error.AcknowledgmentMismatch;
+
+        self.remote_window = packet.window_size;
+        self.recv_next +%= 1;
+        self.state = switch (self.state) {
+            .established => .close_wait,
+            .fin_wait_1, .fin_wait_2 => .closed,
+            else => return error.InvalidState,
+        };
+        return .{
+            .sequence_number = self.send_next,
+            .acknowledgment_number = self.recv_next,
+            .flags = flag_ack,
+            .window_size = self.local_window,
+        };
     }
 
     pub fn acceptPayload(self: *Session, packet: Packet) Error!void {
@@ -737,6 +784,118 @@ test "tcp session payload retransmit timeout clamps zero and does not double fir
     try std.testing.expectEqual(data.sequence_number, second_retry.sequence_number);
     try std.testing.expectEqualStrings(payload, second_retry.payload);
     try std.testing.expectEqual(@as(u32, 2), client.retransmit.attempts);
+}
+
+test "tcp session completes four-way teardown after established payload exchange" {
+    const client_ip = [4]u8{ 192, 168, 56, 10 };
+    const server_ip = [4]u8{ 192, 168, 56, 1 };
+    const payload = "BYE";
+
+    var client = Session.initClient(4321, 443, 0x0102_0304, 4096);
+    var server = Session.initServer(443, 4321, 0xA0B0_C0D0, 8192);
+
+    const syn = try client.buildSyn();
+    var syn_segment: [header_len]u8 = undefined;
+    const syn_len = try encodeOutboundSegment(client, syn, syn_segment[0..], client_ip, server_ip);
+    const syn_packet = try decode(syn_segment[0..syn_len], client_ip, server_ip);
+    const syn_ack = try server.acceptSyn(syn_packet);
+
+    var syn_ack_segment: [header_len]u8 = undefined;
+    const syn_ack_len = try encodeOutboundSegment(server, syn_ack, syn_ack_segment[0..], server_ip, client_ip);
+    const syn_ack_packet = try decode(syn_ack_segment[0..syn_ack_len], server_ip, client_ip);
+    const ack = try client.acceptSynAck(syn_ack_packet);
+
+    var ack_segment: [header_len]u8 = undefined;
+    const ack_len = try encodeOutboundSegment(client, ack, ack_segment[0..], client_ip, server_ip);
+    const ack_packet = try decode(ack_segment[0..ack_len], client_ip, server_ip);
+    try server.acceptAck(ack_packet);
+
+    const data = try client.buildPayload(payload);
+    var data_segment: [header_len + payload.len]u8 = undefined;
+    const data_len = try encodeOutboundSegment(client, data, data_segment[0..], client_ip, server_ip);
+    const data_packet = try decode(data_segment[0..data_len], client_ip, server_ip);
+    try server.acceptPayload(data_packet);
+
+    const payload_ack = try server.buildAck();
+    var payload_ack_segment: [header_len]u8 = undefined;
+    const payload_ack_len = try encodeOutboundSegment(server, payload_ack, payload_ack_segment[0..], server_ip, client_ip);
+    const payload_ack_packet = try decode(payload_ack_segment[0..payload_ack_len], server_ip, client_ip);
+    try client.acceptAck(payload_ack_packet);
+
+    const client_fin = try client.buildFin();
+    try std.testing.expectEqual(State.fin_wait_1, client.state);
+    var client_fin_segment: [header_len]u8 = undefined;
+    const client_fin_len = try encodeOutboundSegment(client, client_fin, client_fin_segment[0..], client_ip, server_ip);
+    const client_fin_packet = try decode(client_fin_segment[0..client_fin_len], client_ip, server_ip);
+    const fin_ack = try server.acceptFin(client_fin_packet);
+    try std.testing.expectEqual(State.close_wait, server.state);
+
+    var fin_ack_segment: [header_len]u8 = undefined;
+    const fin_ack_len = try encodeOutboundSegment(server, fin_ack, fin_ack_segment[0..], server_ip, client_ip);
+    const fin_ack_packet = try decode(fin_ack_segment[0..fin_ack_len], server_ip, client_ip);
+    try client.acceptAck(fin_ack_packet);
+    try std.testing.expectEqual(State.fin_wait_2, client.state);
+
+    const server_fin = try server.buildFin();
+    try std.testing.expectEqual(State.last_ack, server.state);
+    var server_fin_segment: [header_len]u8 = undefined;
+    const server_fin_len = try encodeOutboundSegment(server, server_fin, server_fin_segment[0..], server_ip, client_ip);
+    const server_fin_packet = try decode(server_fin_segment[0..server_fin_len], server_ip, client_ip);
+    const final_ack = try client.acceptFin(server_fin_packet);
+    try std.testing.expectEqual(State.closed, client.state);
+
+    var final_ack_segment: [header_len]u8 = undefined;
+    const final_ack_len = try encodeOutboundSegment(client, final_ack, final_ack_segment[0..], client_ip, server_ip);
+    const final_ack_packet = try decode(final_ack_segment[0..final_ack_len], client_ip, server_ip);
+    try server.acceptAck(final_ack_packet);
+
+    try std.testing.expectEqual(State.closed, client.state);
+    try std.testing.expectEqual(State.closed, server.state);
+    try std.testing.expectEqual(@as(u32, 0x0102_0305 + payload.len + 1), client.send_next);
+    try std.testing.expectEqual(@as(u32, 0x0102_0305 + payload.len + 1), server.recv_next);
+    try std.testing.expectEqual(@as(u32, 0xA0B0_C0D2), server.send_next);
+    try std.testing.expectEqual(@as(u32, 0xA0B0_C0D2), client.recv_next);
+}
+
+test "tcp session rejects fin outside teardown states and rejects malformed fin packets" {
+    const client_ip = [4]u8{ 192, 168, 56, 10 };
+    const server_ip = [4]u8{ 192, 168, 56, 1 };
+    const payload = "bad";
+
+    var client = Session.initClient(4321, 443, 0x0102_0304, 4096);
+    var server = Session.initServer(443, 4321, 0xA0B0_C0D0, 8192);
+
+    try std.testing.expectError(error.InvalidState, client.buildFin());
+
+    const syn = try client.buildSyn();
+    var syn_segment: [header_len]u8 = undefined;
+    const syn_len = try encodeOutboundSegment(client, syn, syn_segment[0..], client_ip, server_ip);
+    const syn_packet = try decode(syn_segment[0..syn_len], client_ip, server_ip);
+    const syn_ack = try server.acceptSyn(syn_packet);
+
+    var syn_ack_segment: [header_len]u8 = undefined;
+    const syn_ack_len = try encodeOutboundSegment(server, syn_ack, syn_ack_segment[0..], server_ip, client_ip);
+    const syn_ack_packet = try decode(syn_ack_segment[0..syn_ack_len], server_ip, client_ip);
+    const ack = try client.acceptSynAck(syn_ack_packet);
+
+    var ack_segment: [header_len]u8 = undefined;
+    const ack_len = try encodeOutboundSegment(client, ack, ack_segment[0..], client_ip, server_ip);
+    const ack_packet = try decode(ack_segment[0..ack_len], client_ip, server_ip);
+    try server.acceptAck(ack_packet);
+
+    const malformed_fin = Packet{
+        .source_port = client.local_port,
+        .destination_port = client.remote_port,
+        .sequence_number = client.send_next,
+        .acknowledgment_number = client.recv_next,
+        .data_offset_bytes = header_len,
+        .flags = flag_fin | flag_ack,
+        .window_size = client.local_window,
+        .checksum_value = 0,
+        .urgent_pointer = 0,
+        .payload = payload,
+    };
+    try std.testing.expectError(error.UnexpectedFlags, server.acceptFin(malformed_fin));
 }
 
 test "tcp session rejects payload larger than remote window" {
