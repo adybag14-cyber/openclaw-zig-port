@@ -1,8 +1,9 @@
 const std = @import("std");
 const filesystem = @import("filesystem.zig");
+const package_store = @import("package_store.zig");
 const tool_exec = @import("tool_exec.zig");
 
-pub const Error = tool_exec.Error || std.mem.Allocator.Error || error{
+pub const Error = tool_exec.Error || package_store.Error || std.mem.Allocator.Error || error{
     EmptyRequest,
     InvalidFrame,
     ResponseTooLarge,
@@ -18,6 +19,9 @@ pub const RequestOp = enum {
     get,
     put,
     stat,
+    package_install,
+    package_list,
+    package_run,
 };
 
 pub const PutRequest = struct {
@@ -32,6 +36,9 @@ pub const FramedRequest = struct {
         get: []const u8,
         put: PutRequest,
         stat: []const u8,
+        package_install: PutRequest,
+        package_list: void,
+        package_run: []const u8,
     },
 };
 
@@ -114,6 +121,28 @@ pub fn parseFramedRequest(request: []const u8) Error!FramedRequest {
         };
     }
 
+    if (std.ascii.eqlIgnoreCase(op_part.token, "PKG")) {
+        const name_part = try splitFirstToken(op_part.rest);
+        const length_part = try splitFirstToken(name_part.rest);
+        if (length_part.rest.len != 0) return error.InvalidFrame;
+        const body_len = std.fmt.parseUnsigned(usize, length_part.token, 10) catch return error.InvalidFrame;
+        if (split.body.len != body_len) return error.InvalidFrame;
+        return .{
+            .request_id = request_id,
+            .operation = .{ .package_install = .{ .path = name_part.token, .body = split.body } },
+        };
+    }
+
+    if (std.ascii.eqlIgnoreCase(op_part.token, "PKGLIST")) {
+        if (op_part.rest.len != 0 or split.body.len != 0) return error.InvalidFrame;
+        return .{ .request_id = request_id, .operation = .{ .package_list = {} } };
+    }
+
+    if (std.ascii.eqlIgnoreCase(op_part.token, "PKGRUN")) {
+        if (op_part.rest.len == 0 or split.body.len != 0) return error.InvalidFrame;
+        return .{ .request_id = request_id, .operation = .{ .package_run = op_part.rest } };
+    }
+
     if (split.body.len != 0) return error.InvalidFrame;
     return .{ .request_id = request_id, .operation = .{ .command = remainder } };
 }
@@ -147,6 +176,9 @@ pub fn handleFramedRequest(
         .get => |path| try handleGetRequest(allocator, path, payload_limit),
         .put => |put_request| try handlePutRequest(allocator, put_request.path, put_request.body, payload_limit),
         .stat => |path| try handleStatRequest(allocator, path, payload_limit),
+        .package_install => |package_request| try handlePackageInstallRequest(allocator, package_request.path, package_request.body, payload_limit),
+        .package_list => try handlePackageListRequest(allocator, payload_limit),
+        .package_run => |package_name| try handlePackageRunRequest(allocator, package_name, stdout_limit, stderr_limit, payload_limit),
     };
     defer allocator.free(payload);
 
@@ -238,6 +270,44 @@ fn handleStatRequest(allocator: std.mem.Allocator, path: []const u8, payload_lim
     return response;
 }
 
+fn handlePackageInstallRequest(
+    allocator: std.mem.Allocator,
+    package_name: []const u8,
+    body: []const u8,
+    payload_limit: usize,
+) Error![]u8 {
+    package_store.installScriptPackage(package_name, body, 0) catch |err| {
+        return formatOperationError(allocator, "PKG", err, payload_limit);
+    };
+
+    var entrypoint_buf: [filesystem.max_path_len]u8 = undefined;
+    const entrypoint = package_store.entrypointPath(package_name, &entrypoint_buf) catch |err| {
+        return formatOperationError(allocator, "PKG", err, payload_limit);
+    };
+    const response = try std.fmt.allocPrint(allocator, "INSTALLED {s} -> {s}\n", .{ package_name, entrypoint });
+    errdefer allocator.free(response);
+    if (response.len > payload_limit) return error.ResponseTooLarge;
+    return response;
+}
+
+fn handlePackageListRequest(allocator: std.mem.Allocator, payload_limit: usize) Error![]u8 {
+    return package_store.listPackagesAlloc(allocator, payload_limit) catch |err| {
+        return formatOperationError(allocator, "PKGLIST", err, payload_limit);
+    };
+}
+
+fn handlePackageRunRequest(
+    allocator: std.mem.Allocator,
+    package_name: []const u8,
+    stdout_limit: usize,
+    stderr_limit: usize,
+    payload_limit: usize,
+) Error![]u8 {
+    var command_buf: [96]u8 = undefined;
+    const command = std.fmt.bufPrint(&command_buf, "run-package {s}", .{package_name}) catch return error.InvalidFrame;
+    return handleCommandRequest(allocator, command, stdout_limit, stderr_limit, payload_limit);
+}
+
 fn formatOperationError(
     allocator: std.mem.Allocator,
     operation: []const u8,
@@ -309,6 +379,27 @@ test "baremetal tool service parses typed framed requests" {
         .stat => |path| try std.testing.expectEqualStrings("/tools/cache/tool.txt", path),
         else => return error.InvalidFrame,
     }
+
+    const pkg = try parseFramedRequest("REQ 14 PKG demo 4\nedge");
+    switch (pkg.operation) {
+        .package_install => |payload| {
+            try std.testing.expectEqualStrings("demo", payload.path);
+            try std.testing.expectEqualStrings("edge", payload.body);
+        },
+        else => return error.InvalidFrame,
+    }
+
+    const pkg_list = try parseFramedRequest("REQ 15 PKGLIST");
+    switch (pkg_list.operation) {
+        .package_list => {},
+        else => return error.InvalidFrame,
+    }
+
+    const pkg_run = try parseFramedRequest("REQ 16 PKGRUN demo");
+    switch (pkg_run.operation) {
+        .package_run => |package_name| try std.testing.expectEqualStrings("demo", package_name),
+        else => return error.InvalidFrame,
+    }
 }
 
 test "baremetal tool service rejects invalid framed requests" {
@@ -372,4 +463,30 @@ test "baremetal tool service uploads and runs persisted scripts" {
     const readback = try filesystem.readFileAlloc(std.testing.allocator, "/tools/out/data.txt", 64);
     defer std.testing.allocator.free(readback);
     try std.testing.expectEqualStrings("tcp-service-persisted", readback);
+}
+
+test "baremetal tool service installs lists and runs persisted packages" {
+    filesystem.resetForTest();
+
+    const script = "mkdir /pkg/out\nwrite-file /pkg/out/result.txt pkg-service-data\necho pkg-service-ok";
+    const install_request = try std.fmt.allocPrint(std.testing.allocator, "REQ 31 PKG demo {d}\n{s}", .{ script.len, script });
+    defer std.testing.allocator.free(install_request);
+
+    const install_response = try handleFramedRequest(std.testing.allocator, install_request, 512, 256, 512);
+    defer std.testing.allocator.free(install_response);
+    try std.testing.expect(std.mem.startsWith(u8, install_response, "RESP 31 "));
+    try std.testing.expect(std.mem.indexOf(u8, install_response, "INSTALLED demo -> /packages/demo/bin/main.oc\n") != null);
+
+    const list_response = try handleFramedRequest(std.testing.allocator, "REQ 32 PKGLIST", 512, 256, 512);
+    defer std.testing.allocator.free(list_response);
+    try std.testing.expectEqualStrings("RESP 32 5\ndemo\n", list_response);
+
+    const run_response = try handleFramedRequest(std.testing.allocator, "REQ 33 PKGRUN demo", 512, 256, 512);
+    defer std.testing.allocator.free(run_response);
+    try std.testing.expect(std.mem.startsWith(u8, run_response, "RESP 33 "));
+    try std.testing.expect(std.mem.indexOf(u8, run_response, "pkg-service-ok\n") != null);
+
+    const readback = try filesystem.readFileAlloc(std.testing.allocator, "/pkg/out/result.txt", 64);
+    defer std.testing.allocator.free(readback);
+    try std.testing.expectEqualStrings("pkg-service-data", readback);
 }

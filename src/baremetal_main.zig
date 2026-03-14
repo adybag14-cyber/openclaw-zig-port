@@ -2445,7 +2445,7 @@ fn runRtl8139TcpProbe() Rtl8139TcpProbeError!void {
     const service_request_short = "REQ 1 echo tcp-service-ok";
     const service_response_short_expected = "RESP 1 15\ntcp-service-ok\n";
     const service_request_long = "REQ 2 help";
-    const service_response_long_expected = "RESP 2 83\nOpenClaw bare-metal builtins: help, echo, cat, write-file, mkdir, stat, run-script\n";
+    const service_response_long_expected = "RESP 2 96\nOpenClaw bare-metal builtins: help, echo, cat, write-file, mkdir, stat, run-script, run-package\n";
     const service_script_path = "/tools/scripts/net.oc";
     const service_script_body = "write-file /tools/out/net.txt tcp-service-persisted";
     const retransmit_interval_ticks: u64 = 4;

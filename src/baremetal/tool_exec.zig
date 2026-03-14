@@ -1,5 +1,6 @@
 const std = @import("std");
 const filesystem = @import("filesystem.zig");
+const package_store = @import("package_store.zig");
 const vga_text_console = @import("vga_text_console.zig");
 const storage_backend = @import("storage_backend.zig");
 
@@ -85,7 +86,7 @@ pub fn runCapture(
     command: []const u8,
     stdout_limit: usize,
     stderr_limit: usize,
-) !Result {
+) Error!Result {
     var stdout_buffer = OutputBuffer.init(allocator, stdout_limit, true);
     errdefer stdout_buffer.deinit();
     var stderr_buffer = OutputBuffer.init(allocator, stderr_limit, true);
@@ -123,11 +124,11 @@ fn execute(
     exit_code: *u8,
     allocator: std.mem.Allocator,
     depth: usize,
-) !void {
+) Error!void {
     if (depth > max_script_depth) return error.ScriptDepthExceeded;
 
     if (std.ascii.eqlIgnoreCase(parsed.name, "help")) {
-        try stdout_buffer.appendLine("OpenClaw bare-metal builtins: help, echo, cat, write-file, mkdir, stat, run-script");
+        try stdout_buffer.appendLine("OpenClaw bare-metal builtins: help, echo, cat, write-file, mkdir, stat, run-script, run-package");
         return;
     }
 
@@ -239,32 +240,29 @@ fn execute(
             try stderr_buffer.appendLine("usage: run-script <path>");
             return;
         }
-        if (depth >= max_script_depth) {
-            exit_code.* = 1;
-            try stderr_buffer.appendLine("run-script failed: ScriptDepthExceeded");
-            return;
-        }
+        try executeScriptPath(arg.arg, "run-script", stdout_buffer, stderr_buffer, exit_code, allocator, depth);
+        return;
+    }
 
-        const script = filesystem.readFileAlloc(allocator, arg.arg, 4096) catch |err| {
-            exit_code.* = 1;
-            try stderr_buffer.appendFmt("run-script failed: {s}\n", .{@errorName(err)});
+    if (std.ascii.eqlIgnoreCase(parsed.name, "run-package")) {
+        const arg = parseFirstArg(parsed.rest) catch |err| {
+            exit_code.* = 2;
+            try writeCommandError(stderr_buffer, err, "run-package <name>");
             return;
         };
-        defer allocator.free(script);
-
-        var lines = std.mem.splitScalar(u8, script, '\n');
-        while (lines.next()) |raw_line| {
-            const line = std.mem.trim(u8, raw_line, " \t\r");
-            if (line.len == 0 or line[0] == '#') continue;
-
-            const nested = parseCommand(line) catch |err| {
-                exit_code.* = 2;
-                try writeCommandError(stderr_buffer, err, "run-script <path>");
-                return;
-            };
-            try execute(nested, stdout_buffer, stderr_buffer, exit_code, allocator, depth + 1);
-            if (exit_code.* != 0) return;
+        if (arg.rest.len != 0) {
+            exit_code.* = 2;
+            try stderr_buffer.appendLine("usage: run-package <name>");
+            return;
         }
+
+        var entrypoint_buf: [filesystem.max_path_len]u8 = undefined;
+        const entrypoint = package_store.entrypointPath(arg.arg, &entrypoint_buf) catch |err| {
+            exit_code.* = 1;
+            try stderr_buffer.appendFmt("run-package failed: {s}\n", .{@errorName(err)});
+            return;
+        };
+        try executeScriptPath(entrypoint, "run-package", stdout_buffer, stderr_buffer, exit_code, allocator, depth);
         return;
     }
 
@@ -315,7 +313,44 @@ fn ensureParentDirectory(path: []const u8) !void {
     try filesystem.createDirPath(parent);
 }
 
-fn writeCommandError(stderr_buffer: *OutputBuffer, err: anyerror, usage: []const u8) !void {
+fn executeScriptPath(
+    path: []const u8,
+    operation: []const u8,
+    stdout_buffer: *OutputBuffer,
+    stderr_buffer: *OutputBuffer,
+    exit_code: *u8,
+    allocator: std.mem.Allocator,
+    depth: usize,
+) Error!void {
+    if (depth >= max_script_depth) {
+        exit_code.* = 1;
+        try stderr_buffer.appendFmt("{s} failed: ScriptDepthExceeded\n", .{operation});
+        return;
+    }
+
+    const script = filesystem.readFileAlloc(allocator, path, 4096) catch |err| {
+        exit_code.* = 1;
+        try stderr_buffer.appendFmt("{s} failed: {s}\n", .{ operation, @errorName(err) });
+        return;
+    };
+    defer allocator.free(script);
+
+    var lines = std.mem.splitScalar(u8, script, '\n');
+    while (lines.next()) |raw_line| {
+        const line = std.mem.trim(u8, raw_line, " \t\r");
+        if (line.len == 0 or line[0] == '#') continue;
+
+        const nested = parseCommand(line) catch |err| {
+            exit_code.* = 2;
+            try writeCommandError(stderr_buffer, err, operation);
+            return;
+        };
+        try execute(nested, stdout_buffer, stderr_buffer, exit_code, allocator, depth + 1);
+        if (exit_code.* != 0) return;
+    }
+}
+
+fn writeCommandError(stderr_buffer: *OutputBuffer, err: anyerror, usage: []const u8) Error!void {
     switch (err) {
         error.MissingCommand, error.MissingPath, error.InvalidQuotedArgument => {
             try stderr_buffer.appendFmt("usage: {s}\n", .{usage});
@@ -402,4 +437,23 @@ test "baremetal tool exec runs persisted scripts through the baremetal filesyste
     const content = try filesystem.readFileAlloc(std.testing.allocator, "/tools/out/data.txt", 64);
     defer std.testing.allocator.free(content);
     try std.testing.expectEqualStrings("script-data", content);
+}
+
+test "baremetal tool exec runs packages from the canonical package layout" {
+    storage_backend.resetForTest();
+    filesystem.resetForTest();
+    vga_text_console.resetForTest();
+
+    try package_store.installScriptPackage("demo", "mkdir /pkg/out\nwrite-file /pkg/out/data.txt package-data\necho package-ok\n", 0);
+
+    var result = try runCapture(std.testing.allocator, "run-package demo", 512, 256);
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(u8, 0), result.exit_code);
+    try std.testing.expectEqualStrings("created /pkg/out\nwrote 12 bytes to /pkg/out/data.txt\npackage-ok\n", result.stdout);
+    try std.testing.expectEqualStrings("", result.stderr);
+
+    const content = try filesystem.readFileAlloc(std.testing.allocator, "/pkg/out/data.txt", 64);
+    defer std.testing.allocator.free(content);
+    try std.testing.expectEqualStrings("package-data", content);
 }

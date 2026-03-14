@@ -157,6 +157,7 @@ pub const Session = struct {
     state: State,
     local_port: u16,
     remote_port: u16,
+    send_unacked: u32,
     send_next: u32,
     recv_next: u32 = 0,
     local_window: u16,
@@ -169,6 +170,7 @@ pub const Session = struct {
             .state = .closed,
             .local_port = local_port,
             .remote_port = remote_port,
+            .send_unacked = initial_sequence_number,
             .send_next = initial_sequence_number,
             .local_window = window_size,
         };
@@ -180,9 +182,14 @@ pub const Session = struct {
             .state = .listen,
             .local_port = local_port,
             .remote_port = remote_port,
+            .send_unacked = initial_sequence_number,
             .send_next = initial_sequence_number,
             .local_window = window_size,
         };
+    }
+
+    pub fn bytesInFlight(self: Session) u32 {
+        return self.send_next -% self.send_unacked;
     }
 
     pub fn headerFor(self: Session, outbound: Outbound) Header {
@@ -283,6 +290,7 @@ pub const Session = struct {
         self.recv_next = packet.sequence_number +% 1;
         self.remote_window = packet.window_size;
         self.state = .established;
+        self.send_unacked = self.send_next;
         self.clearRetransmit();
         return .{
             .sequence_number = self.send_next,
@@ -300,14 +308,24 @@ pub const Session = struct {
 
         self.remote_window = packet.window_size;
         switch (self.state) {
-            .syn_received => self.state = .established,
-            .established => self.clearRetransmit(),
+            .syn_received => {
+                self.state = .established;
+                self.send_unacked = self.send_next;
+            },
+            .established => {
+                try self.acceptEstablishedAck(packet.acknowledgment_number);
+                if (self.retransmit.kind == .payload and self.send_unacked == self.send_next) {
+                    self.clearRetransmit();
+                }
+            },
             .fin_wait_1 => {
                 self.state = .fin_wait_2;
+                self.send_unacked = packet.acknowledgment_number;
                 self.clearRetransmit();
             },
             .last_ack => {
                 self.state = .closed;
+                self.send_unacked = packet.acknowledgment_number;
                 self.clearRetransmit();
             },
             else => return error.InvalidState,
@@ -358,9 +376,10 @@ pub const Session = struct {
     pub fn buildPayloadChunk(self: *Session, payload: []const u8) Error!Outbound {
         if (self.state != .established) return error.InvalidState;
         if (payload.len == 0) return error.EmptyPayload;
-        if (self.remote_window == 0) return error.WindowExceeded;
+        const available_window = self.availableRemoteWindow();
+        if (available_window == 0) return error.WindowExceeded;
 
-        const chunk_len: usize = @min(payload.len, @as(usize, self.remote_window));
+        const chunk_len: usize = @min(payload.len, available_window);
         return self.buildPayloadInternal(payload[0..chunk_len]);
     }
 
@@ -375,7 +394,7 @@ pub const Session = struct {
     fn buildPayloadInternal(self: *Session, payload: []const u8) Error!Outbound {
         if (self.state != .established) return error.InvalidState;
         if (payload.len == 0) return error.EmptyPayload;
-        if (payload.len > self.remote_window) return error.WindowExceeded;
+        if (payload.len > self.availableRemoteWindow()) return error.WindowExceeded;
 
         const outbound = Outbound{
             .sequence_number = self.send_next,
@@ -386,6 +405,19 @@ pub const Session = struct {
         };
         self.send_next +%= @as(u32, @intCast(payload.len));
         return outbound;
+    }
+
+    fn availableRemoteWindow(self: Session) usize {
+        const in_flight = self.bytesInFlight();
+        if (in_flight >= self.remote_window) return 0;
+        return @as(usize, self.remote_window - @as(u16, @intCast(in_flight)));
+    }
+
+    fn acceptEstablishedAck(self: *Session, acknowledgment_number: u32) Error!void {
+        const acknowledged_bytes = acknowledgment_number -% self.send_unacked;
+        const bytes_in_flight = self.send_next -% self.send_unacked;
+        if (acknowledged_bytes > bytes_in_flight) return error.AcknowledgmentMismatch;
+        self.send_unacked = acknowledgment_number;
     }
 
     pub fn acceptFin(self: *Session, packet: Packet) Error!Outbound {
@@ -1264,8 +1296,8 @@ test "tcp session blocks payload on zero window until pure ack reopens it" {
     try std.testing.expectEqual(@as(u16, 4), client.remote_window);
     const reopened_payload = try client.buildPayload("1234");
     try std.testing.expectEqual(@as(usize, 4), reopened_payload.payload.len);
-    const reopened_chunk = try client.buildPayloadChunk("12345");
-    try std.testing.expectEqualStrings("1234", reopened_chunk.payload);
+    try std.testing.expectEqual(@as(u32, 4), client.bytesInFlight());
+    try std.testing.expectError(error.WindowExceeded, client.buildPayloadChunk("12345"));
     try std.testing.expectError(error.WindowExceeded, client.buildPayload("12345"));
 }
 
@@ -1303,8 +1335,48 @@ test "tcp session streams payload in remote-window-sized chunks" {
     }
 
     try std.testing.expectEqual(@as(usize, payload.len), payload_offset);
+    try std.testing.expectEqual(@as(u32, 0), client.bytesInFlight());
     try std.testing.expectEqual(@as(u32, 0x0102_0305 + payload.len), client.send_next);
     try std.testing.expectEqual(@as(u32, 0x0102_0305 + payload.len), server.recv_next);
+}
+
+test "tcp session allows multiple in-flight chunks within remote window and advances on cumulative ack" {
+    const client_ip = [4]u8{ 192, 168, 56, 10 };
+    const server_ip = [4]u8{ 192, 168, 56, 1 };
+
+    var client = Session.initClient(4321, 443, 0x0102_0304, 4096);
+    var server = Session.initServer(443, 4321, 0xA0B0_C0D0, 8);
+
+    var buffer: [header_len + 32]u8 = undefined;
+
+    const syn = try client.buildSyn();
+    const syn_packet = try testDecodeOutbound(client, syn, client_ip, server_ip, buffer[0..]);
+    const syn_ack = try server.acceptSyn(syn_packet);
+    const syn_ack_packet = try testDecodeOutbound(server, syn_ack, server_ip, client_ip, buffer[0..]);
+    const ack = try client.acceptSynAck(syn_ack_packet);
+    const ack_packet = try testDecodeOutbound(client, ack, client_ip, server_ip, buffer[0..]);
+    try server.acceptAck(ack_packet);
+
+    const first_chunk = try client.buildPayloadChunk("ABCD");
+    try std.testing.expectEqualStrings("ABCD", first_chunk.payload);
+    const first_packet = try testDecodeOutbound(client, first_chunk, client_ip, server_ip, buffer[0..]);
+    try server.acceptPayload(first_packet);
+
+    const second_chunk = try client.buildPayloadChunk("EFGH");
+    try std.testing.expectEqualStrings("EFGH", second_chunk.payload);
+    const second_packet = try testDecodeOutbound(client, second_chunk, client_ip, server_ip, buffer[0..]);
+    try server.acceptPayload(second_packet);
+
+    try std.testing.expectEqual(@as(u32, 8), client.bytesInFlight());
+    try std.testing.expectError(error.WindowExceeded, client.buildPayloadChunk("I"));
+
+    const payload_ack = try server.buildAck();
+    const payload_ack_packet = try testDecodeOutbound(server, payload_ack, server_ip, client_ip, buffer[0..]);
+    try client.acceptAck(payload_ack_packet);
+
+    try std.testing.expectEqual(@as(u32, 0), client.bytesInFlight());
+    try std.testing.expectEqual(@as(u32, 0x0102_0305 + 8), client.send_unacked);
+    try std.testing.expectEqual(@as(u32, 0x0102_0305 + 8), client.send_next);
 }
 
 fn testDecodeOutbound(

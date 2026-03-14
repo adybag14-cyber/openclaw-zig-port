@@ -282,8 +282,8 @@ Notes:
   - `src/protocol/arp.zig` encodes ARP request/reply frames and decodes ARP frames
   - `src/protocol/ipv4.zig` encodes and decodes IPv4 headers and validates header checksums
   - `src/protocol/udp.zig` encodes and decodes UDP datagrams and validates pseudo-header checksums
-- `src/protocol/tcp.zig` now also provides a minimal session/state machine for client/server handshake, established payload exchange, bounded four-way teardown, bounded FIN-timeout recovery during teardown, and bounded multi-flow session-table management
-- `src/protocol/tcp.zig` now also provides client-side SYN retransmission/timeout recovery for the initial handshake path, established-payload retransmission/timeout recovery, client/responder FIN retransmission/timeout recovery during teardown, strict remote-window enforcement for bounded sequential payload chunking, and zero-window blocking until a pure ACK reopens the remote window
+- `src/protocol/tcp.zig` now also provides a minimal session/state machine for client/server handshake, established payload exchange, bounded four-way teardown, bounded FIN-timeout recovery during teardown, bounded multi-flow session-table management, and bounded cumulative-ACK advancement across multiple in-flight payload chunks
+- `src/protocol/tcp.zig` now also provides client-side SYN retransmission/timeout recovery for the initial handshake path, established-payload retransmission/timeout recovery, client/responder FIN retransmission/timeout recovery during teardown, strict remote-window enforcement for bounded sequential payload chunking, zero-window blocking until a pure ACK reopens the remote window, and exact bytes-in-flight accounting for the bounded send path
 - `src/pal/net.zig` exposes:
     - `sendArpRequest`
     - `pollArpPacket`
@@ -298,16 +298,17 @@ Notes:
     - `resolveNextHop`
   - `learnArpPacket`
   - `sendUdpPacketRouted`
-- host regressions prove mock-device ARP, IPv4, UDP, DHCP, DNS, TCP handshake/payload exchange, bounded four-way close, dropped-first-SYN retransmission/timeout recovery, dropped-first-payload retransmission/timeout recovery, dropped-first-FIN retransmission/timeout recovery on both close sides, bounded multi-flow session isolation, DHCP-driven route configuration, gateway ARP learning, routed off-subnet UDP delivery, and direct-subnet UDP bypass through the RTL8139 path
-- `src/baremetal/tool_service.zig` now provides a bounded framed request/response shim on top of the bare-metal tool substrate for the TCP path, with typed `CMD`, `GET`, `PUT`, and `STAT` requests
+- host regressions prove mock-device ARP, IPv4, UDP, DHCP, DNS, TCP handshake/payload exchange, bounded four-way close, dropped-first-SYN retransmission/timeout recovery, dropped-first-payload retransmission/timeout recovery, dropped-first-FIN retransmission/timeout recovery on both close sides, bounded multi-flow session isolation, bounded cumulative-ACK advancement across multiple in-flight payload chunks, DHCP-driven route configuration, gateway ARP learning, routed off-subnet UDP delivery, and direct-subnet UDP bypass through the RTL8139 path
+- `src/baremetal/tool_service.zig` now provides a bounded framed request/response shim on top of the bare-metal tool substrate for the TCP path, with typed `CMD`, `GET`, `PUT`, `STAT`, `PKG`, `PKGLIST`, and `PKGRUN` requests
 - live QEMU proofs now pass:
   - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`
   - `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`
   - `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`
   - `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1`
   - `scripts/baremetal-qemu-rtl8139-gateway-probe-check.ps1`
-- `src/baremetal_main.zig` host regressions now also prove TCP zero-window block/reopen behavior, framed multi-request command-service exchange on a single live flow, bounded long-response chunking under the advertised remote window, typed `PUT`/`GET`/`STAT` service behavior, and persisted `run-script` execution through the framed TCP service seam
+- `src/baremetal_main.zig` host regressions now also prove TCP zero-window block/reopen behavior, framed multi-request command-service exchange on a single live flow, bounded long-response chunking under the advertised remote window, typed `PUT`/`GET`/`STAT` service behavior, persisted `run-script` execution through the framed TCP service seam, and package install/list/run behavior on the canonical package layout
 - those proofs now cover live ARP request transmission, IPv4 frame encode/decode, UDP datagram encode/decode, TCP `SYN -> SYN-ACK -> ACK` handshake plus payload exchange, dropped-first-SYN recovery, dropped-first-payload recovery, dropped-first-FIN recovery on both close sides, bounded four-way close, bounded two-flow session isolation, zero-window block/reopen, bounded sequential payload chunking, framed TCP command-service exchange, typed TCP `PUT` upload, direct filesystem readback of the uploaded script path over the attached disk-backed path, and TX/RX counter advance over the freestanding PVH image
+  - the current live QEMU RTL8139 TCP proof still stops at the typed file-service boundary; typed package install/list/run is proven locally through hosted/module tests plus the attached-disk persistence path, not yet through the live RTL8139 probe
   - the routed UDP proof now also covers live ARP-reply learning, ARP-cache population, gateway next-hop selection for off-subnet traffic, direct-subnet gateway bypass, and routed UDP delivery with the gateway MAC on the Ethernet frame while preserving the remote IPv4 destination
 - A real DHCP framing/decode slice is now also closed locally:
   - `src/protocol/dhcp.zig` provides strict DHCP discover encode/decode
@@ -349,9 +350,12 @@ Status: `Complete`
 
 Current local source-of-truth evidence:
 
-- `src/baremetal/tool_exec.zig` now provides the real freestanding builtin command substrate used by the bare-metal PAL, including persisted `run-script` execution on the bare-metal filesystem.
+- `src/baremetal/tool_exec.zig` now provides the real freestanding builtin command substrate used by the bare-metal PAL, including persisted `run-script` execution and canonical `run-package` execution on the bare-metal filesystem.
+- `src/baremetal/package_store.zig` now provides the canonical persisted package layout used by the bare-metal execution and TCP service seams:
+  - `/packages/<name>/bin/main.oc`
+  - `/packages/<name>/meta/package.txt`
 - `src/pal/proc.zig` now exposes an explicit `runCaptureFreestanding(...)` path instead of pretending the hosted child-process path is valid on `freestanding`.
-- `src/baremetal/tool_service.zig` now exposes a bounded typed framed request/response shim on top of `tool_exec.runCapture(...)` and the bare-metal filesystem for the TCP path.
+- `src/baremetal/tool_service.zig` now exposes a bounded typed framed request/response shim on top of `tool_exec.runCapture(...)`, `package_store`, and the bare-metal filesystem for the TCP path.
 - the execution path now closes its dependency chain through real FS5.5 storage/filesystem layers:
   - `src/baremetal/filesystem.zig`
   - `src/pal/fs.zig`
@@ -371,7 +375,12 @@ Current local source-of-truth evidence:
 - host/module validation now also proves the same path through:
   - `zig test src/baremetal/tool_exec.zig`
   - `zig test src/baremetal/tool_service.zig`
+  - `zig test src/baremetal/package_store.zig`
   - the hosted regression in `src/baremetal_main.zig`
+- those host/module proofs now also cover:
+  - persisted ATA-backed package layout roundtrips
+  - typed TCP `PKG` / `PKGLIST` / `PKGRUN` service behavior
+  - canonical `run-package <name>` execution against `/packages/<name>/bin/main.oc`
 
 ## Non-Goals For This Track
 
