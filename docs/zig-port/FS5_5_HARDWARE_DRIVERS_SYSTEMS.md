@@ -299,15 +299,15 @@ Notes:
   - `learnArpPacket`
   - `sendUdpPacketRouted`
 - host regressions prove mock-device ARP, IPv4, UDP, DHCP, DNS, TCP handshake/payload exchange, bounded four-way close, dropped-first-SYN retransmission/timeout recovery, dropped-first-payload retransmission/timeout recovery, dropped-first-FIN retransmission/timeout recovery on both close sides, bounded multi-flow session isolation, DHCP-driven route configuration, gateway ARP learning, routed off-subnet UDP delivery, and direct-subnet UDP bypass through the RTL8139 path
-- `src/baremetal/tool_service.zig` now provides a bounded framed request/response shim on top of the bare-metal tool substrate for the TCP path (`REQ <id> <command>` -> `RESP <id> <len>\n<payload>`)
+- `src/baremetal/tool_service.zig` now provides a bounded framed request/response shim on top of the bare-metal tool substrate for the TCP path, with typed `CMD`, `GET`, `PUT`, and `STAT` requests
 - live QEMU proofs now pass:
   - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`
   - `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`
   - `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`
   - `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1`
   - `scripts/baremetal-qemu-rtl8139-gateway-probe-check.ps1`
-- `src/baremetal_main.zig` host regressions now also prove TCP zero-window block/reopen behavior, framed multi-request command-service exchange on a single live flow, and bounded long-response chunking under the advertised remote window
-- those proofs now cover live ARP request transmission, IPv4 frame encode/decode, UDP datagram encode/decode, TCP `SYN -> SYN-ACK -> ACK` handshake plus payload exchange, dropped-first-SYN recovery, dropped-first-payload recovery, dropped-first-FIN recovery on both close sides, bounded four-way close, bounded two-flow session isolation, zero-window block/reopen, bounded sequential payload chunking, framed TCP command-service exchange, and TX/RX counter advance over the freestanding PVH image
+- `src/baremetal_main.zig` host regressions now also prove TCP zero-window block/reopen behavior, framed multi-request command-service exchange on a single live flow, bounded long-response chunking under the advertised remote window, typed `PUT`/`GET`/`STAT` service behavior, and persisted `run-script` execution through the framed TCP service seam
+- those proofs now cover live ARP request transmission, IPv4 frame encode/decode, UDP datagram encode/decode, TCP `SYN -> SYN-ACK -> ACK` handshake plus payload exchange, dropped-first-SYN recovery, dropped-first-payload recovery, dropped-first-FIN recovery on both close sides, bounded four-way close, bounded two-flow session isolation, zero-window block/reopen, bounded sequential payload chunking, framed TCP command-service exchange, typed TCP `PUT` upload, direct filesystem readback of the uploaded script path over the attached disk-backed path, and TX/RX counter advance over the freestanding PVH image
   - the routed UDP proof now also covers live ARP-reply learning, ARP-cache population, gateway next-hop selection for off-subnet traffic, direct-subnet gateway bypass, and routed UDP delivery with the gateway MAC on the Ethernet frame while preserving the remote IPv4 destination
 - A real DHCP framing/decode slice is now also closed locally:
   - `src/protocol/dhcp.zig` provides strict DHCP discover encode/decode
@@ -351,7 +351,7 @@ Current local source-of-truth evidence:
 
 - `src/baremetal/tool_exec.zig` now provides the real freestanding builtin command substrate used by the bare-metal PAL, including persisted `run-script` execution on the bare-metal filesystem.
 - `src/pal/proc.zig` now exposes an explicit `runCaptureFreestanding(...)` path instead of pretending the hosted child-process path is valid on `freestanding`.
-- `src/baremetal/tool_service.zig` now exposes a bounded framed request/response shim on top of `tool_exec.runCapture(...)` for the bare-metal TCP path.
+- `src/baremetal/tool_service.zig` now exposes a bounded typed framed request/response shim on top of `tool_exec.runCapture(...)` and the bare-metal filesystem for the TCP path.
 - the execution path now closes its dependency chain through real FS5.5 storage/filesystem layers:
   - `src/baremetal/filesystem.zig`
   - `src/pal/fs.zig`

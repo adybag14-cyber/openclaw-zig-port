@@ -1,6 +1,7 @@
 param(
     [switch] $SkipBuild,
-    [int] $TimeoutSeconds = 30
+    [int] $TimeoutSeconds = 30,
+    [int] $DiskSizeMiB = 8
 )
 
 $ErrorActionPreference = 'Stop'
@@ -133,6 +134,23 @@ function Resolve-CompilerRtArchive {
     return $null
 }
 
+function New-RawDiskImage {
+    param(
+        [string] $Path,
+        [int] $SizeMiB
+    )
+
+    if (Test-Path $Path) {
+        Remove-Item -Force $Path
+    }
+    $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::ReadWrite)
+    try {
+        $stream.SetLength([int64]$SizeMiB * 1MB)
+    } finally {
+        $stream.Dispose()
+    }
+}
+
 Set-Location $repo
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 
@@ -165,6 +183,7 @@ $optionsPath = Join-Path $releaseDir 'qemu-rtl8139-tcp-probe-options.zig'
 $mainObj = Join-Path $releaseDir 'openclaw-zig-baremetal-main-rtl8139-tcp-probe.o'
 $bootObj = Join-Path $releaseDir 'openclaw-zig-pvh-boot-rtl8139-tcp-probe.o'
 $artifact = Join-Path $releaseDir 'openclaw-zig-baremetal-pvh-rtl8139-tcp-probe.elf'
+$diskImage = Join-Path $releaseDir 'qemu-rtl8139-tcp-probe.img'
 $bootSource = Join-Path $repo 'scripts\baremetal\pvh_boot.S'
 $linkerScript = Join-Path $repo 'scripts\baremetal\pvh_lld.ld'
 $stdoutPath = Join-Path $releaseDir 'qemu-rtl8139-tcp-probe.stdout.log'
@@ -217,11 +236,13 @@ if (-not (Test-Path $artifact)) {
     throw "RTL8139 TCP probe artifact is missing: $artifact"
 }
 
+New-RawDiskImage -Path $diskImage -SizeMiB $DiskSizeMiB
 if (Test-Path $stdoutPath) { Remove-Item -Force $stdoutPath }
 if (Test-Path $stderrPath) { Remove-Item -Force $stderrPath }
 
 $qemuArgs = @(
     '-kernel', $artifact,
+    '-drive', "file=$diskImage,if=ide,format=raw,index=0,media=disk",
     '-nographic',
     '-no-reboot',
     '-no-shutdown',

@@ -2446,6 +2446,8 @@ fn runRtl8139TcpProbe() Rtl8139TcpProbeError!void {
     const service_response_short_expected = "RESP 1 15\ntcp-service-ok\n";
     const service_request_long = "REQ 2 help";
     const service_response_long_expected = "RESP 2 83\nOpenClaw bare-metal builtins: help, echo, cat, write-file, mkdir, stat, run-script\n";
+    const service_script_path = "/tools/scripts/net.oc";
+    const service_script_body = "write-file /tools/out/net.txt tcp-service-persisted";
     const retransmit_interval_ticks: u64 = 4;
     const flow_a = tcp_protocol.FlowKey{
         .local_ip = source_ip,
@@ -2461,13 +2463,24 @@ fn runRtl8139TcpProbe() Rtl8139TcpProbeError!void {
     };
     var table = tcp_protocol.SessionTable(2).init();
     const client_a = table.createClient(flow_a, 0x0102_0304, 4096) catch return error.SessionStateMismatch;
-    const client_b = table.createClient(flow_b, 0x1112_1314, 32) catch return error.SessionStateMismatch;
+    const client_b = table.createClient(flow_b, 0x1112_1314, 64) catch return error.SessionStateMismatch;
     var server_a = tcp_protocol.Session.initServer(flow_a.remote_port, flow_a.local_port, 0xA0B0_C0D0, 8192);
     var server_b = tcp_protocol.Session.initServer(flow_b.remote_port, flow_b.local_port, 0xB0C0_D0E0, 6144);
     var packet_storage: pal_net.TcpPacket = undefined;
     var probe_tick: u64 = 0;
-    var service_scratch: [1024]u8 = undefined;
+    var service_scratch: [2048]u8 = undefined;
     var service_fba = std.heap.FixedBufferAllocator.init(&service_scratch);
+    var service_request_put_buffer: [256]u8 = undefined;
+    const service_request_put = std.fmt.bufPrint(&service_request_put_buffer, "REQ 3 PUT {s} {d}\n{s}", .{
+        service_script_path,
+        service_script_body.len,
+        service_script_body,
+    }) catch return error.ToolServiceFailed;
+    var service_response_put_expected_buffer: [160]u8 = undefined;
+    const service_response_put_expected = std.fmt.bufPrint(&service_response_put_expected_buffer, "RESP 3 40\nWROTE {d} bytes to {s}\n", .{
+        service_script_body.len,
+        service_script_path,
+    }) catch return error.ToolServiceFailed;
 
     const syn_a = client_a.buildSynWithTimeout(probe_tick, retransmit_interval_ticks) catch |err| return mapTcpSessionProbeError(err);
     _ = try sendTcpProbeSegment(source_ip, destination_ip, flow_a.local_port, flow_a.remote_port, syn_a);
@@ -2583,7 +2596,7 @@ fn runRtl8139TcpProbe() Rtl8139TcpProbeError!void {
     }
 
     var reopen_window_update_b = server_b.buildAck() catch |err| return mapTcpSessionProbeError(err);
-    reopen_window_update_b.window_size = 64;
+    reopen_window_update_b.window_size = 256;
     _ = try sendTcpProbeSegment(destination_ip, source_ip, flow_b.remote_port, flow_b.local_port, reopen_window_update_b);
     try pollTcpProbePacket(eth, &packet_storage);
     try expectTcpProbePacket(&packet_storage, eth.mac, destination_ip, source_ip, flow_b.remote_port, flow_b.local_port, reopen_window_update_b);
@@ -2598,7 +2611,7 @@ fn runRtl8139TcpProbe() Rtl8139TcpProbeError!void {
     try expectTcpProbePacket(&packet_storage, eth.mac, source_ip, destination_ip, flow_b.local_port, flow_b.remote_port, service_request_short_payload);
     server_b.acceptPayload(tcpPacketView(&packet_storage)) catch |err| return mapTcpSessionProbeError(err);
 
-    const service_response_short = tool_service.handleFramedCommandRequest(
+    const service_response_short = tool_service.handleFramedRequest(
         service_fba.allocator(),
         packet_storage.payload[0..packet_storage.payload_len],
         256,
@@ -2628,7 +2641,7 @@ fn runRtl8139TcpProbe() Rtl8139TcpProbeError!void {
     try expectTcpProbePacket(&packet_storage, eth.mac, source_ip, destination_ip, flow_b.local_port, flow_b.remote_port, service_request_long_payload);
     server_b.acceptPayload(tcpPacketView(&packet_storage)) catch |err| return mapTcpSessionProbeError(err);
 
-    const service_response_long = tool_service.handleFramedCommandRequest(
+    const service_response_long = tool_service.handleFramedRequest(
         service_fba.allocator(),
         packet_storage.payload[0..packet_storage.payload_len],
         256,
@@ -2661,6 +2674,39 @@ fn runRtl8139TcpProbe() Rtl8139TcpProbeError!void {
     }
     if (service_response_long_offset != service_response_long.len) return error.PayloadMismatch;
     if (service_response_long_chunks < 2) return error.CounterMismatch;
+    service_fba = std.heap.FixedBufferAllocator.init(&service_scratch);
+    const service_request_put_payload = client_b.buildPayload(service_request_put) catch |err| return mapTcpSessionProbeError(err);
+    _ = try sendTcpProbeSegment(source_ip, destination_ip, flow_b.local_port, flow_b.remote_port, service_request_put_payload);
+    try pollTcpProbePacket(eth, &packet_storage);
+    try expectTcpProbePacket(&packet_storage, eth.mac, source_ip, destination_ip, flow_b.local_port, flow_b.remote_port, service_request_put_payload);
+    server_b.acceptPayload(tcpPacketView(&packet_storage)) catch |err| return mapTcpSessionProbeError(err);
+
+    const service_response_put = tool_service.handleFramedRequest(
+        service_fba.allocator(),
+        packet_storage.payload[0..packet_storage.payload_len],
+        512,
+        256,
+        512,
+    ) catch return error.ToolServiceFailed;
+    if (!std.mem.eql(u8, service_response_put, service_response_put_expected)) return error.ToolServiceResponseMismatch;
+
+    const service_reply_put = server_b.buildPayload(service_response_put) catch |err| return mapTcpSessionProbeError(err);
+    _ = try sendTcpProbeSegment(destination_ip, source_ip, flow_b.remote_port, flow_b.local_port, service_reply_put);
+    try pollTcpProbePacket(eth, &packet_storage);
+    try expectTcpProbePacket(&packet_storage, eth.mac, destination_ip, source_ip, flow_b.remote_port, flow_b.local_port, service_reply_put);
+    const mapped_b_service_reply_put = table.findByInboundPacket(destination_ip, source_ip, tcpPacketView(&packet_storage)) orelse return error.SessionStateMismatch;
+    if (mapped_b_service_reply_put != client_b) return error.SessionStateMismatch;
+    mapped_b_service_reply_put.acceptPayload(tcpPacketView(&packet_storage)) catch |err| return mapTcpSessionProbeError(err);
+
+    const service_reply_put_ack = client_b.buildAck() catch |err| return mapTcpSessionProbeError(err);
+    _ = try sendTcpProbeSegment(source_ip, destination_ip, flow_b.local_port, flow_b.remote_port, service_reply_put_ack);
+    try pollTcpProbePacket(eth, &packet_storage);
+    try expectTcpProbePacket(&packet_storage, eth.mac, source_ip, destination_ip, flow_b.local_port, flow_b.remote_port, service_reply_put_ack);
+    server_b.acceptAck(tcpPacketView(&packet_storage)) catch |err| return mapTcpSessionProbeError(err);
+
+    service_fba = std.heap.FixedBufferAllocator.init(&service_scratch);
+    const service_script_readback = filesystem.readFileAlloc(service_fba.allocator(), service_script_path, 128) catch return error.ToolServiceFailed;
+    if (!std.mem.eql(u8, service_script_readback, service_script_body)) return error.ToolServiceResponseMismatch;
 
     const client_fin_a = client_a.buildFinWithTimeout(probe_tick, retransmit_interval_ticks) catch |err| return mapTcpSessionProbeError(err);
     if (!client_a.retransmit.armed() or client_a.retransmit.kind != .fin) return error.RetransmitMissing;
