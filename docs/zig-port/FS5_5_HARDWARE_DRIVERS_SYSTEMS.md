@@ -331,7 +331,29 @@ Current local source-of-truth evidence:
 
 ### Bare-Metal Tool Execution
 
-Status: `Not started`
+Status: `Complete`
+
+Current local source-of-truth evidence:
+
+- `src/baremetal/tool_exec.zig` now provides the real freestanding builtin command substrate used by the bare-metal PAL.
+- `src/pal/proc.zig` now exposes an explicit `runCaptureFreestanding(...)` path instead of pretending the hosted child-process path is valid on `freestanding`.
+- the execution path now closes its dependency chain through real FS5.5 storage/filesystem layers:
+  - `src/baremetal/filesystem.zig`
+  - `src/pal/fs.zig`
+  - `src/baremetal/storage_backend.zig`
+  - attached ATA-backed media in the live probe
+- the tool-exec proof is wired directly into `src/baremetal_main.zig` as a dedicated freestanding validation path.
+- `scripts/baremetal-qemu-tool-exec-probe-check.ps1` now proves end-to-end bare-metal command execution over the freestanding PVH image with an attached disk by validating:
+  - `help`
+  - `mkdir /tools/tmp`
+  - `write-file /tools/tmp/tool.txt baremetal-tool`
+  - `cat /tools/tmp/tool.txt`
+  - `stat /tools/tmp/tool.txt`
+  - direct filesystem readback of `baremetal-tool`
+  - `echo tool-exec-ok`
+- host/module validation now also proves the same path through:
+  - `zig test src/baremetal/tool_exec.zig`
+  - the hosted regression in `src/baremetal_main.zig`
 
 ## Non-Goals For This Track
 

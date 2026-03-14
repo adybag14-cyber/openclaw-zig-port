@@ -1,5 +1,6 @@
 const builtin = @import("builtin");
 const std = @import("std");
+const baremetal_tool_exec = @import("../baremetal/tool_exec.zig");
 
 pub const RunCapture = struct {
     term: std.process.Child.Term,
@@ -24,7 +25,7 @@ pub fn timeoutFromMs(timeout_ms: u32) std.Io.Timeout {
     };
 }
 
-pub fn runCapture(
+fn runCaptureHosted(
     allocator: std.mem.Allocator,
     io: std.Io,
     argv: []const []const u8,
@@ -45,7 +46,49 @@ pub fn runCapture(
     };
 }
 
+fn resolveFreestandingCommand(allocator: std.mem.Allocator, argv: []const []const u8) ![]u8 {
+    if (argv.len == 0) return error.MissingCommand;
+    if (argv.len == 1) return allocator.dupe(u8, argv[0]);
+    if (argv.len >= 3 and (std.mem.eql(u8, argv[1], "/C") or std.mem.eql(u8, argv[1], "-lc"))) {
+        return allocator.dupe(u8, argv[2]);
+    }
+    return std.mem.join(allocator, " ", argv);
+}
+
+pub fn runCaptureFreestanding(
+    allocator: std.mem.Allocator,
+    io: std.Io,
+    argv: []const []const u8,
+    timeout_ms: u32,
+    stdout_limit: usize,
+    stderr_limit: usize,
+) !RunCapture {
+    _ = io;
+    _ = timeout_ms;
+
+    const command = try resolveFreestandingCommand(allocator, argv);
+    defer allocator.free(command);
+
+    var result = try baremetal_tool_exec.runCapture(allocator, command, stdout_limit, stderr_limit);
+    errdefer result.deinit(allocator);
+
+    return .{
+        .term = .{ .exited = @intCast(result.exit_code) },
+        .stdout = result.stdout,
+        .stderr = result.stderr,
+    };
+}
+
+pub const runCapture = if (builtin.os.tag == .freestanding) runCaptureFreestanding else runCaptureHosted;
+
 pub fn termExitCode(term: std.process.Child.Term) i32 {
+    if (builtin.os.tag == .freestanding) {
+        return switch (term) {
+            .exited => |code| code,
+            else => -1,
+        };
+    }
+
     return switch (term) {
         .exited => |code| code,
         .signal => |sig| -@as(i32, @intCast(@intFromEnum(sig))),

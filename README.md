@@ -7,11 +7,11 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 - RPC method surface in Zig: `175`
 - Pinned parity gate (tri-baseline, CI/docs):
   - Go baseline (`v2.14.0-go`): `134/134` covered
-- Original OpenClaw baseline (`v2026.3.8`): `97/97` covered
-- Original OpenClaw beta baseline (`v2026.3.8-beta.1`): `97/97` covered
-- Union baseline: `138/138` covered (`MISSING_IN_ZIG=0`)
+- Original OpenClaw baseline (`v2026.3.11`): `99/99` covered
+- Original OpenClaw beta baseline (`v2026.3.11-beta.1`): `99/99` covered
+- Union baseline: `140/140` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
-- Latest local validation: `zig build test --summary all` -> main `259/259` + bare-metal host `183/183` passing
+- Latest local validation: `zig build test --summary all` -> main `263/263` + bare-metal host `192/192` passing
 - Latest published edge release tag: `v0.2.0-zig-edge.28`
 - Toolchain policy: Codeberg `master` is canonical; `adybag14-cyber/zig` publishes rolling `latest-master` and immutable `upstream-<sha>` Windows releases for refresh and reproducibility.
 - CI policy: keep hosted build/test/parity/docs on Zig `master`, but pin the freestanding bare-metal compile/probe lane to the known-good Linux build `0.16.0-dev.2736+3b515fbed` until the upstream Linux `master` compiler crash on `zig build baremetal -Doptimize=ReleaseFast` is resolved.
@@ -69,6 +69,10 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
     - `src/baremetal/filesystem.zig` implements directory creation plus file read/write/stat on the shared storage backend
     - `src/pal/fs.zig` routes the freestanding PAL filesystem surface through that layer
     - hosted and host validation now prove persistence over both RAM-disk and ATA PIO backends
+  - bare-metal tool execution is now also on a real freestanding path:
+    - `src/baremetal/tool_exec.zig` provides the builtin command substrate instead of falling back to hosted process execution
+    - `src/pal/proc.zig` exposes the explicit freestanding capture path used by the bare-metal PAL
+    - `scripts/baremetal-qemu-tool-exec-probe-check.ps1` proves `help`, `mkdir`, `write-file`, `cat`, `stat`, direct readback, and `echo` over the freestanding PVH artifact with attached disk media
 - Recent FS6 progress (2026-03-06):
   - `update.*` now has a real `canary` rollout lane instead of collapsing `canary` into `edge`
   - appliance rollout boundary is now enforced by live smoke validation (`canary` selection, secure-boot block, canary apply, stable promotion)

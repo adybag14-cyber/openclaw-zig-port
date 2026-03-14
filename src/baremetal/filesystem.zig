@@ -177,7 +177,47 @@ pub fn readFileAlloc(allocator: std.mem.Allocator, path: []const u8, max_bytes: 
     return buffer;
 }
 
+pub const SimpleStat = struct {
+    kind: std.Io.File.Kind,
+    size: u64,
+    modified_tick: u64,
+    entry_id: u64,
+};
+
+fn dirStatInode(value: u64) @TypeOf(@as(std.Io.Dir.Stat, undefined).inode) {
+    const T = @TypeOf(@as(std.Io.Dir.Stat, undefined).inode);
+    if (T == void) return {};
+    return @as(T, @intCast(value));
+}
+
+fn dirStatNlink(value: u64) @TypeOf(@as(std.Io.Dir.Stat, undefined).nlink) {
+    const T = @TypeOf(@as(std.Io.Dir.Stat, undefined).nlink);
+    if (T == void) return {};
+    return @as(T, @intCast(value));
+}
+
+fn dirStatBlockSize(value: u32) @TypeOf(@as(std.Io.Dir.Stat, undefined).block_size) {
+    const T = @TypeOf(@as(std.Io.Dir.Stat, undefined).block_size);
+    if (T == void) return {};
+    return @as(T, @intCast(value));
+}
+
 pub fn statNoFollow(path: []const u8) Error!std.Io.Dir.Stat {
+    const summary = try statSummary(path);
+    return .{
+        .inode = dirStatInode(summary.entry_id),
+        .nlink = dirStatNlink(1),
+        .size = summary.size,
+        .permissions = if (summary.kind == .directory) .default_dir else .default_file,
+        .kind = summary.kind,
+        .atime = null,
+        .mtime = std.Io.Timestamp.fromNanoseconds(@as(i96, @intCast(summary.modified_tick))),
+        .ctime = std.Io.Timestamp.fromNanoseconds(@as(i96, @intCast(summary.modified_tick))),
+        .block_size = dirStatBlockSize(storage_backend.block_size),
+    };
+}
+
+pub fn statSummary(path: []const u8) Error!SimpleStat {
     try init();
     const normalized = try normalizePath(path);
     const full = normalized.slice();
@@ -185,30 +225,20 @@ pub fn statNoFollow(path: []const u8) Error!std.Io.Dir.Stat {
 
     if (full.len == 1) {
         return .{
-            .inode = 0,
-            .nlink = 1,
             .size = 0,
-            .permissions = .default_dir,
             .kind = .directory,
-            .atime = null,
-            .mtime = std.Io.Timestamp.zero,
-            .ctime = std.Io.Timestamp.zero,
-            .block_size = @as(u32, storage_backend.block_size),
+            .modified_tick = 0,
+            .entry_id = 0,
         };
     }
 
     const entry_index = findEntryIndex(full) orelse return error.FileNotFound;
     const record = entries[entry_index];
     return .{
-        .inode = record.entry_id,
-        .nlink = 1,
         .size = record.byte_len,
-        .permissions = if (record.kind == abi.filesystem_kind_directory) .default_dir else .default_file,
         .kind = if (record.kind == abi.filesystem_kind_directory) .directory else .file,
-        .atime = null,
-        .mtime = std.Io.Timestamp.fromNanoseconds(@as(i96, @intCast(record.modified_tick))),
-        .ctime = std.Io.Timestamp.fromNanoseconds(@as(i96, @intCast(record.modified_tick))),
-        .block_size = @as(u32, storage_backend.block_size),
+        .modified_tick = record.modified_tick,
+        .entry_id = record.entry_id,
     };
 }
 

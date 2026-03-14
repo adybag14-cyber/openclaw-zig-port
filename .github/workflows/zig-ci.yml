@@ -189,6 +189,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-rtl8139-dns-probe-check.ps1
 
+      - name: Bare-metal QEMU tool exec probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-tool-exec-probe-check.ps1
+
       - name: Bare-metal QEMU framebuffer console probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-framebuffer-console-probe-check.ps1

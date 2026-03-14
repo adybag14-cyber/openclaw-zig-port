@@ -12,6 +12,7 @@ const ps2_input = @import("baremetal/ps2_input.zig");
 const tool_layout = @import("baremetal/tool_layout.zig");
 const pal_fs = @import("pal/fs.zig");
 const pal_net = @import("pal/net.zig");
+const pal_proc = @import("pal/proc.zig");
 const arp_protocol = @import("protocol/arp.zig");
 const dhcp_protocol = @import("protocol/dhcp.zig");
 const dns_protocol = @import("protocol/dns.zig");
@@ -77,6 +78,7 @@ const qemu_rtl8139_udp_probe_ok_code: u8 = 0x39;
 const qemu_rtl8139_tcp_probe_ok_code: u8 = 0x3A;
 const qemu_rtl8139_dhcp_probe_ok_code: u8 = 0x3B;
 const qemu_rtl8139_dns_probe_ok_code: u8 = 0x3C;
+const qemu_tool_exec_probe_ok_code: u8 = 0x3D;
 const build_options = if (builtin.is_test)
     struct {
         pub const qemu_smoke: bool = false;
@@ -90,6 +92,7 @@ const build_options = if (builtin.is_test)
         pub const rtl8139_tcp_probe: bool = false;
         pub const rtl8139_dhcp_probe: bool = false;
         pub const rtl8139_dns_probe: bool = false;
+        pub const tool_exec_probe: bool = false;
     }
 else
     @import("build_options");
@@ -104,6 +107,7 @@ const rtl8139_udp_probe_enabled: bool = build_options.rtl8139_udp_probe;
 const rtl8139_tcp_probe_enabled: bool = build_options.rtl8139_tcp_probe;
 const rtl8139_dhcp_probe_enabled: bool = build_options.rtl8139_dhcp_probe;
 const rtl8139_dns_probe_enabled: bool = build_options.rtl8139_dns_probe;
+const tool_exec_probe_enabled: bool = build_options.tool_exec_probe;
 
 const ata_probe_raw_lba: u32 = 300;
 const ata_probe_raw_block_count: u32 = 2;
@@ -382,6 +386,31 @@ const Rtl8139DnsProbeError = error{
     ChecksumMissing,
     FrameLengthMismatch,
     CounterMismatch,
+};
+
+const ToolExecProbeError = error{
+    AllocatorExhausted,
+    HelpRunFailed,
+    HelpExitCodeFailed,
+    HelpMissingBuiltin,
+    MkdirRunFailed,
+    MkdirExitCodeFailed,
+    MkdirOutputMismatch,
+    WriteRunFailed,
+    WriteExitCodeFailed,
+    WriteOutputMismatch,
+    CatRunFailed,
+    CatExitCodeFailed,
+    CatMismatch,
+    StatRunFailed,
+    StatExitCodeFailed,
+    StatMismatch,
+    EchoRunFailed,
+    EchoExitCodeFailed,
+    EchoOutputMismatch,
+    UnexpectedStderr,
+    FilesystemReadbackFailed,
+    FilesystemReadbackMismatch,
 };
 
 const Multiboot2Header = extern struct {
@@ -1486,6 +1515,10 @@ fn baremetalStart() callconv(.c) noreturn {
         runRtl8139DnsProbe() catch |err| qemuExit(rtl8139DnsProbeFailureCode(err));
         qemuExit(qemu_rtl8139_dns_probe_ok_code);
     }
+    if (tool_exec_probe_enabled) {
+        runToolExecProbe() catch |err| qemuExit(toolExecProbeFailureCode(err));
+        qemuExit(qemu_tool_exec_probe_ok_code);
+    }
     ps2_input.init();
     tool_layout.init() catch unreachable;
     if (console_probe_banner_enabled) {
@@ -2492,11 +2525,111 @@ fn rtl8139DnsProbeFailureCode(err: Rtl8139DnsProbeError) u8 {
     };
 }
 
+fn toolExecProbeFailureCode(err: ToolExecProbeError) u8 {
+    return switch (err) {
+        error.AllocatorExhausted => 0x99,
+        error.HelpRunFailed => 0x9A,
+        error.HelpExitCodeFailed => 0x9B,
+        error.HelpMissingBuiltin => 0x9C,
+        error.MkdirRunFailed => 0x9D,
+        error.MkdirExitCodeFailed => 0x9E,
+        error.MkdirOutputMismatch => 0x9F,
+        error.WriteRunFailed => 0xA0,
+        error.WriteExitCodeFailed => 0xA1,
+        error.WriteOutputMismatch => 0xA2,
+        error.CatRunFailed => 0xA3,
+        error.CatExitCodeFailed => 0xA4,
+        error.CatMismatch => 0xA5,
+        error.StatRunFailed => 0xA6,
+        error.StatExitCodeFailed => 0xA7,
+        error.StatMismatch => 0xA8,
+        error.EchoRunFailed => 0xA9,
+        error.EchoExitCodeFailed => 0xAA,
+        error.EchoOutputMismatch => 0xAB,
+        error.UnexpectedStderr => 0xAC,
+        error.FilesystemReadbackFailed => 0xAD,
+        error.FilesystemReadbackMismatch => 0xAE,
+    };
+}
+
 fn probeFilesystemContent(path: []const u8, expected: []const u8) bool {
     var scratch: [64]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&scratch);
     const content = filesystem.readFileAlloc(fba.allocator(), path, scratch.len) catch return false;
     return std.mem.eql(u8, content, expected);
+}
+
+fn runToolExecProbe() ToolExecProbeError!void {
+    resetBaremetalRuntimeForTest();
+    vga_text_console.clear();
+
+    var scratch: [4096]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&scratch);
+    const allocator = fba.allocator();
+    const io: std.Io = undefined;
+
+    var help = pal_proc.runCaptureFreestanding(allocator, io, &.{"help"}, 1000, 256, 128) catch |err| switch (err) {
+        error.OutOfMemory => return error.AllocatorExhausted,
+        else => return error.HelpRunFailed,
+    };
+    defer help.deinit(allocator);
+    if (pal_proc.termExitCode(help.term) != 0) return error.HelpExitCodeFailed;
+    if (!std.mem.containsAtLeast(u8, help.stdout, 1, "OpenClaw bare-metal builtins")) return error.HelpMissingBuiltin;
+    if (help.stderr.len != 0) return error.UnexpectedStderr;
+
+    var mkdir = pal_proc.runCaptureFreestanding(allocator, io, &.{ "mkdir", "/tools/tmp" }, 1000, 256, 128) catch |err| switch (err) {
+        error.OutOfMemory => return error.AllocatorExhausted,
+        else => return error.MkdirRunFailed,
+    };
+    defer mkdir.deinit(allocator);
+    if (pal_proc.termExitCode(mkdir.term) != 0) return error.MkdirExitCodeFailed;
+    if (!std.mem.eql(u8, mkdir.stdout, "created /tools/tmp\n")) return error.MkdirOutputMismatch;
+    if (mkdir.stderr.len != 0) return error.UnexpectedStderr;
+
+    var write_file = pal_proc.runCaptureFreestanding(allocator, io, &.{ "write-file", "/tools/tmp/tool.txt", "baremetal-tool" }, 1000, 256, 128) catch |err| switch (err) {
+        error.OutOfMemory => return error.AllocatorExhausted,
+        else => return error.WriteRunFailed,
+    };
+    defer write_file.deinit(allocator);
+    if (pal_proc.termExitCode(write_file.term) != 0) return error.WriteExitCodeFailed;
+    if (!std.mem.eql(u8, write_file.stdout, "wrote 14 bytes to /tools/tmp/tool.txt\n")) return error.WriteOutputMismatch;
+    if (write_file.stderr.len != 0) return error.UnexpectedStderr;
+
+    var cat = pal_proc.runCaptureFreestanding(allocator, io, &.{ "cat", "/tools/tmp/tool.txt" }, 1000, 256, 128) catch |err| switch (err) {
+        error.OutOfMemory => return error.AllocatorExhausted,
+        else => return error.CatRunFailed,
+    };
+    defer cat.deinit(allocator);
+    if (pal_proc.termExitCode(cat.term) != 0) return error.CatExitCodeFailed;
+    if (!std.mem.eql(u8, cat.stdout, "baremetal-tool")) return error.CatMismatch;
+    if (cat.stderr.len != 0) return error.UnexpectedStderr;
+
+    var stat = pal_proc.runCaptureFreestanding(allocator, io, &.{ "stat", "/tools/tmp/tool.txt" }, 1000, 256, 128) catch |err| switch (err) {
+        error.OutOfMemory => return error.AllocatorExhausted,
+        else => return error.StatRunFailed,
+    };
+    defer stat.deinit(allocator);
+    if (pal_proc.termExitCode(stat.term) != 0) return error.StatExitCodeFailed;
+    if (!std.mem.eql(u8, stat.stdout, "path=/tools/tmp/tool.txt kind=file size=14\n")) return error.StatMismatch;
+    if (stat.stderr.len != 0) return error.UnexpectedStderr;
+
+    const readback = filesystem.readFileAlloc(allocator, "/tools/tmp/tool.txt", 64) catch |err| switch (err) {
+        error.OutOfMemory => return error.AllocatorExhausted,
+        else => return error.FilesystemReadbackFailed,
+    };
+    defer allocator.free(readback);
+    if (!std.mem.eql(u8, readback, "baremetal-tool")) return error.FilesystemReadbackMismatch;
+
+    vga_text_console.clear();
+
+    var echo = pal_proc.runCaptureFreestanding(allocator, io, &.{ "echo", "tool-exec-ok" }, 1000, 256, 128) catch |err| switch (err) {
+        error.OutOfMemory => return error.AllocatorExhausted,
+        else => return error.EchoRunFailed,
+    };
+    defer echo.deinit(allocator);
+    if (pal_proc.termExitCode(echo.term) != 0) return error.EchoExitCodeFailed;
+    if (!std.mem.eql(u8, echo.stdout, "tool-exec-ok\n")) return error.EchoOutputMismatch;
+    if (echo.stderr.len != 0) return error.UnexpectedStderr;
 }
 
 fn ataStorageProbeFailureCode(err: AtaStorageProbeError) u8 {
@@ -10661,6 +10794,10 @@ test "baremetal rtl8139 dns probe succeeds through mock device" {
     defer rtl8139.testDisableMockDevice();
 
     try runRtl8139DnsProbe();
+}
+
+test "baremetal tool exec probe succeeds through pal proc freestanding path" {
+    try runToolExecProbe();
 }
 
 test "baremetal storage export surface persists block writes and flush state" {

@@ -54,6 +54,10 @@
   - `src/baremetal/filesystem.zig` implements path-based directory creation plus file read/write/stat
   - `src/pal/fs.zig` routes the freestanding PAL filesystem surface through that layer
   - hosted and host validation now prove persistence over both RAM-disk and ATA PIO backends
+- bare-metal tool execution is now also on a real freestanding path in `FS5.5`:
+  - `src/baremetal/tool_exec.zig` provides the builtin command substrate used by the bare-metal PAL instead of a hosted-process stub
+  - `src/pal/proc.zig` now exposes the explicit freestanding capture path
+  - `scripts/baremetal-qemu-tool-exec-probe-check.ps1` proves `help`, `mkdir`, `write-file`, `cat`, `stat`, direct filesystem readback, and `echo` over the freestanding PVH image with attached disk media
 - `scripts/package-registry-status.ps1` now performs default npmjs/PyPI visibility checks even when invoked with only `-ReleaseTag`, so local package diagnostics no longer silently skip unresolved public-registry state.
 - Latest CI:
   - latest pushed `main` head is tracked in issue `#1`

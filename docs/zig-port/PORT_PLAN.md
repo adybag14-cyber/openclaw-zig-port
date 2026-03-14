@@ -83,6 +83,10 @@ Full-stack replacement execution reference:
     - `src/baremetal/filesystem.zig` implements directory creation plus file read/write/stat
     - `src/pal/fs.zig` routes the freestanding PAL through that layer
     - hosted and host validation now proves RAM-disk and ATA-backed persistence for `/runtime/state/agent.json` and `/tools/cache/tool.txt`
+  - bare-metal tool execution closure is now reached locally:
+    - real freestanding builtin command substrate shipped in `src/baremetal/tool_exec.zig`
+    - `src/pal/proc.zig` now exposes explicit freestanding capture through `runCaptureFreestanding(...)`
+    - live QEMU+GDB proof `scripts/baremetal-qemu-tool-exec-probe-check.ps1` validates `help`, `mkdir`, `write-file`, `cat`, `stat`, direct filesystem readback, and `echo` over the freestanding PVH artifact with attached disk media
 - `docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md` (FS0..FS7 scope/gates)
 
 ## Critical Points
