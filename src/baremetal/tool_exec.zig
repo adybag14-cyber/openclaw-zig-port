@@ -8,7 +8,10 @@ pub const Error = filesystem.Error || std.mem.Allocator.Error || error{
     MissingPath,
     StreamTooLong,
     InvalidQuotedArgument,
+    ScriptDepthExceeded,
 };
+
+const max_script_depth: usize = 4;
 
 pub const Result = struct {
     exit_code: u8,
@@ -101,7 +104,7 @@ pub fn runCapture(
         };
     };
 
-    execute(parsed, &stdout_buffer, &stderr_buffer, &exit_code, allocator) catch |err| {
+    execute(parsed, &stdout_buffer, &stderr_buffer, &exit_code, allocator, 0) catch |err| {
         exit_code = 1;
         try stderr_buffer.appendFmt("{s}\n", .{@errorName(err)});
     };
@@ -119,9 +122,12 @@ fn execute(
     stderr_buffer: *OutputBuffer,
     exit_code: *u8,
     allocator: std.mem.Allocator,
+    depth: usize,
 ) !void {
+    if (depth > max_script_depth) return error.ScriptDepthExceeded;
+
     if (std.ascii.eqlIgnoreCase(parsed.name, "help")) {
-        try stdout_buffer.appendLine("OpenClaw bare-metal builtins: help, echo, cat, write-file, mkdir, stat");
+        try stdout_buffer.appendLine("OpenClaw bare-metal builtins: help, echo, cat, write-file, mkdir, stat, run-script");
         return;
     }
 
@@ -219,6 +225,46 @@ fn execute(
             else => "unknown",
         };
         try stdout_buffer.appendFmt("path={s} kind={s} size={d}\n", .{ arg.arg, kind, stat.size });
+        return;
+    }
+
+    if (std.ascii.eqlIgnoreCase(parsed.name, "run-script")) {
+        const arg = parseFirstArg(parsed.rest) catch |err| {
+            exit_code.* = 2;
+            try writeCommandError(stderr_buffer, err, "run-script <path>");
+            return;
+        };
+        if (arg.rest.len != 0) {
+            exit_code.* = 2;
+            try stderr_buffer.appendLine("usage: run-script <path>");
+            return;
+        }
+        if (depth >= max_script_depth) {
+            exit_code.* = 1;
+            try stderr_buffer.appendLine("run-script failed: ScriptDepthExceeded");
+            return;
+        }
+
+        const script = filesystem.readFileAlloc(allocator, arg.arg, 4096) catch |err| {
+            exit_code.* = 1;
+            try stderr_buffer.appendFmt("run-script failed: {s}\n", .{@errorName(err)});
+            return;
+        };
+        defer allocator.free(script);
+
+        var lines = std.mem.splitScalar(u8, script, '\n');
+        while (lines.next()) |raw_line| {
+            const line = std.mem.trim(u8, raw_line, " \t\r");
+            if (line.len == 0 or line[0] == '#') continue;
+
+            const nested = parseCommand(line) catch |err| {
+                exit_code.* = 2;
+                try writeCommandError(stderr_buffer, err, "run-script <path>");
+                return;
+            };
+            try execute(nested, stdout_buffer, stderr_buffer, exit_code, allocator, depth + 1);
+            if (exit_code.* != 0) return;
+        }
         return;
     }
 
@@ -328,4 +374,32 @@ test "baremetal tool exec reports unknown commands on stderr" {
     try std.testing.expectEqual(@as(u8, 127), result.exit_code);
     try std.testing.expectEqualStrings("", result.stdout);
     try std.testing.expect(std.mem.indexOf(u8, result.stderr, "unknown command") != null);
+}
+
+test "baremetal tool exec runs persisted scripts through the baremetal filesystem" {
+    storage_backend.resetForTest();
+    filesystem.resetForTest();
+    vga_text_console.resetForTest();
+
+    try filesystem.init();
+    try filesystem.createDirPath("/tools/scripts");
+    try filesystem.writeFile(
+        "/tools/scripts/bootstrap.oc",
+        "# setup\nmkdir /tools/out\nwrite-file /tools/out/data.txt script-data\nstat /tools/out/data.txt\necho script-ok\n",
+        0,
+    );
+
+    var result = try runCapture(std.testing.allocator, "run-script /tools/scripts/bootstrap.oc", 512, 256);
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(u8, 0), result.exit_code);
+    try std.testing.expectEqualStrings(
+        "created /tools/out\nwrote 11 bytes to /tools/out/data.txt\npath=/tools/out/data.txt kind=file size=11\nscript-ok\n",
+        result.stdout,
+    );
+    try std.testing.expectEqualStrings("", result.stderr);
+
+    const content = try filesystem.readFileAlloc(std.testing.allocator, "/tools/out/data.txt", 64);
+    defer std.testing.allocator.free(content);
+    try std.testing.expectEqualStrings("script-data", content);
 }

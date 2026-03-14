@@ -366,7 +366,7 @@ pub const Session = struct {
     fn buildPayloadInternal(self: *Session, payload: []const u8) Error!Outbound {
         if (self.state != .established) return error.InvalidState;
         if (payload.len == 0) return error.EmptyPayload;
-        if (self.remote_window != 0 and payload.len > self.remote_window) return error.WindowExceeded;
+        if (payload.len > self.remote_window) return error.WindowExceeded;
 
         const outbound = Outbound{
             .sequence_number = self.send_next,
@@ -1219,6 +1219,43 @@ test "tcp session rejects payload larger than remote window" {
     try std.testing.expectEqual(@as(u16, 4), client.remote_window);
     try std.testing.expectError(error.WindowExceeded, client.buildPayload("12345"));
     try std.testing.expectError(error.WindowExceeded, client.buildPayloadWithTimeout("12345", 10, 3));
+}
+
+test "tcp session blocks payload on zero window until pure ack reopens it" {
+    const client_ip = [4]u8{ 192, 168, 56, 10 };
+    const server_ip = [4]u8{ 192, 168, 56, 1 };
+
+    var client = Session.initClient(4321, 443, 0x0102_0304, 4096);
+    var server = Session.initServer(443, 4321, 0xA0B0_C0D0, 4);
+
+    var buffer: [header_len + 32]u8 = undefined;
+
+    const syn = try client.buildSyn();
+    const syn_packet = try testDecodeOutbound(client, syn, client_ip, server_ip, buffer[0..]);
+    const syn_ack = try server.acceptSyn(syn_packet);
+    const syn_ack_packet = try testDecodeOutbound(server, syn_ack, server_ip, client_ip, buffer[0..]);
+    const ack = try client.acceptSynAck(syn_ack_packet);
+    const ack_packet = try testDecodeOutbound(client, ack, client_ip, server_ip, buffer[0..]);
+    try server.acceptAck(ack_packet);
+
+    var zero_window_update = try server.buildAck();
+    zero_window_update.window_size = 0;
+    const zero_window_packet = try testDecodeOutbound(server, zero_window_update, server_ip, client_ip, buffer[0..]);
+    try client.acceptAck(zero_window_packet);
+
+    try std.testing.expectEqual(@as(u16, 0), client.remote_window);
+    try std.testing.expectError(error.WindowExceeded, client.buildPayload("X"));
+    try std.testing.expectError(error.WindowExceeded, client.buildPayloadWithTimeout("X", 10, 3));
+
+    var reopen_window_update = try server.buildAck();
+    reopen_window_update.window_size = 4;
+    const reopen_window_packet = try testDecodeOutbound(server, reopen_window_update, server_ip, client_ip, buffer[0..]);
+    try client.acceptAck(reopen_window_packet);
+
+    try std.testing.expectEqual(@as(u16, 4), client.remote_window);
+    const reopened_payload = try client.buildPayload("1234");
+    try std.testing.expectEqual(@as(usize, 4), reopened_payload.payload.len);
+    try std.testing.expectError(error.WindowExceeded, client.buildPayload("12345"));
 }
 
 fn testDecodeOutbound(

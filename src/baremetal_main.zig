@@ -10,6 +10,7 @@ const storage_backend = @import("baremetal/storage_backend.zig");
 const filesystem = @import("baremetal/filesystem.zig");
 const ps2_input = @import("baremetal/ps2_input.zig");
 const tool_layout = @import("baremetal/tool_layout.zig");
+const tool_service = @import("baremetal/tool_service.zig");
 const pal_fs = @import("pal/fs.zig");
 const pal_net = @import("pal/net.zig");
 const pal_proc = @import("pal/proc.zig");
@@ -335,6 +336,10 @@ const Rtl8139TcpProbeError = error{
     RetransmitMissing,
     RetransmitShapeMismatch,
     RetransmitNotCleared,
+    WindowUpdateMismatch,
+    WindowBlockedBypass,
+    ToolServiceFailed,
+    ToolServiceResponseMismatch,
 };
 
 const Rtl8139DhcpProbeError = error{
@@ -452,6 +457,12 @@ const ToolExecProbeError = error{
     EchoRunFailed,
     EchoExitCodeFailed,
     EchoOutputMismatch,
+    ScriptSeedFailed,
+    ScriptRunFailed,
+    ScriptExitCodeFailed,
+    ScriptOutputMismatch,
+    ScriptFilesystemReadbackFailed,
+    ScriptFilesystemReadbackMismatch,
     UnexpectedStderr,
     FilesystemReadbackFailed,
     FilesystemReadbackMismatch,
@@ -2431,6 +2442,8 @@ fn runRtl8139TcpProbe() Rtl8139TcpProbeError!void {
     const payload_a = "OPENCLAW-TCP";
     const payload_b = "OPENCLAW-TCP-B";
     const payload_b_after_close = "OPENCLAW-TCP-B2";
+    const service_request = "echo tcp-service-ok";
+    const service_response_expected = "tcp-service-ok\n";
     const retransmit_interval_ticks: u64 = 4;
     const flow_a = tcp_protocol.FlowKey{
         .local_ip = source_ip,
@@ -2451,6 +2464,8 @@ fn runRtl8139TcpProbe() Rtl8139TcpProbeError!void {
     var server_b = tcp_protocol.Session.initServer(flow_b.remote_port, flow_b.local_port, 0xB0C0_D0E0, 6144);
     var packet_storage: pal_net.TcpPacket = undefined;
     var probe_tick: u64 = 0;
+    var service_scratch: [1024]u8 = undefined;
+    var service_fba = std.heap.FixedBufferAllocator.init(&service_scratch);
 
     const syn_a = client_a.buildSynWithTimeout(probe_tick, retransmit_interval_ticks) catch |err| return mapTcpSessionProbeError(err);
     _ = try sendTcpProbeSegment(source_ip, destination_ip, flow_a.local_port, flow_a.remote_port, syn_a);
@@ -2548,6 +2563,61 @@ fn runRtl8139TcpProbe() Rtl8139TcpProbeError!void {
     const mapped_b_payload_ack = table.findByInboundPacket(destination_ip, source_ip, tcpPacketView(&packet_storage)) orelse return error.SessionStateMismatch;
     if (mapped_b_payload_ack != client_b) return error.SessionStateMismatch;
     mapped_b_payload_ack.acceptAck(tcpPacketView(&packet_storage)) catch |err| return mapTcpSessionProbeError(err);
+
+    var zero_window_update_b = server_b.buildAck() catch |err| return mapTcpSessionProbeError(err);
+    zero_window_update_b.window_size = 0;
+    _ = try sendTcpProbeSegment(destination_ip, source_ip, flow_b.remote_port, flow_b.local_port, zero_window_update_b);
+    try pollTcpProbePacket(eth, &packet_storage);
+    try expectTcpProbePacket(&packet_storage, eth.mac, destination_ip, source_ip, flow_b.remote_port, flow_b.local_port, zero_window_update_b);
+    const mapped_b_zero_window = table.findByInboundPacket(destination_ip, source_ip, tcpPacketView(&packet_storage)) orelse return error.SessionStateMismatch;
+    if (mapped_b_zero_window != client_b) return error.SessionStateMismatch;
+    mapped_b_zero_window.acceptAck(tcpPacketView(&packet_storage)) catch |err| return mapTcpSessionProbeError(err);
+    if (client_b.remote_window != 0) return error.WindowUpdateMismatch;
+    if (client_b.buildPayload("X")) |_| {
+        return error.WindowBlockedBypass;
+    } else |err| switch (err) {
+        error.WindowExceeded => {},
+        else => return mapTcpSessionProbeError(err),
+    }
+
+    var reopen_window_update_b = server_b.buildAck() catch |err| return mapTcpSessionProbeError(err);
+    reopen_window_update_b.window_size = 64;
+    _ = try sendTcpProbeSegment(destination_ip, source_ip, flow_b.remote_port, flow_b.local_port, reopen_window_update_b);
+    try pollTcpProbePacket(eth, &packet_storage);
+    try expectTcpProbePacket(&packet_storage, eth.mac, destination_ip, source_ip, flow_b.remote_port, flow_b.local_port, reopen_window_update_b);
+    const mapped_b_reopen = table.findByInboundPacket(destination_ip, source_ip, tcpPacketView(&packet_storage)) orelse return error.SessionStateMismatch;
+    if (mapped_b_reopen != client_b) return error.SessionStateMismatch;
+    mapped_b_reopen.acceptAck(tcpPacketView(&packet_storage)) catch |err| return mapTcpSessionProbeError(err);
+    if (client_b.remote_window != reopen_window_update_b.window_size) return error.WindowUpdateMismatch;
+
+    const service_request_payload = client_b.buildPayload(service_request) catch |err| return mapTcpSessionProbeError(err);
+    _ = try sendTcpProbeSegment(source_ip, destination_ip, flow_b.local_port, flow_b.remote_port, service_request_payload);
+    try pollTcpProbePacket(eth, &packet_storage);
+    try expectTcpProbePacket(&packet_storage, eth.mac, source_ip, destination_ip, flow_b.local_port, flow_b.remote_port, service_request_payload);
+    server_b.acceptPayload(tcpPacketView(&packet_storage)) catch |err| return mapTcpSessionProbeError(err);
+
+    const service_response = tool_service.handleCommandRequest(
+        service_fba.allocator(),
+        packet_storage.payload[0..packet_storage.payload_len],
+        256,
+        256,
+        256,
+    ) catch return error.ToolServiceFailed;
+    if (!std.mem.eql(u8, service_response, service_response_expected)) return error.ToolServiceResponseMismatch;
+
+    const service_reply = server_b.buildPayload(service_response) catch |err| return mapTcpSessionProbeError(err);
+    _ = try sendTcpProbeSegment(destination_ip, source_ip, flow_b.remote_port, flow_b.local_port, service_reply);
+    try pollTcpProbePacket(eth, &packet_storage);
+    try expectTcpProbePacket(&packet_storage, eth.mac, destination_ip, source_ip, flow_b.remote_port, flow_b.local_port, service_reply);
+    const mapped_b_service_reply = table.findByInboundPacket(destination_ip, source_ip, tcpPacketView(&packet_storage)) orelse return error.SessionStateMismatch;
+    if (mapped_b_service_reply != client_b) return error.SessionStateMismatch;
+    mapped_b_service_reply.acceptPayload(tcpPacketView(&packet_storage)) catch |err| return mapTcpSessionProbeError(err);
+
+    const service_reply_ack = client_b.buildAck() catch |err| return mapTcpSessionProbeError(err);
+    _ = try sendTcpProbeSegment(source_ip, destination_ip, flow_b.local_port, flow_b.remote_port, service_reply_ack);
+    try pollTcpProbePacket(eth, &packet_storage);
+    try expectTcpProbePacket(&packet_storage, eth.mac, source_ip, destination_ip, flow_b.local_port, flow_b.remote_port, service_reply_ack);
+    server_b.acceptAck(tcpPacketView(&packet_storage)) catch |err| return mapTcpSessionProbeError(err);
 
     const client_fin_a = client_a.buildFinWithTimeout(probe_tick, retransmit_interval_ticks) catch |err| return mapTcpSessionProbeError(err);
     if (!client_a.retransmit.armed() or client_a.retransmit.kind != .fin) return error.RetransmitMissing;
@@ -2695,6 +2765,10 @@ fn rtl8139TcpProbeFailureCode(err: Rtl8139TcpProbeError) u8 {
         error.RetransmitMissing => 0xEF,
         error.RetransmitShapeMismatch => 0xF0,
         error.RetransmitNotCleared => 0xF1,
+        error.WindowUpdateMismatch => 0xF2,
+        error.WindowBlockedBypass => 0xF3,
+        error.ToolServiceFailed => 0xF4,
+        error.ToolServiceResponseMismatch => 0xF5,
     };
 }
 
@@ -3038,9 +3112,15 @@ fn toolExecProbeFailureCode(err: ToolExecProbeError) u8 {
         error.EchoRunFailed => 0xA9,
         error.EchoExitCodeFailed => 0xAA,
         error.EchoOutputMismatch => 0xAB,
-        error.UnexpectedStderr => 0xAC,
-        error.FilesystemReadbackFailed => 0xAD,
-        error.FilesystemReadbackMismatch => 0xAE,
+        error.ScriptSeedFailed => 0xAC,
+        error.ScriptRunFailed => 0xAD,
+        error.ScriptExitCodeFailed => 0xAE,
+        error.ScriptOutputMismatch => 0xAF,
+        error.ScriptFilesystemReadbackFailed => 0xB0,
+        error.ScriptFilesystemReadbackMismatch => 0xB1,
+        error.UnexpectedStderr => 0xB2,
+        error.FilesystemReadbackFailed => 0xB3,
+        error.FilesystemReadbackMismatch => 0xB4,
     };
 }
 
@@ -3111,6 +3191,35 @@ fn runToolExecProbe() ToolExecProbeError!void {
     };
     defer allocator.free(readback);
     if (!std.mem.eql(u8, readback, "baremetal-tool")) return error.FilesystemReadbackMismatch;
+
+    filesystem.createDirPath("/tools/scripts") catch return error.ScriptSeedFailed;
+    filesystem.writeFile(
+        "/tools/scripts/bootstrap.oc",
+        "# tool exec bootstrap\nmkdir /tools/script\nwrite-file /tools/script/output.txt script-data\nstat /tools/script/output.txt\necho script-ok\n",
+        0,
+    ) catch return error.ScriptSeedFailed;
+
+    var run_script = pal_proc.runCaptureFreestanding(allocator, io, &.{ "run-script", "/tools/scripts/bootstrap.oc" }, 1000, 512, 256) catch |err| switch (err) {
+        error.OutOfMemory => return error.AllocatorExhausted,
+        else => return error.ScriptRunFailed,
+    };
+    defer run_script.deinit(allocator);
+    if (pal_proc.termExitCode(run_script.term) != 0) return error.ScriptExitCodeFailed;
+    if (!std.mem.eql(
+        u8,
+        run_script.stdout,
+        "created /tools/script\nwrote 11 bytes to /tools/script/output.txt\npath=/tools/script/output.txt kind=file size=11\nscript-ok\n",
+    )) return error.ScriptOutputMismatch;
+    if (run_script.stderr.len != 0) return error.UnexpectedStderr;
+
+    filesystem.resetForTest();
+    filesystem.init() catch return error.ScriptFilesystemReadbackFailed;
+    const script_readback = filesystem.readFileAlloc(allocator, "/tools/script/output.txt", 64) catch |err| switch (err) {
+        error.OutOfMemory => return error.AllocatorExhausted,
+        else => return error.ScriptFilesystemReadbackFailed,
+    };
+    defer allocator.free(script_readback);
+    if (!std.mem.eql(u8, script_readback, "script-data")) return error.ScriptFilesystemReadbackMismatch;
 
     vga_text_console.clear();
 
