@@ -299,16 +299,16 @@ Notes:
   - `learnArpPacket`
   - `sendUdpPacketRouted`
 - host regressions prove mock-device ARP, IPv4, UDP, DHCP, DNS, TCP handshake/payload exchange, bounded four-way close, dropped-first-SYN retransmission/timeout recovery, dropped-first-payload retransmission/timeout recovery, dropped-first-FIN retransmission/timeout recovery on both close sides, bounded multi-flow session isolation, bounded cumulative-ACK advancement across multiple in-flight payload chunks, DHCP-driven route configuration, gateway ARP learning, routed off-subnet UDP delivery, and direct-subnet UDP bypass through the RTL8139 path
-- `src/baremetal/tool_service.zig` now provides a bounded framed request/response shim on top of the bare-metal tool substrate for the TCP path, with typed `CMD`, `GET`, `PUT`, `STAT`, `PKG`, `PKGLIST`, and `PKGRUN` requests
+- `src/baremetal/tool_service.zig` now provides a bounded framed request/response shim on top of the bare-metal tool substrate for the TCP path, with typed `CMD`, `GET`, `PUT`, `STAT`, `PKG`, `PKGLIST`, and `PKGRUN` requests plus bounded batched request parsing/execution on one flow
 - live QEMU proofs now pass:
   - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`
   - `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`
   - `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`
   - `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1`
   - `scripts/baremetal-qemu-rtl8139-gateway-probe-check.ps1`
-- `src/baremetal_main.zig` host regressions now also prove TCP zero-window block/reopen behavior, framed multi-request command-service exchange on a single live flow, bounded long-response chunking under the advertised remote window, typed `PUT`/`GET`/`STAT` service behavior, persisted `run-script` execution through the framed TCP service seam, and package install/list/run behavior on the canonical package layout
-- those proofs now cover live ARP request transmission, IPv4 frame encode/decode, UDP datagram encode/decode, TCP `SYN -> SYN-ACK -> ACK` handshake plus payload exchange, dropped-first-SYN recovery, dropped-first-payload recovery, dropped-first-FIN recovery on both close sides, bounded four-way close, bounded two-flow session isolation, zero-window block/reopen, bounded sequential payload chunking, framed TCP command-service exchange, typed TCP `PUT` upload, direct filesystem readback of the uploaded script path over the attached disk-backed path, and TX/RX counter advance over the freestanding PVH image
-  - the current live QEMU RTL8139 TCP proof still stops at the typed file-service boundary; typed package install/list/run is proven locally through hosted/module tests plus the attached-disk persistence path, not yet through the live RTL8139 probe
+- `src/baremetal_main.zig` host regressions now also prove TCP zero-window block/reopen behavior, framed multi-request command-service exchange on a single live flow, bounded long-response chunking under the advertised remote window, bounded typed batch request multiplexing on one live flow, typed `PUT`/`GET`/`STAT` service behavior, persisted `run-script` execution through the framed TCP service seam, and package install/list/run behavior on the canonical package layout
+- those proofs now cover live ARP request transmission, IPv4 frame encode/decode, UDP datagram encode/decode, TCP `SYN -> SYN-ACK -> ACK` handshake plus payload exchange, dropped-first-SYN recovery, dropped-first-payload recovery, dropped-first-FIN recovery on both close sides, bounded four-way close, bounded two-flow session isolation, zero-window block/reopen, bounded sequential payload chunking, framed TCP command-service exchange, bounded typed batch request multiplexing on one flow with concatenated framed responses, typed TCP `PUT` upload, direct filesystem readback of the uploaded script path, typed `PKG` / `PKGLIST` / `PKGRUN` package-service exchange, canonical package entrypoint readback, package output readback, and TX/RX counter advance over the freestanding PVH image
+  - the live package-service extension required a real probe-stack fix: `runRtl8139TcpProbe()` now uses static scratch storage, reducing the project-built bare-metal stack frame from `0x3e78` to `0x3708` bytes before the live QEMU proof would pass with package install/list/run enabled
   - the routed UDP proof now also covers live ARP-reply learning, ARP-cache population, gateway next-hop selection for off-subnet traffic, direct-subnet gateway bypass, and routed UDP delivery with the gateway MAC on the Ethernet frame while preserving the remote IPv4 destination
 - A real DHCP framing/decode slice is now also closed locally:
   - `src/protocol/dhcp.zig` provides strict DHCP discover encode/decode
@@ -321,7 +321,7 @@ Notes:
   - `scripts/baremetal-qemu-rtl8139-dns-probe-check.ps1` now proves real RTL8139 TX/RX of a DNS query plus strict decode/validation of a DNS A response over the freestanding PVH artifact
 - deeper networking depth remains future work above the FS5.5 closure bar:
   - sliding-window and congestion-control behavior beyond the current bounded zero-window reopen + sequential chunk-and-ACK session model
-  - richer network service/runtime multiplexing beyond the current framed multi-request command shim on the bare-metal TCP path
+  - higher-level service/runtime layers beyond the current bounded typed batch file/package seam on the bare-metal TCP path
   - higher-level protocol/service layers above the current DHCP/DNS/TCP proof surfaces
 
 ### Filesystem Usage
