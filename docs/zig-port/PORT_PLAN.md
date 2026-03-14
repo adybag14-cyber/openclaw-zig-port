@@ -81,9 +81,10 @@ Full-stack replacement execution reference:
     - TCP session/state closure is now reached locally:
       - `src/protocol/tcp.zig` now carries a minimal client/server session state machine for `SYN -> SYN-ACK -> ACK`, established payload exchange, bounded four-way teardown, bounded SYN/payload/FIN retransmission recovery, bounded multi-flow session-table management, strict remote-window enforcement for bounded sequential payload chunking, and zero-window blocking until a pure ACK reopens the remote window
       - `src/pal/net.zig` host regressions now prove that session behavior over the mock RTL8139 path, including dropped-first-SYN recovery, dropped-first-payload recovery, dropped-first-FIN recovery on both close sides, bounded four-way close, and bounded multi-flow session isolation
-      - `src/baremetal/tool_service.zig` now provides a bounded framed request/response shim on top of the bare-metal tool substrate for the TCP path (`REQ <id> <command>` -> `RESP <id> <len>\n<payload>`)
-      - `src/baremetal_main.zig` now drives the live RTL8139 TCP proof through the same session/state machine, including zero-window block/reopen, framed multi-request service exchange on a single flow, and bounded long-response chunking under the advertised remote window
-      - `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1` now proves live handshake + payload exchange + bounded four-way close with dropped-first-SYN recovery, dropped-first-payload recovery, dropped-first-FIN recovery on both close sides, bounded two-flow session isolation, zero-window block/reopen, bounded sequential payload chunking, and framed multi-request command-service exchange over the freestanding PVH artifact
+      - `src/baremetal/tool_service.zig` now provides a bounded framed request/response shim on top of the bare-metal tool substrate for the TCP path, with typed `CMD`, `GET`, `PUT`, and `STAT` requests
+      - host/module validation now also proves typed TCP file-service behavior on top of the bare-metal filesystem, including `PUT`, `GET`, `STAT`, and persisted `run-script` execution through that framed service seam
+      - `src/baremetal_main.zig` now drives the live RTL8139 TCP proof through the same session/state machine, including zero-window block/reopen, framed multi-request service exchange on a single flow, bounded long-response chunking under the advertised remote window, typed TCP `PUT` upload, and direct filesystem readback of the uploaded script path
+      - `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1` now proves live handshake + payload exchange + bounded four-way close with dropped-first-SYN recovery, dropped-first-payload recovery, dropped-first-FIN recovery on both close sides, bounded two-flow session isolation, zero-window block/reopen, bounded sequential payload chunking, framed multi-request command-service exchange, and typed TCP `PUT` upload with direct filesystem readback over the freestanding PVH artifact with attached disk media
     - routed networking depth now also closes through the real RTL8139 path:
       - `src/protocol/arp.zig` now also encodes ARP replies
       - `src/pal/net.zig` now carries ARP-cache learning, DHCP-driven route configuration, next-hop resolution, and routed UDP send helpers
@@ -100,7 +101,7 @@ Full-stack replacement execution reference:
   - bare-metal tool execution closure is now reached locally:
     - real freestanding builtin command substrate shipped in `src/baremetal/tool_exec.zig`, including persisted `run-script` execution
     - `src/pal/proc.zig` now exposes explicit freestanding capture through `runCaptureFreestanding(...)`
-    - `src/baremetal/tool_service.zig` now closes the bounded request/response service seam on top of the freestanding tool substrate
+    - `src/baremetal/tool_service.zig` now closes the bounded typed request/response service seam on top of the freestanding tool substrate
     - live QEMU+GDB proof `scripts/baremetal-qemu-tool-exec-probe-check.ps1` validates `help`, `mkdir`, `write-file`, `cat`, `stat`, `run-script`, direct filesystem readback, persisted script readback after filesystem reset/re-init, and `echo` over the freestanding PVH artifact with attached disk media
 - `docs/zig-port/FULL_STACK_REPLACEMENT_MATRIX.md` (FS0..FS7 scope/gates)
 

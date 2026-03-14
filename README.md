@@ -60,8 +60,9 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
     - `src/protocol/tcp.zig` now provides strict TCP framing, checksum, a minimal client/server session state machine for `SYN -> SYN-ACK -> ACK`, established payload exchange, bounded client-side SYN and established-payload retransmission state, bounded FIN retransmission/timeout recovery during teardown, four-way teardown, a bounded multi-flow session table, strict remote-window enforcement for bounded sequential payload chunking, and zero-window blocking until a pure ACK reopens the remote window
     - `src/pal/net.zig` now exposes `sendArpRequest` / `pollArpPacket`, `sendIpv4Frame` / `pollIpv4PacketStrict`, `sendUdpPacket` / `pollUdpPacketStrictInto`, and `sendTcpPacket` / `pollTcpPacketStrictInto`
     - `src/pal/net.zig` host regressions now also prove two TCP flows can handshake, exchange payloads, and teardown independently through the mock RTL8139 path
-    - `src/baremetal/tool_service.zig` now provides a bounded framed request/response shim on top of the bare-metal tool substrate for the TCP path
-    - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`, and `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1` now prove live ARP, IPv4, UDP, and TCP handshake/payload exchange plus four-way close over the freestanding PVH artifact, including dropped-first-SYN recovery, dropped-first-payload recovery, dropped-first-FIN recovery on both close sides, bounded two-flow session isolation, zero-window block/reopen behavior, bounded sequential payload chunking, and framed multi-request command-service exchange over the TCP path
+    - `src/baremetal/tool_service.zig` now provides a bounded framed request/response shim on top of the bare-metal tool substrate for the TCP path, with typed `CMD`, `GET`, `PUT`, and `STAT` requests
+    - host/module validation now also proves typed TCP file-service behavior on top of the bare-metal filesystem, including `PUT`, `GET`, `STAT`, and persisted `run-script` execution through the framed service seam
+    - `scripts/baremetal-qemu-rtl8139-arp-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-ipv4-probe-check.ps1`, `scripts/baremetal-qemu-rtl8139-udp-probe-check.ps1`, and `scripts/baremetal-qemu-rtl8139-tcp-probe-check.ps1` now prove live ARP, IPv4, UDP, and TCP handshake/payload exchange plus four-way close over the freestanding PVH artifact, including dropped-first-SYN recovery, dropped-first-payload recovery, dropped-first-FIN recovery on both close sides, bounded two-flow session isolation, zero-window block/reopen behavior, bounded sequential payload chunking, framed multi-request command-service exchange, and typed TCP `PUT` upload with direct filesystem readback over the attached disk-backed bare-metal path
   - DHCP framing/decode is now also proven on the real RTL8139 path:
     - `src/protocol/dhcp.zig` provides strict DHCP discover encode/decode
     - `src/pal/net.zig` exposes DHCP send/poll helpers for the hosted/mock path
@@ -85,7 +86,7 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - bare-metal tool execution is now also on a real freestanding path:
     - `src/baremetal/tool_exec.zig` provides the builtin command substrate instead of falling back to hosted process execution
     - `src/pal/proc.zig` exposes the explicit freestanding capture path used by the bare-metal PAL
-    - `src/baremetal/tool_service.zig` provides the bounded request/response shim used by the bare-metal TCP proof
+    - `src/baremetal/tool_service.zig` provides the bounded typed request/response shim used by the bare-metal TCP proof
     - `scripts/baremetal-qemu-tool-exec-probe-check.ps1` proves `help`, `mkdir`, `write-file`, `cat`, `stat`, `run-script`, direct readback, persisted script readback after filesystem reset/re-init, and `echo` over the freestanding PVH artifact with attached disk media
 - Recent FS6 progress (2026-03-06):
   - `update.*` now has a real `canary` rollout lane instead of collapsing `canary` into `edge`
