@@ -37,17 +37,20 @@ Full-stack replacement execution reference:
   - storage/disk depth advanced locally:
     - shared storage backend facade shipped in `src/baremetal/storage_backend.zig`
     - real ATA PIO path shipped in `src/baremetal/ata_pio_disk.zig`
-    - ATA PIO currently supports `IDENTIFY`, sector `READ`, sector `WRITE`, `CACHE FLUSH`, and first-usable-MBR-partition mounting with logical LBA translation
+    - ATA PIO currently supports `IDENTIFY`, sector `READ`, sector `WRITE`, `CACHE FLUSH`, first-usable-MBR-partition mounting, and protective-MBR GPT partition mounting with logical LBA translation
     - PAL storage and bare-metal tool layout now route through the backend facade
     - hosted and host validation now proves:
       - ATA-backed backend selection
       - identify-backed capacity detection
       - first-partition MBR mount and logical base-LBA translation
+      - protective-MBR GPT mount and logical base-LBA translation
       - ATA mock-device read/write/flush behavior
       - ATA-backed bare-metal export reporting
       - live QEMU ATA-backed mutation + readback against a real MBR-partitioned raw image
       - ATA-backed tool-layout persistence through the mounted partition view
       - ATA-backed filesystem persistence through the mounted partition view
+      - canonical persisted install-layout seeding through `src/baremetal/disk_installer.zig`
+      - live QEMU ATA-backed GPT install proof against a real protective-MBR GPT raw image, including mounted-view block mutation, `/boot` + `/system` + `/runtime/install` readback, and persisted bootstrap package execution from disk
   - Ethernet driver depth advanced locally:
     - real RTL8139 path shipped in `src/baremetal/rtl8139.zig`
     - PCI RTL8139 discovery + I/O / bus-master enable shipped in `src/baremetal/pci.zig`

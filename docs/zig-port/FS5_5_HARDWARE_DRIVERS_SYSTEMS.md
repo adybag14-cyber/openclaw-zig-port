@@ -220,13 +220,20 @@ Current local source-of-truth evidence:
   - sector-count discovery from identify words `60/61`
   - sector `READ`, `WRITE`, and `CACHE FLUSH`
   - first usable MBR partition mount from sector `0`, with logical LBA translation above the mounted partition base
+  - protective-MBR GPT header parsing plus first usable GPT partition mount with the same logical LBA translation model
   - hosted mock-device support for deterministic regression coverage
 - `src/pal/storage.zig` now routes through the backend facade instead of directly through the RAM disk
 - `src/baremetal/tool_layout.zig` now routes through the backend facade instead of directly through the RAM disk
+- `src/baremetal/disk_installer.zig` now seeds a canonical persisted install layout on the active backend:
+  - `/boot/loader.cfg`
+  - `/system/kernel.txt`
+  - `/runtime/install/manifest.txt`
+  - bootstrap package under `/packages/bootstrap/...`
 - host regressions now prove:
   - the storage facade prefers ATA PIO when a device is present
   - ATA PIO mock-device mount and identify-backed capacity detection
   - first-partition MBR mounting with logical base-LBA translation
+  - protective-MBR GPT partition discovery with mounted logical base-LBA translation
   - ATA PIO mock-device read/write/flush behavior
 - bare-metal exports now report ATA PIO as the active backend when a device is present
 - the live freestanding/QEMU ATA proof is now strict-closed through:
@@ -235,6 +242,11 @@ Current local source-of-truth evidence:
   - raw ATA-backed block mutation + readback at physical-on-disk LBAs behind the mounted logical partition view
   - tool-layout persistence through the ATA-backed shared storage facade on that partition-mounted view
   - path-based filesystem persistence through the ATA-backed shared storage facade on that partition-mounted view
+  - `scripts/baremetal-qemu-ata-gpt-installer-probe-check.ps1`
+  - a real protective-MBR GPT raw image attached to the freestanding PVH artifact
+  - raw ATA-backed block mutation + readback behind the mounted GPT partition view
+  - persisted install-layout seeding through `src/baremetal/disk_installer.zig`
+  - bootstrap package execution and readback from the mounted GPT-backed filesystem
 
 Notes:
 

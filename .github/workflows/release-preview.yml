@@ -187,6 +187,10 @@ jobs:
         shell: pwsh
         run: ./scripts/baremetal-qemu-ata-storage-probe-check.ps1
 
+      - name: Bare-metal QEMU ATA GPT installer probe (optional)
+        shell: pwsh
+        run: ./scripts/baremetal-qemu-ata-gpt-installer-probe-check.ps1
+
       - name: Bare-metal QEMU RTL8139 probe (optional)
         shell: pwsh
         run: ./scripts/baremetal-qemu-rtl8139-probe-check.ps1

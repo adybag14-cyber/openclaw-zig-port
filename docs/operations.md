@@ -27,9 +27,11 @@
   - `scripts/baremetal-qemu-ps2-input-probe-check.ps1` plus its wrapper probes are the live bare-metal proof for IRQ-driven keyboard/mouse updates
 - disk/block I/O is now on a real shared backend path in `FS5.5`:
   - `src/baremetal/storage_backend.zig` selects between RAM-disk and ATA PIO backends
-  - `src/baremetal/ata_pio_disk.zig` now performs real x86 ATA PIO `IDENTIFY` / `READ` / `WRITE` / `FLUSH` plus first-usable-MBR-partition mounting with logical LBA translation
+  - `src/baremetal/ata_pio_disk.zig` now performs real x86 ATA PIO `IDENTIFY` / `READ` / `WRITE` / `FLUSH` plus first-usable-MBR and protective-MBR GPT partition mounting with logical LBA translation
   - `src/pal/storage.zig` and `src/baremetal/tool_layout.zig` now route through the backend facade instead of directly targeting the RAM disk
   - `scripts/baremetal-qemu-ata-storage-probe-check.ps1` now proves live ATA-backed raw block mutation + readback plus ATA-backed tool-layout and filesystem persistence over the freestanding PVH image on top of a real MBR-partitioned raw disk, verifying physical-on-disk offsets behind the mounted logical partition view
+  - `src/baremetal/disk_installer.zig` now seeds the canonical persisted install layout (`/boot`, `/system`, `/runtime/install`, bootstrap package) on the active backend
+  - `scripts/baremetal-qemu-ata-gpt-installer-probe-check.ps1` now proves the freestanding PVH path mounts a protective-MBR GPT partition, preserves logical-to-physical LBA translation, seeds the install layout, and runs the persisted bootstrap package from disk
 - Ethernet L2 is now also on a real device path in `FS5.5`:
   - `src/baremetal/rtl8139.zig` provides real RTL8139 PCI-discovered bring-up, MAC readout, RX/TX setup, and loopback-friendly datapath validation
   - `src/baremetal/pci.zig` now discovers the RTL8139 I/O BAR and IRQ line and enables I/O plus bus mastering on the selected PCI function

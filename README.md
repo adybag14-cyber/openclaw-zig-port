@@ -7,15 +7,15 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
 - RPC method surface in Zig: `175`
 - Pinned parity gate (tri-baseline, CI/docs):
   - Go baseline (`v2.14.0-go`): `134/134` covered
-  - Original OpenClaw baseline (`v2026.3.8`): `97/97` covered
-  - Original OpenClaw beta baseline (`v2026.3.8-beta.1`): `97/97` covered
-  - Union baseline: `138/138` covered (`MISSING_IN_ZIG=0`)
+  - Original OpenClaw baseline (`v2026.3.13-1`): `100/100` covered
+  - Original OpenClaw beta baseline (`v2026.3.13-beta.1`): `100/100` covered
+  - Union baseline: `141/141` covered (`MISSING_IN_ZIG=0`)
   - Gateway events: stable `19/19`, beta `19/19`, union `19/19` (`UNION_EVENTS_MISSING_IN_ZIG=0`)
 - Latest upstream release snapshot (docs drift gate reference):
-  - Original OpenClaw baseline (`v2026.3.11`): `99/99` covered
-  - Original OpenClaw beta baseline (`v2026.3.11-beta.1`): `99/99` covered
-  - Union baseline: `140/140` covered (`MISSING_IN_ZIG=0`)
-- Latest local validation: `zig build test --summary all` -> main `282/282` + bare-metal host `212/212` passing
+  - Original OpenClaw baseline (`v2026.3.13-1`): `100/100` covered
+  - Original OpenClaw beta baseline (`v2026.3.13-beta.1`): `100/100` covered
+  - Union baseline: `141/141` covered (`MISSING_IN_ZIG=0`)
+- Latest local validation: `zig build test --summary all` -> main `290/290` + bare-metal host `245/245` passing
 - Latest published edge release tag: `v0.2.0-zig-edge.28`
 - Toolchain policy: Codeberg `master` is canonical; `adybag14-cyber/zig` publishes rolling `latest-master` and immutable `upstream-<sha>` Windows releases for refresh and reproducibility.
 - CI policy: keep hosted build/test/parity/docs on Zig `master`, but pin the freestanding bare-metal compile/probe lane to the known-good Linux build `0.16.0-dev.2736+3b515fbed` until the upstream Linux `master` compiler crash on `zig build baremetal -Doptimize=ReleaseFast` is resolved.
@@ -47,9 +47,11 @@ Zig runtime port of OpenClaw with parity-first delivery, deterministic validatio
   - `src/baremetal/ps2_input.zig` now contains a real x86 port-I/O backed PS/2 controller path
   - `scripts/baremetal-qemu-ps2-input-probe-check.ps1` proves IRQ-driven keyboard/mouse state updates against the freestanding PVH artifact
   - shared storage backend routing is now live through `src/baremetal/storage_backend.zig`
-- `src/baremetal/ata_pio_disk.zig` now provides a real ATA PIO path with `IDENTIFY`, `READ`, `WRITE`, `FLUSH`, and first-partition MBR mounting
+- `src/baremetal/ata_pio_disk.zig` now provides a real ATA PIO path with `IDENTIFY`, `READ`, `WRITE`, `FLUSH`, first-partition MBR mounting, and protective-MBR GPT partition mounting
   - PAL storage and bare-metal tool-layout now route through the backend facade instead of talking directly to the RAM disk
 - `scripts/baremetal-qemu-ata-storage-probe-check.ps1` now proves live ATA-backed raw block mutation + readback plus ATA-backed tool-layout and filesystem persistence against the freestanding PVH artifact on top of a real MBR-partitioned disk image
+- `src/baremetal/disk_installer.zig` now seeds a canonical persisted install layout on the active backend (`/boot`, `/system`, `/runtime/install`, bootstrap package)
+- `scripts/baremetal-qemu-ata-gpt-installer-probe-check.ps1` now proves the freestanding PVH artifact mounts a protective-MBR GPT partition, writes through the logical mounted view, seeds the installer layout, and runs the persisted bootstrap package from disk
   - Ethernet L2 is now strict-closed in [`docs/zig-port/FS5_5_HARDWARE_DRIVERS_SYSTEMS.md`](docs/zig-port/FS5_5_HARDWARE_DRIVERS_SYSTEMS.md)
   - `src/baremetal/rtl8139.zig` now contains the real RTL8139 PCI-discovered bring-up, raw-frame TX/RX path, and loopback-friendly datapath checks
   - `src/pal/net.zig` and `src/baremetal_main.zig` now expose the raw-frame PAL + bare-metal ABI/export surface through the same driver path

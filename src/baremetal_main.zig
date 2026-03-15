@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const abi = @import("baremetal/abi.zig");
 const ata_pio_disk = @import("baremetal/ata_pio_disk.zig");
+const disk_installer = @import("baremetal/disk_installer.zig");
 const x86_bootstrap = @import("baremetal/x86_bootstrap.zig");
 const framebuffer_console = @import("baremetal/framebuffer_console.zig");
 const vga_text_console = @import("baremetal/vga_text_console.zig");
@@ -82,6 +83,7 @@ const qemu_rtl8139_dhcp_probe_ok_code: u8 = 0x3B;
 const qemu_rtl8139_dns_probe_ok_code: u8 = 0x3C;
 const qemu_tool_exec_probe_ok_code: u8 = 0x3D;
 const qemu_rtl8139_gateway_probe_ok_code: u8 = 0x3E;
+const qemu_ata_gpt_installer_probe_ok_code: u8 = 0x40;
 const build_options = if (builtin.is_test)
     struct {
         pub const qemu_smoke: bool = false;
@@ -99,6 +101,7 @@ const build_options = if (builtin.is_test)
         pub const rtl8139_dns_probe: bool = false;
         pub const tool_exec_probe: bool = false;
         pub const rtl8139_gateway_probe: bool = false;
+        pub const ata_gpt_installer_probe: bool = false;
     }
 else
     @import("build_options");
@@ -117,6 +120,7 @@ const rtl8139_dhcp_probe_enabled: bool = build_options.rtl8139_dhcp_probe;
 const rtl8139_dns_probe_enabled: bool = build_options.rtl8139_dns_probe;
 const tool_exec_probe_enabled: bool = build_options.tool_exec_probe;
 const rtl8139_gateway_probe_enabled: bool = build_options.rtl8139_gateway_probe;
+const ata_gpt_installer_probe_enabled: bool = if (@hasDecl(build_options, "ata_gpt_installer_probe")) build_options.ata_gpt_installer_probe else false;
 
 const ata_probe_raw_lba: u32 = 300;
 const ata_probe_raw_block_count: u32 = 2;
@@ -130,6 +134,10 @@ const ata_probe_tool_slot_expected_lba: u32 = tool_layout.slot_data_lba + (@as(u
 const ata_probe_filesystem_dir = "/runtime/state";
 const ata_probe_filesystem_path = "/runtime/state/ata.json";
 const ata_probe_filesystem_payload = "{\"disk\":\"ata\"}";
+const ata_gpt_probe_partition_start_lba: u32 = 2048;
+const ata_gpt_probe_partition_sector_count: u32 = 8192;
+const ata_gpt_probe_raw_lba: u32 = 48;
+const ata_gpt_probe_raw_seed: u8 = 0x71;
 
 const AtaStorageProbeError = error{
     AtaBackendUnavailable,
@@ -147,6 +155,24 @@ const AtaStorageProbeError = error{
     FilesystemWriteFailed,
     FilesystemReadbackFailed,
     FilesystemReloadFailed,
+};
+
+const AtaGptInstallerProbeError = error{
+    AtaBackendUnavailable,
+    LogicalCapacityTooSmall,
+    PartitionMountMismatch,
+    RawPatternWriteFailed,
+    RawPatternFlushFailed,
+    RawPatternReadbackFailed,
+    InstallerFailed,
+    LoaderCfgReadbackFailed,
+    KernelInfoReadbackFailed,
+    ManifestReadbackFailed,
+    PackageListFailed,
+    BootstrapRunFailed,
+    BootstrapOutputMismatch,
+    BootstrapFilesystemReadbackFailed,
+    ReloadFailed,
 };
 
 const Rtl8139ProbeError = error{
@@ -1561,6 +1587,10 @@ fn baremetalStart() callconv(.c) noreturn {
         runAtaStorageProbe() catch |err| qemuExit(ataStorageProbeFailureCode(err));
         qemuExit(qemu_ata_storage_probe_ok_code);
     }
+    if (ata_gpt_installer_probe_enabled) {
+        runAtaGptInstallerProbe() catch |err| qemuExit(ataGptInstallerProbeFailureCode(err));
+        qemuExit(qemu_ata_gpt_installer_probe_ok_code);
+    }
     if (rtl8139_probe_enabled) {
         runRtl8139Probe() catch |err| qemuExit(rtl8139ProbeFailureCode(err));
         qemuExit(qemu_rtl8139_probe_ok_code);
@@ -1683,6 +1713,94 @@ fn runAtaStorageProbe() AtaStorageProbeError!void {
         !probeFilesystemContent(ata_probe_filesystem_path, ata_probe_filesystem_payload))
     {
         return error.FilesystemReloadFailed;
+    }
+}
+
+fn runAtaGptInstallerProbe() AtaGptInstallerProbeError!void {
+    storage_backend.init();
+    const storage = storage_backend.statePtr();
+    if (storage.backend != abi.storage_backend_ata_pio or storage.mounted == 0) {
+        return error.AtaBackendUnavailable;
+    }
+    if (storage.block_count < ata_gpt_probe_raw_lba + 1) {
+        return error.LogicalCapacityTooSmall;
+    }
+    if (ata_pio_disk.logicalBaseLba() != ata_gpt_probe_partition_start_lba or
+        storage.block_count != ata_gpt_probe_partition_sector_count)
+    {
+        return error.PartitionMountMismatch;
+    }
+
+    if (oc_storage_write_pattern(ata_gpt_probe_raw_lba, 1, ata_gpt_probe_raw_seed) != abi.result_ok) {
+        return error.RawPatternWriteFailed;
+    }
+    if (oc_storage_flush() != abi.result_ok) {
+        return error.RawPatternFlushFailed;
+    }
+    if (oc_storage_read_byte(ata_gpt_probe_raw_lba, 0) != ata_gpt_probe_raw_seed or
+        oc_storage_read_byte(ata_gpt_probe_raw_lba, 1) != ata_gpt_probe_raw_seed +% 1)
+    {
+        return error.RawPatternReadbackFailed;
+    }
+
+    tool_layout.resetForTest();
+    filesystem.resetForTest();
+    disk_installer.installDefaultLayout(status.ticks) catch return error.InstallerFailed;
+    if (tool_layout.statePtr().formatted == 0 or filesystem.statePtr().active_backend != abi.storage_backend_ata_pio) {
+        return error.InstallerFailed;
+    }
+
+    var loader_buf: [160]u8 = undefined;
+    const expected_loader = disk_installer.loaderConfigForCurrentBackend(loader_buf[0..]) catch return error.LoaderCfgReadbackFailed;
+    if (!probeFilesystemContent(disk_installer.loader_cfg_path, expected_loader)) {
+        return error.LoaderCfgReadbackFailed;
+    }
+
+    var kernel_buf: [128]u8 = undefined;
+    const expected_kernel = disk_installer.kernelConfigForCurrentBackend(kernel_buf[0..]) catch return error.KernelInfoReadbackFailed;
+    if (!probeFilesystemContent(disk_installer.kernel_info_path, expected_kernel)) {
+        return error.KernelInfoReadbackFailed;
+    }
+
+    var manifest_buf: [192]u8 = undefined;
+    const expected_manifest = disk_installer.installManifestForCurrentBackend(manifest_buf[0..]) catch return error.ManifestReadbackFailed;
+    if (!probeFilesystemContent(disk_installer.install_manifest_path, expected_manifest)) {
+        return error.ManifestReadbackFailed;
+    }
+
+    var package_scratch: [256]u8 = undefined;
+    var package_fba = std.heap.FixedBufferAllocator.init(&package_scratch);
+    const package_listing = package_store.listPackagesAlloc(package_fba.allocator(), package_scratch.len) catch return error.PackageListFailed;
+    if (!std.mem.eql(u8, package_listing, "bootstrap\n")) {
+        return error.PackageListFailed;
+    }
+
+    vga_text_console.clear();
+    var exec_scratch: [4096]u8 = undefined;
+    var exec_fba = std.heap.FixedBufferAllocator.init(&exec_scratch);
+    const allocator = exec_fba.allocator();
+    const io: std.Io = undefined;
+    var result = pal_proc.runCaptureFreestanding(allocator, io, &.{ "run-package", disk_installer.bootstrap_package_name }, 1000, 512, 256) catch |err| switch (err) {
+        error.OutOfMemory => return error.BootstrapRunFailed,
+        else => return error.BootstrapRunFailed,
+    };
+    defer result.deinit(allocator);
+    if (pal_proc.termExitCode(result.term) != 0) return error.BootstrapRunFailed;
+    if (!std.mem.eql(
+        u8,
+        result.stdout,
+        "created /runtime/state\nwrote 10 bytes to /runtime/state/bootstrap.txt\nbootstrap-ok\n",
+    ) or result.stderr.len != 0) {
+        return error.BootstrapOutputMismatch;
+    }
+
+    filesystem.resetForTest();
+    tool_layout.resetForTest();
+    filesystem.init() catch return error.ReloadFailed;
+    if (filesystem.statePtr().active_backend != abi.storage_backend_ata_pio or
+        !probeFilesystemContent(disk_installer.bootstrap_state_path, disk_installer.bootstrap_state_payload))
+    {
+        return error.BootstrapFilesystemReadbackFailed;
     }
 }
 
@@ -3437,7 +3555,7 @@ fn toolExecProbeFailureCode(err: ToolExecProbeError) u8 {
 }
 
 fn probeFilesystemContent(path: []const u8, expected: []const u8) bool {
-    var scratch: [64]u8 = undefined;
+    var scratch: [256]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&scratch);
     const content = filesystem.readFileAlloc(fba.allocator(), path, scratch.len) catch return false;
     return std.mem.eql(u8, content, expected);
@@ -3562,6 +3680,26 @@ fn ataStorageProbeFailureCode(err: AtaStorageProbeError) u8 {
         error.FilesystemWriteFailed => 0x4D,
         error.FilesystemReadbackFailed => 0x4E,
         error.FilesystemReloadFailed => 0x4F,
+    };
+}
+
+fn ataGptInstallerProbeFailureCode(err: AtaGptInstallerProbeError) u8 {
+    return switch (err) {
+        error.AtaBackendUnavailable => 0x50,
+        error.LogicalCapacityTooSmall => 0x51,
+        error.PartitionMountMismatch => 0x52,
+        error.RawPatternWriteFailed => 0x53,
+        error.RawPatternFlushFailed => 0x54,
+        error.RawPatternReadbackFailed => 0x55,
+        error.InstallerFailed => 0x56,
+        error.LoaderCfgReadbackFailed => 0x57,
+        error.KernelInfoReadbackFailed => 0x58,
+        error.ManifestReadbackFailed => 0x59,
+        error.PackageListFailed => 0x5A,
+        error.BootstrapRunFailed => 0x5B,
+        error.BootstrapOutputMismatch => 0x5C,
+        error.BootstrapFilesystemReadbackFailed => 0x5D,
+        error.ReloadFailed => 0x5E,
     };
 }
 
@@ -11936,6 +12074,30 @@ test "baremetal ata storage probe validates raw, tool layout, and filesystem per
     const content = try filesystem.readFileAlloc(std.testing.allocator, ata_probe_filesystem_path, 64);
     defer std.testing.allocator.free(content);
     try std.testing.expectEqualStrings(ata_probe_filesystem_payload, content);
+}
+
+test "baremetal ata gpt installer probe validates partition mount and install layout persistence" {
+    resetBaremetalRuntimeForTest();
+    ata_pio_disk.testEnableMockDevice(16384);
+    ata_pio_disk.testInstallMockProtectiveGptPartition(ata_gpt_probe_partition_start_lba, ata_gpt_probe_partition_sector_count);
+    defer ata_pio_disk.testDisableMockDevice();
+
+    try runAtaGptInstallerProbe();
+
+    const storage = oc_storage_state_ptr();
+    try std.testing.expectEqual(@as(u8, abi.storage_backend_ata_pio), storage.backend);
+    try std.testing.expectEqual(ata_gpt_probe_partition_start_lba, ata_pio_disk.logicalBaseLba());
+    try std.testing.expectEqual(ata_gpt_probe_partition_sector_count, storage.block_count);
+    try std.testing.expectEqual(@as(u8, ata_gpt_probe_raw_seed), oc_storage_read_byte(ata_gpt_probe_raw_lba, 0));
+    try std.testing.expectEqual(@as(u8, ata_gpt_probe_raw_seed), ata_pio_disk.testReadMockByteRaw(ata_gpt_probe_partition_start_lba + ata_gpt_probe_raw_lba, 0));
+
+    const manifest = try filesystem.readFileAlloc(std.testing.allocator, disk_installer.install_manifest_path, 192);
+    defer std.testing.allocator.free(manifest);
+    try std.testing.expect(std.mem.indexOf(u8, manifest, "logical_base_lba=2048") != null);
+
+    const bootstrap_payload = try filesystem.readFileAlloc(std.testing.allocator, disk_installer.bootstrap_state_path, 64);
+    defer std.testing.allocator.free(bootstrap_payload);
+    try std.testing.expectEqualStrings(disk_installer.bootstrap_state_payload, bootstrap_payload);
 }
 
 test "baremetal keyboard export surface captures interrupt-driven scancodes" {
